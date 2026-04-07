@@ -1,0 +1,45 @@
+{
+  "name": "@kimchi-dev/cli",
+  "version": "0.1.0",
+  "description": "kimchi-code — a coding agent CLI powered by Cast AI",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "kimchi-code": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc && node scripts/copy-themes.js",
+    "build:binary": "pnpm run build && bun build dist/cli.js --compile --outfile dist/kimchi-code && cp package.json dist/ && cp -r src/modes/interactive/theme dist/theme && cp -r node_modules/@mariozechner/pi-coding-agent/dist/core/export-html dist/export-html",
+    "dev": "tsc --watch",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
+    "check": "biome check src/ && tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "piConfig": {
+    "name": "kimchi",
+    "configDir": ".config/kimchi/harness"
+  },
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "^0.65.2",
+    "undici": "^8.0.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.15.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.1.1"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@10.8.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "esbuild",
+      "koffi",
+      "protobufjs"
+    ]
+  }
+}

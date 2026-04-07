@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: bun-darwin-x64
+            os: darwin
+            arch: amd64
+            runner: macos-13
+          - target: bun-darwin-arm64
+            os: darwin
+            arch: arm64
+            runner: macos-14
+          - target: bun-linux-x64
+            os: linux
+            arch: amd64
+            runner: ubuntu-latest
+          - target: bun-linux-arm64
+            os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build TypeScript
+        run: pnpm run build
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Compile standalone binary
+        run: |
+          bun build dist/cli.js --compile --target=${{ matrix.target }} --outfile dist/kimchi-code
+          cp package.json dist/
+          cp -r node_modules/@mariozechner/pi-coding-agent/dist/core/export-html dist/export-html
+
+      - name: Package binary
+        run: tar -czf kimchi-code_${{ matrix.os }}_${{ matrix.arch }}.tar.gz -C dist kimchi-code package.json theme export-html
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kimchi-code_${{ matrix.os }}_${{ matrix.arch }}
+          path: kimchi-code_${{ matrix.os }}_${{ matrix.arch }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum kimchi-code_*.tar.gz > checksums.txt
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/kimchi-code_*.tar.gz
+            artifacts/checksums.txt
+          generate_release_notes: true
