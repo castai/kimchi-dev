@@ -1,0 +1,16 @@
+{
+  "name": "kimchi-web-fetch",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "dependencies": {
+    "playwright": "^1.52.0",
+    "turndown": "^7.2.0"
+  },
+  "devDependencies": {
+    "@types/turndown": "^5.0.5"
+  }
+}
