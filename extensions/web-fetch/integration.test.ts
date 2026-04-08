@@ -1,9 +1,51 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { convertContent } from "./content-converter.js";
 import { fetchPage } from "./page-fetcher.js";
 
 let server: Server;
 let baseURL: string;
+
+/** Rich HTML page with boilerplate, relative URLs, and varied content for format testing. */
+const RICH_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Rich Test Page</title>
+  <style>body { font-family: sans-serif; }</style>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <script>console.log('tracking');</script>
+  <nav><a href="/">Home</a> | <a href="/about">About</a></nav>
+
+  <h1>Documentation</h1>
+  <p>Welcome to the docs. See the <a href="/api/reference">API reference</a> for details.</p>
+  <p>You can also check the <a href="https://external.example.com/guide">external guide</a>.</p>
+
+  <h2>Getting Started</h2>
+  <ul>
+    <li>Install the package</li>
+    <li>Import the module</li>
+    <li>Call <code>init()</code></li>
+  </ul>
+
+  <h3>Code Example</h3>
+  <pre><code>import { init } from "lib";
+init({ debug: true });</code></pre>
+
+  <p>Here is an <em>important</em> note with <strong>bold text</strong>.</p>
+  <img src="/images/diagram.png" alt="Architecture diagram">
+
+  <header><h2>Header Section</h2></header>
+  <aside>This sidebar is preserved.</aside>
+
+  <footer><p>Copyright 2026 Example Corp</p></footer>
+  <iframe src="https://ads.example.com/banner"></iframe>
+  <svg><circle r="50"/></svg>
+  <noscript>Enable JavaScript for full experience.</noscript>
+</body>
+</html>`;
 
 function handler(req: IncomingMessage, res: ServerResponse) {
 	const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
@@ -19,6 +61,11 @@ function handler(req: IncomingMessage, res: ServerResponse) {
 <p>This is a test page with a <a href="/other">link</a>.</p>
 </body>
 </html>`);
+			break;
+
+		case "/rich":
+			res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+			res.end(RICH_HTML);
 			break;
 
 		case "/json":
@@ -131,4 +178,92 @@ describe("integration: fetchPage with local HTTP server", () => {
 			fetchPage(`${baseURL}/slow?delay=5000`, { timeoutSeconds: 0.1 }),
 		).rejects.toThrow("timed out");
 	}, 10_000);
+});
+
+describe("integration: fetchPage + convertContent with format parameter", () => {
+	it("returns markdown with boilerplate stripped and URLs resolved", async () => {
+		const result = await fetchPage(`${baseURL}/rich`);
+		const md = convertContent(result.body, result.finalURL, "markdown");
+
+		// Content is present
+		expect(md).toContain("# Documentation");
+		expect(md).toContain("## Getting Started");
+		expect(md).toContain("`init()`");
+		expect(md).toContain("*important*");
+		expect(md).toContain("**bold text**");
+
+		// Code block preserved
+		expect(md).toContain("```");
+		expect(md).toContain('import { init } from "lib"');
+
+		// Relative URLs resolved to absolute
+		expect(md).toContain(`${baseURL}/api/reference`);
+		expect(md).toContain(`${baseURL}/images/diagram.png`);
+
+		// Absolute external URLs preserved
+		expect(md).toContain("https://external.example.com/guide");
+
+		// Boilerplate stripped
+		expect(md).not.toContain("tracking");       // script
+		expect(md).not.toContain("sans-serif");      // style
+		expect(md).not.toContain("Copyright");       // footer
+		expect(md).not.toContain("ads.example.com"); // iframe
+		expect(md).not.toContain("circle");          // svg
+		expect(md).not.toContain("Enable JavaScript"); // noscript
+		expect(md).not.toMatch(/\bHome\b/);          // nav
+
+		// Header and aside preserved
+		expect(md).toContain("Header Section");
+		expect(md).toContain("sidebar is preserved");
+	});
+
+	it("returns plain text with boilerplate stripped", async () => {
+		const result = await fetchPage(`${baseURL}/rich`);
+		const text = convertContent(result.body, result.finalURL, "text");
+
+		// Content present as plain text
+		expect(text).toContain("Documentation");
+		expect(text).toContain("Getting Started");
+		expect(text).toContain("init()");
+		expect(text).toContain("important");
+
+		// No HTML tags
+		expect(text).not.toContain("<");
+		expect(text).not.toContain(">");
+
+		// Boilerplate stripped
+		expect(text).not.toContain("tracking");
+		expect(text).not.toContain("Copyright");
+
+		// Preserved sections
+		expect(text).toContain("Header Section");
+		expect(text).toContain("sidebar is preserved");
+	});
+
+	it("returns raw HTML unchanged for html format", async () => {
+		const result = await fetchPage(`${baseURL}/rich`);
+		const html = convertContent(result.body, result.finalURL, "html");
+
+		// Exact passthrough
+		expect(html).toBe(result.body);
+
+		// Nothing stripped
+		expect(html).toContain("<nav>");
+		expect(html).toContain("<footer>");
+		expect(html).toContain("<script>");
+		expect(html).toContain("<style>");
+		expect(html).toContain('href="/api/reference"'); // relative URL not modified
+	});
+
+	it("does not convert non-HTML content regardless of format", async () => {
+		const result = await fetchPage(`${baseURL}/json`);
+		expect(result.isHTML).toBe(false);
+
+		// Non-HTML content should be returned as-is regardless of format
+		const asMarkdown = result.isHTML ? convertContent(result.body, result.finalURL, "markdown") : result.body;
+		const asText = result.isHTML ? convertContent(result.body, result.finalURL, "text") : result.body;
+
+		expect(asMarkdown).toBe(result.body);
+		expect(asText).toBe(result.body);
+	});
 });

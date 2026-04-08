@@ -4,9 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   },
   "dependencies": {
+    "@mixmark-io/domino": "^2.2.0",
     "playwright": "^1.52.0",
     "turndown": "^7.2.0"
   },

@@ -1,39 +1,6 @@
-import { spawnSync, type SpawnSyncReturns } from "node:child_process"
-import { accessSync, constants, mkdtempSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join, resolve } from "node:path"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
-
-const BINARY_PATH = resolve("dist/kimchi-code")
-
-let tempHome: string
-let tempAgentDir: string
-
-beforeAll(() => {
-	tempHome = mkdtempSync(join(tmpdir(), "kimchi-smoke-home-"))
-	tempAgentDir = mkdtempSync(join(tmpdir(), "kimchi-smoke-agent-"))
-})
-
-afterAll(() => {
-	rmSync(tempHome, { recursive: true, force: true })
-	rmSync(tempAgentDir, { recursive: true, force: true })
-})
-
-function runBinary(
-	args: string[] = [],
-	extraEnv: Record<string, string> = {},
-): SpawnSyncReturns<string> {
-	return spawnSync(BINARY_PATH, args, {
-		encoding: "utf-8",
-		timeout: 30_000,
-		env: {
-			PATH: process.env.PATH,
-			HOME: tempHome,
-			KIMCHI_CODING_AGENT_DIR: tempAgentDir,
-			...extraEnv,
-		},
-	})
-}
+import { accessSync, constants } from "node:fs"
+import { describe, expect, it } from "vitest"
+import { BINARY_PATH, runBinary } from "./harness.js"
 
 describe("binary smoke tests", () => {
 	it("binary exists and is executable", () => {
@@ -74,5 +41,3 @@ describe("binary smoke tests", () => {
 		},
 	)
 })
-
-export { runBinary, BINARY_PATH }
