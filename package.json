@@ -9,12 +9,14 @@
   },
   "scripts": {
     "build": "tsc && node scripts/copy-themes.js",
-    "build:binary": "pnpm run build && bun build dist/cli.js --compile --outfile dist/kimchi-code && cp package.json dist/ && cp -r src/modes/interactive/theme dist/theme && cp -r node_modules/@mariozechner/pi-coding-agent/dist/core/export-html dist/export-html",
+    "build:binary": "rm -rf dist && pnpm run build && bun build dist/cli.js --compile --outfile dist/kimchi-code && cp package.json dist/ && cp -r src/modes/interactive/theme dist/theme && cp -r node_modules/@mariozechner/pi-coding-agent/dist/core/export-html dist/export-html",
     "dev": "tsc --watch",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "check": "biome check src/ && tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --dir src",
+    "test:smoke": "vitest run --config tests/smoke/vitest.config.ts",
+    "verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:smoke"
   },
   "piConfig": {
     "name": "kimchi",
