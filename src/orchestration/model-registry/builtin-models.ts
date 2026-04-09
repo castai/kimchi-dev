@@ -1,14 +1,3 @@
-/**
- * Built-in model descriptors shipped with kimchi.
- *
- * These are hardcoded and immutable at runtime. They describe the models
- * currently available through the kimchi-dev provider (Cast AI) and their
- * orchestration-relevant capabilities.
- *
- * Custom models from the user config can override these if they share the
- * same (id, provider) pair.
- */
-
 import type { OrchestrationModelDescriptor } from "./types.js"
 
 export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [

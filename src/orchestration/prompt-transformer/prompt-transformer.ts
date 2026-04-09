@@ -1,16 +1,8 @@
-/**
- * Prompt Transformer
- *
- * Enriches the user prompt with orchestration instructions before it
- * reaches the Orchestrator LLM. Reads the prompt template from
- * orchestration-prompt.md and fills in model registry data + user prompt.
- */
-
 import { readFileSync } from "node:fs"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
-import type { ModelRegistry } from "./model-registry.js"
-import type { OrchestrationModelDescriptor } from "./types.js"
+import type { ModelRegistry } from "../model-registry/index.js"
+import type { OrchestrationModelDescriptor } from "../model-registry/types.js"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PROMPT_TEMPLATE_PATH = join(__dirname, "orchestration-prompt.md")
@@ -32,9 +24,7 @@ function formatModelsSection(models: OrchestrationModelDescriptor[]): string {
 	return models.map(formatModel).join("\n\n")
 }
 
-/**
- * Load the prompt template from disk. Cached after first read.
- */
+// Cached after first read — the template doesn't change at runtime.
 let cachedTemplate: string | undefined
 function loadTemplate(): string {
 	if (!cachedTemplate) {
@@ -43,13 +33,6 @@ function loadTemplate(): string {
 	return cachedTemplate
 }
 
-/**
- * Transform a user prompt into an orchestration prompt.
- *
- * Reads the prompt template, injects the available models from the registry,
- * and wraps the original user prompt. The result is what the Orchestrator LLM
- * receives — it contains routing instructions + the original task.
- */
 export function transformPrompt(userPrompt: string, registry: ModelRegistry): string {
 	const template = loadTemplate()
 	const models = registry.getAll()

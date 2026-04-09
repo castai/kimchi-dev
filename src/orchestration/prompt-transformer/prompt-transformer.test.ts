@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { transformPrompt } from "./prompt-transformer.js"
-import { ModelRegistry } from "./model-registry.js"
+import { ModelRegistry } from "../model-registry/index.js"
 
 describe("transformPrompt", () => {
 	const registry = new ModelRegistry()
