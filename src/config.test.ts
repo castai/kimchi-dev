@@ -49,6 +49,6 @@ describe("loadConfig", () => {
 				env: {},
 				configPath,
 			}),
-		).toThrow("No Cast AI API key found")
+		).toThrow("No Kimchi API key found")
 	})
 })

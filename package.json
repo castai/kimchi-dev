@@ -8,13 +8,18 @@
     "kimchi-code": "dist/cli.js"
   },
   "scripts": {
+    "clean": "rm -rf dist",
+    "copy:assets": "cp package.json dist/ && cp -r src/modes/interactive/theme dist/theme && cp -r node_modules/@mariozechner/pi-coding-agent/dist/core/export-html dist/export-html",
     "build": "tsc && node scripts/copy-themes.js",
-    "build:binary": "pnpm run build && bun build dist/cli.js --compile --outfile dist/kimchi-code && cp package.json dist/ && cp -r src/modes/interactive/theme dist/theme && cp -r node_modules/@mariozechner/pi-coding-agent/dist/core/export-html dist/export-html",
-    "dev": "tsc --watch",
+    "build:binary": "pnpm run clean && pnpm run build && bun build dist/cli.js --compile --outfile dist/kimchi-code && pnpm run copy:assets",
+    "dev": "tsx src/cli.ts",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "check": "biome check src/ && tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --dir src",
+    "test:smoke": "vitest run --config tests/smoke/vitest.config.ts",
+    "test:extensions": "cd extensions/web-fetch && pnpm test",
+    "verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:extensions && pnpm run test:smoke"
   },
   "piConfig": {
     "name": "kimchi",
@@ -27,6 +32,7 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^22.15.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.3",
     "vitest": "^3.1.1"
   },

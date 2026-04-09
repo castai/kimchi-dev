@@ -61,7 +61,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 	}
 
 	throw new Error(
-		"No Cast AI API key found. Set the KIMCHI_API_KEY environment variable or log in with the kimchi CLI (`kimchi auth login`).",
+		"No Kimchi API key found. Set the KIMCHI_API_KEY environment variable or log in with the kimchi CLI (`kimchi auth login`).",
 	)
 }
 
