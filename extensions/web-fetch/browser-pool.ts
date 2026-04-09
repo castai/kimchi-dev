@@ -16,6 +16,18 @@ export interface BrowserPoolOptions {
 	idleTimeoutMs?: number;
 }
 
+/**
+ * Returns true when the error indicates Chromium is permanently unavailable
+ * (not installed). Returns false for transient failures that should be retried.
+ */
+function isPermanentLaunchError(err: unknown): boolean {
+	const message = err instanceof Error ? err.message : String(err);
+	return (
+		message.includes("Executable doesn't exist") ||
+		message.includes("Cannot find module")
+	);
+}
+
 export class BrowserPool {
 	private readonly idleTimeoutMs: number;
 	private browser: Browser | null = null;
@@ -60,9 +72,13 @@ export class BrowserPool {
 			});
 
 			return this.browser;
-		} catch {
-			// Chromium binary not installed — treat as "Playwright unavailable".
-			this.playwrightAvailable = false;
+		} catch (err) {
+			// Only permanently disable Playwright when Chromium is genuinely
+			// not installed. Transient errors (resource exhaustion, file locks)
+			// should allow retry on the next call.
+			if (isPermanentLaunchError(err)) {
+				this.playwrightAvailable = false;
+			}
 			return null;
 		}
 	}

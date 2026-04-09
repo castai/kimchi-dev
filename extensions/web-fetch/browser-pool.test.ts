@@ -79,11 +79,33 @@ describe("BrowserPool", () => {
 		expect(browser).toBeNull();
 	});
 
-	it("returns null when chromium launch fails", async () => {
-		launchMock.mockRejectedValue(new Error("Chromium not found"));
+	it("returns null when chromium executable is missing and permanently disables", async () => {
+		launchMock.mockRejectedValue(
+			new Error("browserType.launch: Executable doesn't exist at /path/to/chromium"),
+		);
 		const browser = await pool.getBrowser();
 		expect(browser).toBeNull();
 		expect(pool.isPlaywrightAvailable()).toBe(false);
+
+		// Subsequent call should not retry
+		launchMock.mockResolvedValue(mockBrowser);
+		const second = await pool.getBrowser();
+		expect(second).toBeNull();
+		expect(launchMock).toHaveBeenCalledOnce();
+	});
+
+	it("retries after transient launch error (e.g. ENOMEM)", async () => {
+		launchMock.mockRejectedValueOnce(new Error("spawn ENOMEM"));
+		const first = await pool.getBrowser();
+		expect(first).toBeNull();
+		// playwrightAvailable should still be true so next call retries
+		expect(pool.isPlaywrightAvailable()).toBe(true);
+
+		// Next call succeeds
+		launchMock.mockResolvedValue(mockBrowser);
+		const second = await pool.getBrowser();
+		expect(second).toBe(mockBrowser);
+		expect(launchMock).toHaveBeenCalledTimes(2);
 	});
 
 	it("creates a new browser after the old one disconnects", async () => {
