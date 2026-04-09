@@ -36,7 +36,7 @@ function buildOutput(metadataLines: string[], content: string, truncationNotice:
 export async function executeWebFetch(params: WebFetchParams): Promise<WebFetchResult> {
 	const format: OutputFormat = params.format ?? "markdown";
 	const timeoutSeconds = params.timeout != null
-		? Math.min(params.timeout, MAX_TIMEOUT_SECONDS)
+		? Math.max(0, Math.min(params.timeout, MAX_TIMEOUT_SECONDS))
 		: undefined;
 
 	// Validate URL
@@ -111,6 +111,8 @@ export async function executeWebFetch(params: WebFetchParams): Promise<WebFetchR
 	const cacheIndex = lines.indexOf("Cache: miss");
 	const cachedLines = [...lines];
 	cachedLines[cacheIndex] = "Cache: hit";
+	// Truncated responses are cached as-is: re-fetching would hit the same
+	// truncation limit, so serving the truncated copy is correct.
 	cacheSet(params.url, format, buildOutput(cachedLines, content, truncationNotice));
 
 	return {
