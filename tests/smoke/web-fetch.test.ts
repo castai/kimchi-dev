@@ -3,23 +3,12 @@
  * kimchi-code harness.
  *
  * Requires KIMCHI_API_KEY to be set (skipped otherwise).
- * Writes settings.json into the temp agent dir so the harness discovers
- * the web-fetch extension through its normal settings-based loading path.
+ * The web_fetch tool is bundled into the compiled binary via inline
+ * extension factories — no settings.json or disk-based discovery needed.
  */
 
-import { writeFileSync } from "node:fs"
-import { join, resolve } from "node:path"
-import { beforeAll, describe, expect, it } from "vitest"
-import { ensureAgentDir, runBinary } from "./harness.js"
-
-beforeAll(() => {
-	const agentDir = ensureAgentDir()
-	const extensionAbsPath = resolve("extensions/web-fetch")
-	writeFileSync(
-		join(agentDir, "settings.json"),
-		JSON.stringify({ extensions: [extensionAbsPath] }),
-	)
-})
+import { describe, expect, it } from "vitest"
+import { runBinary } from "./harness.js"
 
 describe("web_fetch smoke tests", () => {
 	it.skipIf(!process.env.KIMCHI_API_KEY)(
