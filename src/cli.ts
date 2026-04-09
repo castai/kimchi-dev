@@ -28,6 +28,14 @@ process.env.PI_SKIP_VERSION_CHECK = "1"
 import { loadConfig } from "./config.js"
 import { ensureModelsConfig } from "./models.js"
 
+const extensionsDir = isBunBinary
+	? resolve(dirname(process.execPath), "extensions")
+	: resolve(dirname(fileURLToPath(import.meta.url)), "extensions")
+
+const extensions = [
+	resolve(extensionsDir, "kimchi.js"),
+]
+
 try {
 	const config = loadConfig()
 
@@ -46,9 +54,10 @@ try {
 	const { EnvHttpProxyAgent, setGlobalDispatcher } = await import("undici")
 	setGlobalDispatcher(new EnvHttpProxyAgent())
 
-	// Delegate to pi-mono's CLI main function
+	// Delegate to pi-mono's CLI main function, injecting the kimchi extension
 	const { main } = await import("@mariozechner/pi-coding-agent")
-	await main(process.argv.slice(2))
+	const extensionArgs = extensions.flatMap((p) => ["--extension", p])
+	await main([...extensionArgs, ...process.argv.slice(2)])
 } catch (err) {
 	console.error(err instanceof Error ? err.message : String(err))
 	process.exit(1)
