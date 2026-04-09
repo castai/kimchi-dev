@@ -1,10 +1,21 @@
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Mock browser-pool to control Playwright availability.
+vi.mock("./browser-pool.js", () => ({
+	getBrowser: vi.fn(),
+}));
+
+import { getBrowser } from "./browser-pool.js";
 import { FetchError, fetchPage } from "./page-fetcher.js";
 
-describe("fetchPage", () => {
+const getBrowserMock = getBrowser as unknown as MockInstance;
+
+describe("fetchPage — native fetch fallback", () => {
 	let fetchSpy: MockInstance;
 
 	beforeEach(() => {
+		// Simulate Playwright not installed — getBrowser returns null.
+		getBrowserMock.mockResolvedValue(null);
 		fetchSpy = vi.spyOn(globalThis, "fetch");
 	});
 
@@ -84,6 +95,15 @@ describe("fetchPage", () => {
 			const result = await fetchPage("https://example.com/file.txt");
 			expect(result.body).toBe("Hello, world!");
 			expect(result.isHTML).toBe(false);
+		});
+
+		it("includes fallback warning when using native fetch", async () => {
+			fetchSpy.mockResolvedValue(mockResponse("<h1>Hello</h1>", { url: "https://example.com/" }));
+
+			const result = await fetchPage("https://example.com/");
+			expect(result.fallbackWarning).toBeDefined();
+			expect(result.fallbackWarning).toContain("Playwright is not installed");
+			expect(result.fallbackWarning).toContain("npx playwright install chromium");
 		});
 	});
 
@@ -283,5 +303,201 @@ describe("fetchPage", () => {
 				expect((err as FetchError).message).toContain("5MB");
 			}
 		});
+	});
+});
+
+describe("fetchPage — Playwright path", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	function mockPage(overrides: {
+		gotoResponse?: {
+			status?: number;
+			statusText?: string;
+			headers?: Record<string, string>;
+			body?: Buffer;
+		};
+		url?: string;
+		content?: string;
+		textContent?: string;
+		gotoError?: Error;
+	}) {
+		const resp = overrides.gotoResponse ?? {};
+		const mockResponse = {
+			status: () => resp.status ?? 200,
+			statusText: () => resp.statusText ?? "OK",
+			headers: () => resp.headers ?? { "content-type": "text/html; charset=utf-8" },
+			body: () => Promise.resolve(resp.body ?? Buffer.from("")),
+		};
+
+		const page = {
+			goto: overrides.gotoError
+				? vi.fn().mockRejectedValue(overrides.gotoError)
+				: vi.fn().mockResolvedValue(mockResponse),
+			url: vi.fn().mockReturnValue(overrides.url ?? "https://example.com/"),
+			content: vi.fn().mockResolvedValue(overrides.content ?? "<html><body><h1>Test</h1></body></html>"),
+			textContent: vi.fn().mockResolvedValue(overrides.textContent ?? "Test"),
+			waitForLoadState: vi.fn().mockResolvedValue(undefined),
+			close: vi.fn().mockResolvedValue(undefined),
+		};
+
+		const browser = {
+			newPage: vi.fn().mockResolvedValue(page),
+			isConnected: () => true,
+		};
+
+		getBrowserMock.mockResolvedValue(browser);
+
+		return { browser, page, mockResponse };
+	}
+
+	it("returns HTML content via Playwright", async () => {
+		const { page } = mockPage({
+			content: "<html><body><h1>Hello Playwright</h1></body></html>",
+		});
+
+		const result = await fetchPage("https://example.com/");
+		expect(result.body).toBe("<html><body><h1>Hello Playwright</h1></body></html>");
+		expect(result.isHTML).toBe(true);
+		expect(result.fallbackWarning).toBeUndefined();
+		expect(page.close).toHaveBeenCalled();
+	});
+
+	it("uses page.textContent for format: text", async () => {
+		const { page } = mockPage({
+			textContent: "Hello plain text from Playwright",
+		});
+
+		const result = await fetchPage("https://example.com/", { format: "text" });
+		expect(result.body).toBe("Hello plain text from Playwright");
+		expect(page.textContent).toHaveBeenCalledWith("body");
+		expect(page.content).not.toHaveBeenCalled();
+	});
+
+	it("uses page.content for format: markdown", async () => {
+		const { page } = mockPage({
+			content: "<html><body><h1>Markdown source</h1></body></html>",
+		});
+
+		const result = await fetchPage("https://example.com/", { format: "markdown" });
+		expect(result.body).toContain("Markdown source");
+		expect(page.content).toHaveBeenCalled();
+		expect(page.textContent).not.toHaveBeenCalled();
+	});
+
+	it("uses page.content for format: html", async () => {
+		const { page } = mockPage({
+			content: "<html><body><h1>Raw HTML</h1></body></html>",
+		});
+
+		const result = await fetchPage("https://example.com/", { format: "html" });
+		expect(result.body).toContain("Raw HTML");
+		expect(page.content).toHaveBeenCalled();
+	});
+
+	it("reports final URL from Playwright page", async () => {
+		mockPage({
+			url: "https://example.com/final-destination",
+		});
+
+		const result = await fetchPage("https://example.com/redirect");
+		expect(result.finalURL).toBe("https://example.com/final-destination");
+	});
+
+	it("throws FetchError on HTTP error", async () => {
+		mockPage({
+			gotoResponse: { status: 404, statusText: "Not Found" },
+		});
+
+		try {
+			await fetchPage("https://example.com/missing");
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(FetchError);
+			expect((err as FetchError).category).toBe("http");
+			expect((err as FetchError).message).toContain("404");
+		}
+	});
+
+	it("throws FetchError on timeout", async () => {
+		mockPage({
+			gotoError: new Error("Timeout 30000ms exceeded"),
+		});
+
+		try {
+			await fetchPage("https://slow.example.com/", { timeoutSeconds: 5 });
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(FetchError);
+			expect((err as FetchError).category).toBe("timeout");
+			expect((err as FetchError).message).toContain("timed out");
+		}
+	});
+
+	it("throws FetchError on DNS failure", async () => {
+		mockPage({
+			gotoError: new Error("net::ERR_NAME_NOT_RESOLVED"),
+		});
+
+		try {
+			await fetchPage("https://nonexistent.example/");
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(FetchError);
+			expect((err as FetchError).category).toBe("network");
+			expect((err as FetchError).message).toContain("DNS");
+		}
+	});
+
+	it("rejects binary content-type via Playwright", async () => {
+		mockPage({
+			gotoResponse: {
+				status: 200,
+				headers: { "content-type": "image/png" },
+			},
+		});
+
+		try {
+			await fetchPage("https://example.com/image.png");
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(FetchError);
+			expect((err as FetchError).category).toBe("binary");
+		}
+	});
+
+	it("closes page even on error", async () => {
+		const { page } = mockPage({
+			gotoResponse: { status: 500, statusText: "Server Error" },
+		});
+
+		try {
+			await fetchPage("https://example.com/error");
+		} catch {
+			// expected
+		}
+		expect(page.close).toHaveBeenCalled();
+	});
+
+	it("waits for networkidle after load", async () => {
+		const { page } = mockPage({});
+
+		await fetchPage("https://example.com/");
+		expect(page.waitForLoadState).toHaveBeenCalledWith("networkidle", expect.any(Object));
+	});
+
+	it("returns non-HTML text content via Playwright", async () => {
+		mockPage({
+			gotoResponse: {
+				status: 200,
+				headers: { "content-type": "application/json" },
+				body: Buffer.from('{"hello":"world"}'),
+			},
+		});
+
+		const result = await fetchPage("https://api.example.com/data");
+		expect(result.body).toBe('{"hello":"world"}');
+		expect(result.isHTML).toBe(false);
 	});
 });

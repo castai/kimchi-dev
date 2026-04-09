@@ -10,6 +10,10 @@ vi.mock("./page-fetcher.js", () => ({
 	fetchPage: vi.fn(),
 }));
 
+vi.mock("./browser-pool.js", () => ({
+	getBrowser: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock("./url-validator.js", () => ({
 	validateURL: vi.fn(() => ({ valid: true, url: new URL("https://example.com/") })),
 }));
@@ -46,7 +50,7 @@ describe("executeWebFetch", () => {
 
 			await executeWebFetch({ url: "https://example.com/", timeout: 60 });
 
-			expect(fetchPageMock).toHaveBeenCalledWith("https://example.com/", { timeoutSeconds: 60 });
+			expect(fetchPageMock).toHaveBeenCalledWith("https://example.com/", { timeoutSeconds: 60, format: "markdown" });
 		});
 
 		it("clamps timeout values above 120 to 120", async () => {
@@ -54,7 +58,7 @@ describe("executeWebFetch", () => {
 
 			await executeWebFetch({ url: "https://example.com/", timeout: 300 });
 
-			expect(fetchPageMock).toHaveBeenCalledWith("https://example.com/", { timeoutSeconds: 120 });
+			expect(fetchPageMock).toHaveBeenCalledWith("https://example.com/", { timeoutSeconds: 120, format: "markdown" });
 		});
 
 		it("clamps timeout of exactly 121 to 120", async () => {
@@ -62,7 +66,7 @@ describe("executeWebFetch", () => {
 
 			await executeWebFetch({ url: "https://example.com/", timeout: 121 });
 
-			expect(fetchPageMock).toHaveBeenCalledWith("https://example.com/", { timeoutSeconds: 120 });
+			expect(fetchPageMock).toHaveBeenCalledWith("https://example.com/", { timeoutSeconds: 120, format: "markdown" });
 		});
 
 		it("passes through timeout values at or below 120", async () => {
@@ -70,7 +74,7 @@ describe("executeWebFetch", () => {
 
 			await executeWebFetch({ url: "https://example.com/", timeout: 120 });
 
-			expect(fetchPageMock).toHaveBeenCalledWith("https://example.com/", { timeoutSeconds: 120 });
+			expect(fetchPageMock).toHaveBeenCalledWith("https://example.com/", { timeoutSeconds: 120, format: "markdown" });
 		});
 
 		it("does not pass timeoutSeconds when timeout is not provided", async () => {
@@ -78,7 +82,7 @@ describe("executeWebFetch", () => {
 
 			await executeWebFetch({ url: "https://example.com/" });
 
-			expect(fetchPageMock).toHaveBeenCalledWith("https://example.com/", { timeoutSeconds: undefined });
+			expect(fetchPageMock).toHaveBeenCalledWith("https://example.com/", { timeoutSeconds: undefined, format: "markdown" });
 		});
 
 		it("returns timeout error message from fetchPage", async () => {
@@ -192,6 +196,60 @@ describe("executeWebFetch", () => {
 			const result = await executeWebFetch({ url: "https://example.com/" });
 
 			expect(result.content[0].text).toContain("Characters: 250,000");
+		});
+
+		it("includes fallback warning in metadata when present", async () => {
+			const body = "<p>Content</p>";
+			fetchPageMock.mockResolvedValue({
+				...mockFetchResult(body),
+				fallbackWarning: "Warning: Playwright is not installed.",
+			});
+			convertContentMock.mockReturnValue("Content");
+
+			const result = await executeWebFetch({ url: "https://example.com/" });
+			const text = result.content[0].text;
+
+			expect(text).toContain("Warning: Playwright is not installed.");
+		});
+
+		it("does not include fallback warning when Playwright was used", async () => {
+			const body = "<p>Content</p>";
+			fetchPageMock.mockResolvedValue(mockFetchResult(body));
+			convertContentMock.mockReturnValue("Content");
+
+			const result = await executeWebFetch({ url: "https://example.com/" });
+			const text = result.content[0].text;
+
+			expect(text).not.toContain("Warning:");
+		});
+	});
+
+	describe("Playwright text extraction", () => {
+		it("skips content converter when Playwright extracted text directly", async () => {
+			// Playwright path: isHTML true, format text, no fallbackWarning
+			fetchPageMock.mockResolvedValue({
+				...mockFetchResult("Plain text from Playwright"),
+				fallbackWarning: undefined,
+			});
+
+			const result = await executeWebFetch({ url: "https://example.com/", format: "text" });
+
+			// convertContent should not be called because Playwright extracted text
+			expect(convertContentMock).not.toHaveBeenCalled();
+			expect(result.content[0].text).toContain("Plain text from Playwright");
+		});
+
+		it("uses content converter for text format when falling back to native fetch", async () => {
+			fetchPageMock.mockResolvedValue({
+				...mockFetchResult("<p>Content</p>"),
+				fallbackWarning: "Warning: Playwright is not installed.",
+			});
+			convertContentMock.mockReturnValue("Converted text");
+
+			const result = await executeWebFetch({ url: "https://example.com/", format: "text" });
+
+			expect(convertContentMock).toHaveBeenCalledWith("<p>Content</p>", "https://example.com/", "text");
+			expect(result.content[0].text).toContain("Converted text");
 		});
 	});
 });

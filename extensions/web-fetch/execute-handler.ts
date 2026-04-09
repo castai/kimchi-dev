@@ -44,7 +44,7 @@ export async function executeWebFetch(params: WebFetchParams): Promise<WebFetchR
 	// Fetch
 	let result;
 	try {
-		result = await fetchPage(params.url, { timeoutSeconds });
+		result = await fetchPage(params.url, { timeoutSeconds, format });
 	} catch (err: unknown) {
 		const fetchErr = err as FetchError;
 		return {
@@ -53,8 +53,11 @@ export async function executeWebFetch(params: WebFetchParams): Promise<WebFetchR
 		};
 	}
 
-	// Convert content based on format (HTML content only; non-HTML returned as-is)
-	let content = result.isHTML
+	// Convert content based on format.
+	// When Playwright extracted text directly (format: text), the body is already
+	// plain text — skip the content converter. For non-HTML, return as-is.
+	const playwrightExtractedText = result.isHTML && format === "text" && !result.fallbackWarning;
+	let content = result.isHTML && !playwrightExtractedText
 		? convertContent(result.body, result.finalURL, format)
 		: result.body;
 
@@ -76,6 +79,7 @@ export async function executeWebFetch(params: WebFetchParams): Promise<WebFetchR
 		...(truncated
 			? [`Truncated: content truncated to ${MAX_OUTPUT_CHARS.toLocaleString()} of ${totalChars.toLocaleString()} characters`]
 			: []),
+		...(result.fallbackWarning ? [result.fallbackWarning] : []),
 	];
 
 	const metadata = lines.join("\n");

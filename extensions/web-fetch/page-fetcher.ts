@@ -1,9 +1,11 @@
 /**
- * Page fetcher — retrieves a URL using native fetch().
+ * Page fetcher — retrieves a URL using Playwright (primary) or native fetch() (fallback).
  *
- * Phase 1 uses only native fetch(). Playwright browser integration
- * will be added in Phase 4.
+ * Playwright renders JavaScript, so SPA content is captured. When Playwright is
+ * not installed, falls back to native fetch() with a warning.
  */
+
+import { getBrowser } from "./browser-pool.js";
 
 /** Maximum raw response size in bytes (5 MB). */
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -43,6 +45,8 @@ export interface FetchResult {
 	contentType: string;
 	statusCode: number;
 	isHTML: boolean;
+	/** Set when Playwright was unavailable and native fetch was used instead. */
+	fallbackWarning?: string;
 }
 
 export class FetchError extends Error {
@@ -53,6 +57,12 @@ export class FetchError extends Error {
 		super(message);
 		this.name = "FetchError";
 	}
+}
+
+export interface FetchOptions {
+	timeoutSeconds?: number;
+	/** Requested output format — when "text" and Playwright is active, uses page.textContent(). */
+	format?: "markdown" | "text" | "html";
 }
 
 function isBinaryContentType(ct: string): boolean {
@@ -71,16 +81,175 @@ function isHTMLContentType(ct: string): boolean {
 }
 
 /**
- * Fetch a URL using native `fetch()`.
- *
- * - Follows redirects automatically.
- * - Rejects binary content-types.
- * - Rejects responses exceeding 5 MB.
- * - Returns the body as a string along with metadata.
+ * Fetch a URL. Tries Playwright first; falls back to native fetch() when
+ * Playwright is not installed.
  */
 export async function fetchPage(
 	url: string,
-	options?: { timeoutSeconds?: number },
+	options?: FetchOptions,
+): Promise<FetchResult> {
+	const browser = await getBrowser();
+	if (browser) {
+		return fetchWithPlaywright(browser, url, options);
+	}
+	return fetchWithNative(url, options);
+}
+
+// ---------------------------------------------------------------------------
+// Playwright path
+// ---------------------------------------------------------------------------
+
+async function fetchWithPlaywright(
+	browser: import("playwright").Browser,
+	url: string,
+	options?: FetchOptions,
+): Promise<FetchResult> {
+	const timeoutMs = (options?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000;
+	const page = await browser.newPage();
+
+	try {
+		const response = await page.goto(url, {
+			waitUntil: "load",
+			timeout: timeoutMs,
+		});
+
+		if (!response) {
+			throw new FetchError(`No response from "${url}"`, "network");
+		}
+
+		const statusCode = response.status();
+		if (statusCode >= 400) {
+			throw new FetchError(
+				`HTTP ${statusCode} ${response.statusText()} fetching "${url}"`,
+				"http",
+			);
+		}
+
+		const contentType = response.headers()["content-type"] ?? "application/octet-stream";
+		if (isBinaryContentType(contentType)) {
+			throw new FetchError(
+				`Unsupported binary content-type "${contentType}" for "${url}". Only text-based content is supported`,
+				"binary",
+			);
+		}
+
+		const finalURL = page.url();
+
+		// For non-HTML text content, read the body bytes directly.
+		if (!isHTMLContentType(contentType)) {
+			const buf = await response.body();
+			if (buf.byteLength > MAX_RESPONSE_BYTES) {
+				throw new FetchError(
+					`Response too large: ${buf.byteLength} bytes exceeds the ${MAX_RESPONSE_BYTES / 1024 / 1024}MB limit for "${url}"`,
+					"too_large",
+				);
+			}
+			if (!isTextContentType(contentType)) {
+				// Unknown non-binary type — try to decode as text
+				try {
+					return {
+						body: new TextDecoder().decode(buf),
+						finalURL,
+						contentType,
+						statusCode,
+						isHTML: false,
+					};
+				} catch {
+					throw new FetchError(
+						`Unsupported content-type "${contentType}" for "${url}"`,
+						"binary",
+					);
+				}
+			}
+			return {
+				body: new TextDecoder().decode(buf),
+				finalURL,
+				contentType,
+				statusCode,
+				isHTML: false,
+			};
+		}
+
+		// HTML content — wait for network to settle so JS can finish rendering.
+		await page.waitForLoadState("networkidle", { timeout: timeoutMs }).catch(() => {
+			// networkidle may not fire on very busy pages — proceed with what we have.
+		});
+
+		// For format: text, use Playwright's built-in textContent extraction
+		// which captures the rendered (post-JS) text.
+		if (options?.format === "text") {
+			const textContent = await page.textContent("body") ?? "";
+			const byteLength = new TextEncoder().encode(textContent).byteLength;
+			if (byteLength > MAX_RESPONSE_BYTES) {
+				throw new FetchError(
+					`Response too large: ${byteLength} bytes exceeds the ${MAX_RESPONSE_BYTES / 1024 / 1024}MB limit for "${url}"`,
+					"too_large",
+				);
+			}
+			return {
+				body: textContent,
+				finalURL,
+				contentType,
+				statusCode,
+				isHTML: true,
+				// Signal that text was extracted directly by Playwright — skip
+				// content-converter's DOM-based text extraction.
+			};
+		}
+
+		// For markdown/html, get the full rendered HTML.
+		const html = await page.content();
+		const byteLength = new TextEncoder().encode(html).byteLength;
+		if (byteLength > MAX_RESPONSE_BYTES) {
+			throw new FetchError(
+				`Response too large: ${byteLength} bytes exceeds the ${MAX_RESPONSE_BYTES / 1024 / 1024}MB limit for "${url}"`,
+				"too_large",
+			);
+		}
+
+		return {
+			body: html,
+			finalURL,
+			contentType,
+			statusCode,
+			isHTML: true,
+		};
+	} catch (err: unknown) {
+		if (err instanceof FetchError) throw err;
+		const message = err instanceof Error ? err.message : String(err);
+		if (message.includes("Timeout") || message.includes("timeout")) {
+			throw new FetchError(
+				`Timeout: request to "${url}" timed out after ${options?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS} seconds`,
+				"timeout",
+			);
+		}
+		if (message.includes("ERR_NAME_NOT_RESOLVED") || message.includes("ENOTFOUND") || message.includes("getaddrinfo")) {
+			throw new FetchError(`DNS error: could not resolve hostname for "${url}"`, "network");
+		}
+		if (message.includes("ERR_CONNECTION_REFUSED") || message.includes("ECONNREFUSED")) {
+			throw new FetchError(`Connection refused: "${url}"`, "network");
+		}
+		if (message.includes("ERR_CONNECTION_RESET") || message.includes("ECONNRESET")) {
+			throw new FetchError(`Connection reset while fetching "${url}"`, "network");
+		}
+		throw new FetchError(`Network error fetching "${url}": ${message}`, "network");
+	} finally {
+		await page.close().catch(() => {});
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Native fetch fallback
+// ---------------------------------------------------------------------------
+
+const FALLBACK_WARNING =
+	"Warning: Playwright is not installed. Fetching with native HTTP client — " +
+	"JavaScript-rendered content (SPAs) will not be captured. " +
+	"Run `npx playwright install chromium` to enable full SPA support.";
+
+async function fetchWithNative(
+	url: string,
+	options?: FetchOptions,
 ): Promise<FetchResult> {
 	const timeoutMs = (options?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000;
 	const controller = new AbortController();
@@ -148,8 +317,6 @@ export async function fetchPage(
 	// Read body as text, enforcing size limit
 	let body: string;
 	if (!isTextContentType(contentType) && !isHTMLContentType(contentType)) {
-		// Unknown content-type that's not explicitly binary — try to read as text
-		// but reject if it looks binary (non-UTF8)
 		try {
 			body = await readBodyWithLimit(response);
 		} catch (err) {
@@ -169,6 +336,7 @@ export async function fetchPage(
 		contentType,
 		statusCode: response.status,
 		isHTML: isHTMLContentType(contentType),
+		fallbackWarning: FALLBACK_WARNING,
 	};
 }
 
@@ -176,7 +344,6 @@ export async function fetchPage(
  * Read the response body as text, enforcing the 5 MB size limit.
  */
 async function readBodyWithLimit(response: Response): Promise<string> {
-	// Use arrayBuffer to measure bytes accurately
 	const buffer = await response.arrayBuffer();
 	if (buffer.byteLength > MAX_RESPONSE_BYTES) {
 		throw new FetchError(

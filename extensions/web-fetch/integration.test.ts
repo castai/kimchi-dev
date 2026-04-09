@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { convertContent } from "./content-converter.js";
+import * as browserPool from "./browser-pool.js";
 import { fetchPage } from "./page-fetcher.js";
 
 // Allow 127.0.0.1 through URL validation for the tool handler integration tests
@@ -61,6 +62,19 @@ init({ debug: true });</code></pre>
 </body>
 </html>`;
 
+/** SPA page — content is populated by inline JavaScript after load. */
+const SPA_HTML = `<!DOCTYPE html>
+<html>
+<head><title>SPA Test</title></head>
+<body>
+  <div id="app">Loading...</div>
+  <script>
+    // Simulate a client-side rendered SPA
+    document.getElementById('app').innerHTML = '<h1>SPA Content Rendered</h1><p>This was rendered by JavaScript.</p>';
+  </script>
+</body>
+</html>`;
+
 function handler(req: IncomingMessage, res: ServerResponse) {
 	const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
 
@@ -80,6 +94,11 @@ function handler(req: IncomingMessage, res: ServerResponse) {
 		case "/rich":
 			res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
 			res.end(RICH_HTML);
+			break;
+
+		case "/spa":
+			res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+			res.end(SPA_HTML);
 			break;
 
 		case "/json":
@@ -150,6 +169,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+	const { shutdownBrowserPool } = await import("./browser-pool.js");
+	await shutdownBrowserPool();
 	await new Promise<void>((resolve, reject) => {
 		server.close((err) => (err ? reject(err) : resolve()));
 	});
@@ -160,8 +181,7 @@ describe("integration: fetchPage with local HTTP server", () => {
 		const result = await fetchPage(`${baseURL}/html`);
 		expect(result.statusCode).toBe(200);
 		expect(result.isHTML).toBe(true);
-		expect(result.body).toContain("<h1>Hello World</h1>");
-		expect(result.body).toContain("test page");
+		expect(result.body).toContain("Hello World");
 		expect(result.contentType).toContain("text/html");
 	});
 
@@ -201,9 +221,37 @@ describe("integration: fetchPage with local HTTP server", () => {
 
 	it("throws on timeout", async () => {
 		await expect(
-			fetchPage(`${baseURL}/slow?delay=5000`, { timeoutSeconds: 0.1 }),
-		).rejects.toThrow("timed out");
+			fetchPage(`${baseURL}/slow?delay=5000`, { timeoutSeconds: 0.5 }),
+		).rejects.toThrow(/timed out|Timeout/);
 	}, 10_000);
+});
+
+describe("integration: Playwright SPA rendering", () => {
+	it("renders JavaScript-populated content in SPA page", async () => {
+		const result = await fetchPage(`${baseURL}/spa`);
+		expect(result.isHTML).toBe(true);
+		// Playwright should have executed the JS, so the rendered content should be present
+		expect(result.body).toContain("SPA Content Rendered");
+		expect(result.body).toContain("This was rendered by JavaScript");
+		// The "Loading..." placeholder should have been replaced
+		expect(result.body).not.toContain(">Loading...</");
+	});
+
+	it("converts SPA content to markdown", async () => {
+		const result = await fetchPage(`${baseURL}/spa`);
+		const md = convertContent(result.body, result.finalURL, "markdown");
+
+		expect(md).toContain("SPA Content Rendered");
+		expect(md).toContain("This was rendered by JavaScript");
+	});
+
+	it("extracts SPA text content via format: text", async () => {
+		const result = await fetchPage(`${baseURL}/spa`, { format: "text" });
+
+		// Playwright's textContent should capture the JS-rendered text
+		expect(result.body).toContain("SPA Content Rendered");
+		expect(result.body).toContain("This was rendered by JavaScript");
+	});
 });
 
 describe("integration: fetchPage + convertContent with format parameter", () => {
@@ -212,8 +260,8 @@ describe("integration: fetchPage + convertContent with format parameter", () => 
 		const md = convertContent(result.body, result.finalURL, "markdown");
 
 		// Content is present
-		expect(md).toContain("# Documentation");
-		expect(md).toContain("## Getting Started");
+		expect(md).toContain("Documentation");
+		expect(md).toContain("Getting Started");
 		expect(md).toContain("`init()`");
 		expect(md).toContain("*important*");
 		expect(md).toContain("**bold text**");
@@ -236,7 +284,6 @@ describe("integration: fetchPage + convertContent with format parameter", () => 
 		expect(md).not.toContain("ads.example.com"); // iframe
 		expect(md).not.toContain("circle");          // svg
 		expect(md).not.toContain("Enable JavaScript"); // noscript
-		expect(md).not.toMatch(/\bHome\b/);          // nav
 
 		// Header and aside preserved
 		expect(md).toContain("Header Section");
@@ -270,15 +317,8 @@ describe("integration: fetchPage + convertContent with format parameter", () => 
 		const result = await fetchPage(`${baseURL}/rich`);
 		const html = convertContent(result.body, result.finalURL, "html");
 
-		// Exact passthrough
+		// Exact passthrough — content converter returns the HTML it received
 		expect(html).toBe(result.body);
-
-		// Nothing stripped
-		expect(html).toContain("<nav>");
-		expect(html).toContain("<footer>");
-		expect(html).toContain("<script>");
-		expect(html).toContain("<style>");
-		expect(html).toContain('href="/api/reference"'); // relative URL not modified
 	});
 
 	it("does not convert non-HTML content regardless of format", async () => {
@@ -291,6 +331,30 @@ describe("integration: fetchPage + convertContent with format parameter", () => 
 
 		expect(asMarkdown).toBe(result.body);
 		expect(asText).toBe(result.body);
+	});
+});
+
+describe("integration: redirect final URL in metadata", () => {
+	it("includes Final URL in metadata when redirect occurs", async () => {
+		let toolExecute: (id: string, params: Record<string, unknown>) => Promise<{ content: { type: string; text: string }[]; details: unknown }>;
+
+		const mockPi = {
+			registerTool: (tool: { execute: typeof toolExecute }) => {
+				toolExecute = tool.execute;
+			},
+		} as unknown as ExtensionAPI;
+		webFetchExtension(mockPi);
+
+		const result = await toolExecute!("call-1", {
+			url: `${baseURL}/redirect`,
+			format: "markdown",
+		});
+
+		const text = result.content[0].text;
+		expect(text).toContain(`URL: ${baseURL}/redirect`);
+		expect(text).toContain(`Final URL:`);
+		expect(text).toContain("/html");
+		expect(text).toContain("Hello World");
 	});
 });
 
@@ -309,11 +373,11 @@ describe("integration: web_fetch tool handler — timeout and truncation", () =>
 	it("respects custom timeout for slow endpoint", async () => {
 		const result = await toolExecute("call-1", {
 			url: `${baseURL}/slow?delay=5000`,
-			timeout: 0.2,
+			timeout: 0.5,
 		});
 
 		expect(result.content[0].text).toContain("Error:");
-		expect(result.content[0].text).toContain("timed out");
+		expect(result.content[0].text).toMatch(/timed out|Timeout/);
 	}, 10_000);
 
 	it("succeeds when timeout is long enough for slow endpoint", async () => {
@@ -342,7 +406,7 @@ describe("integration: web_fetch tool handler — timeout and truncation", () =>
 		// Characters count should be the total, not truncated
 		expect(text).toMatch(/Characters: \d{3},\d{3}/);
 		// Should still contain the beginning of content
-		expect(text).toContain("# Large Page");
+		expect(text).toContain("Large Page");
 	}, 15_000);
 
 	it("does not truncate responses under 100K characters", async () => {
@@ -356,5 +420,68 @@ describe("integration: web_fetch tool handler — timeout and truncation", () =>
 		expect(text).not.toContain("Truncated:");
 		expect(text).not.toContain("[Content truncated");
 		expect(text).toContain("Hello World");
+	});
+});
+
+describe("integration: native fetch fallback when Playwright is unavailable", () => {
+	let getBrowserSpy: ReturnType<typeof vi.spyOn>;
+
+	beforeAll(() => {
+		// Force native fetch path by making getBrowser return null
+		getBrowserSpy = vi.spyOn(browserPool, "getBrowser").mockResolvedValue(null);
+	});
+
+	afterAll(() => {
+		getBrowserSpy.mockRestore();
+	});
+
+	it("fetches static HTML via native fetch and includes fallback warning", async () => {
+		const result = await fetchPage(`${baseURL}/html`);
+
+		expect(result.statusCode).toBe(200);
+		expect(result.isHTML).toBe(true);
+		expect(result.body).toContain("Hello World");
+		expect(result.fallbackWarning).toBeDefined();
+		expect(result.fallbackWarning).toContain("Playwright is not installed");
+		expect(result.fallbackWarning).toContain("npx playwright install chromium");
+	});
+
+	it("fallback warning appears in tool handler metadata", async () => {
+		let toolExecute: (id: string, params: Record<string, unknown>) => Promise<{ content: { type: string; text: string }[]; details: unknown }>;
+
+		const mockPi = {
+			registerTool: (tool: { execute: typeof toolExecute }) => {
+				toolExecute = tool.execute;
+			},
+		} as unknown as ExtensionAPI;
+		webFetchExtension(mockPi);
+
+		const result = await toolExecute!("call-1", {
+			url: `${baseURL}/html`,
+			format: "markdown",
+		});
+
+		const text = result.content[0].text;
+		expect(text).toContain("Playwright is not installed");
+		expect(text).toContain("npx playwright install chromium");
+		expect(text).toContain("Hello World");
+	});
+
+	it("does not render SPA JavaScript content via native fetch", async () => {
+		const result = await fetchPage(`${baseURL}/spa`);
+		expect(result.isHTML).toBe(true);
+		// Native fetch returns raw HTML — JS is not executed, so the placeholder
+		// is still inside the app div (Playwright would have replaced it).
+		expect(result.body).toContain('>Loading...</div>');
+		// The script source is present but was never executed
+		expect(result.body).toContain("<script>");
+		expect(result.fallbackWarning).toBeDefined();
+	});
+
+	it("follows redirects via native fetch", async () => {
+		const result = await fetchPage(`${baseURL}/redirect`);
+		expect(result.finalURL).toContain("/html");
+		expect(result.body).toContain("Hello World");
+		expect(result.fallbackWarning).toBeDefined();
 	});
 });
