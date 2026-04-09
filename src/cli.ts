@@ -25,9 +25,9 @@ process.env.KIMCHI_CODING_AGENT_DIR = agentDir
 process.title = "kimchi"
 process.env.PI_SKIP_VERSION_CHECK = "1"
 
-import subagentExtension from "./extensions/subagent.js"
-import webFetchExtension from "../extensions/web-fetch/index.js"
 import { loadConfig } from "./config.js"
+import subagentExtension from "./extensions/subagent.js"
+import webFetchExtension from "./extensions/web-fetch/index.js"
 import { ensureModelsConfig } from "./models.js"
 
 try {

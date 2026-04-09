@@ -5,12 +5,12 @@
  * execute-handler.ts so it can be tested without pi-mono dependencies.
  */
 
-import { StringEnum } from "@mariozechner/pi-ai";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
-import { shutdownBrowserPool } from "./browser-pool.js";
-import { cacheClear } from "./cache.js";
-import { executeWebFetch } from "./execute-handler.js";
+import { StringEnum } from "@mariozechner/pi-ai"
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
+import { Type } from "@sinclair/typebox"
+import { shutdownBrowserPool } from "./browser-pool.js"
+import { cacheClear } from "./cache.js"
+import { executeWebFetch } from "./execute-handler.js"
 
 export default function webFetchExtension(pi: ExtensionAPI): void {
 	pi.registerTool({
@@ -40,12 +40,12 @@ export default function webFetchExtension(pi: ExtensionAPI): void {
 		}),
 
 		async execute(_toolCallId, params) {
-			return executeWebFetch(params);
+			return executeWebFetch(params)
 		},
-	});
+	})
 
 	pi.on("session_shutdown", () => {
-		cacheClear();
-		void shutdownBrowserPool();
-	});
+		cacheClear()
+		void shutdownBrowserPool()
+	})
 }

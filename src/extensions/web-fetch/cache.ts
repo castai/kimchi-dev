@@ -6,36 +6,36 @@
  */
 
 /** Default TTL in milliseconds (15 minutes). */
-const DEFAULT_TTL_MS = 15 * 60 * 1000;
+const DEFAULT_TTL_MS = 15 * 60 * 1000
 
 /** Default maximum number of cache entries before eviction kicks in. */
-export const MAX_ENTRIES = 100;
+export const MAX_ENTRIES = 100
 
 export interface CacheEntry {
 	/** The fully rendered tool output (metadata header + content body). */
-	output: string;
+	output: string
 	/** Timestamp when the entry was stored (Date.now()). */
-	storedAt: number;
+	storedAt: number
 }
 
 export interface CacheOptions {
-	ttlMs?: number;
-	maxEntries?: number;
+	ttlMs?: number
+	maxEntries?: number
 }
 
 export class Cache {
-	private readonly store = new Map<string, CacheEntry>();
-	private readonly ttlMs: number;
-	private readonly maxEntries: number;
+	private readonly store = new Map<string, CacheEntry>()
+	private readonly ttlMs: number
+	private readonly maxEntries: number
 
 	constructor(options?: CacheOptions) {
-		this.ttlMs = options?.ttlMs ?? DEFAULT_TTL_MS;
-		this.maxEntries = options?.maxEntries ?? MAX_ENTRIES;
+		this.ttlMs = options?.ttlMs ?? DEFAULT_TTL_MS
+		this.maxEntries = options?.maxEntries ?? MAX_ENTRIES
 	}
 
 	/** Build a composite cache key from URL and format. */
 	static key(url: string, format: string): string {
-		return `${url}::${format}`;
+		return `${url}::${format}`
 	}
 
 	/**
@@ -43,46 +43,46 @@ export class Cache {
 	 * on miss or expiry. Expired entries are evicted on access.
 	 */
 	get(url: string, format: string): string | undefined {
-		const key = Cache.key(url, format);
-		const entry = this.store.get(key);
-		if (!entry) return undefined;
+		const key = Cache.key(url, format)
+		const entry = this.store.get(key)
+		if (!entry) return undefined
 
 		if (Date.now() - entry.storedAt > this.ttlMs) {
-			this.store.delete(key);
-			return undefined;
+			this.store.delete(key)
+			return undefined
 		}
 
-		return entry.output;
+		return entry.output
 	}
 
 	/** Store a result in the cache. Evicts the oldest entry when at capacity. */
 	set(url: string, format: string, output: string): void {
-		const key = Cache.key(url, format);
+		const key = Cache.key(url, format)
 
 		// Evict oldest entry if at capacity (skip if we're overwriting an existing key)
 		if (this.store.size >= this.maxEntries && !this.store.has(key)) {
-			let oldestKey: string | undefined;
-			let oldestTime = Infinity;
+			let oldestKey: string | undefined
+			let oldestTime = Number.POSITIVE_INFINITY
 			for (const [k, v] of this.store) {
 				if (v.storedAt < oldestTime) {
-					oldestTime = v.storedAt;
-					oldestKey = k;
+					oldestTime = v.storedAt
+					oldestKey = k
 				}
 			}
-			if (oldestKey) this.store.delete(oldestKey);
+			if (oldestKey) this.store.delete(oldestKey)
 		}
 
-		this.store.set(key, { output, storedAt: Date.now() });
+		this.store.set(key, { output, storedAt: Date.now() })
 	}
 
 	/** Clear all cached entries. Called on session shutdown. */
 	clear(): void {
-		this.store.clear();
+		this.store.clear()
 	}
 
 	/** Number of entries currently in the cache. */
 	get size(): number {
-		return this.store.size;
+		return this.store.size
 	}
 }
 
@@ -90,25 +90,25 @@ export class Cache {
 // Default singleton — keeps the same module-level API for consumers.
 // ---------------------------------------------------------------------------
 
-const defaultCache = new Cache();
+const defaultCache = new Cache()
 
 /** Build a composite cache key from URL and format. */
 export function cacheKey(url: string, format: string): string {
-	return Cache.key(url, format);
+	return Cache.key(url, format)
 }
 
 export function cacheGet(url: string, format: string): string | undefined {
-	return defaultCache.get(url, format);
+	return defaultCache.get(url, format)
 }
 
 export function cacheSet(url: string, format: string, output: string): void {
-	defaultCache.set(url, format, output);
+	defaultCache.set(url, format, output)
 }
 
 export function cacheClear(): void {
-	defaultCache.clear();
+	defaultCache.clear()
 }
 
 export function cacheSize(): number {
-	return defaultCache.size;
+	return defaultCache.size
 }

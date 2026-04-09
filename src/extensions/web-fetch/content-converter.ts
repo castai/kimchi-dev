@@ -10,13 +10,13 @@
 // on it explicitly for boilerplate stripping, relative URL resolution, and
 // text extraction — none of which Turndown's API can do on its own.
 // @ts-expect-error — domino types are declared under 'domino', not '@mixmark-io/domino'
-import domino from "@mixmark-io/domino";
-import TurndownService from "turndown";
+import domino from "@mixmark-io/domino"
+import TurndownService from "turndown"
 
-export type OutputFormat = "markdown" | "text" | "html";
+export type OutputFormat = "markdown" | "text" | "html"
 
 /** Elements stripped before conversion (boilerplate / non-content). */
-const BOILERPLATE_SELECTORS = "script, style, meta, link, nav, footer, iframe, svg, noscript";
+const BOILERPLATE_SELECTORS = "script, style, meta, link, nav, footer, iframe, svg, noscript"
 
 /** Attributes that may contain relative URLs. */
 const URL_ATTRIBUTES: ReadonlyArray<{ selector: string; attr: string }> = [
@@ -24,7 +24,7 @@ const URL_ATTRIBUTES: ReadonlyArray<{ selector: string; attr: string }> = [
 	{ selector: "[src]", attr: "src" },
 	{ selector: "[action]", attr: "action" },
 	{ selector: "[poster]", attr: "poster" },
-];
+]
 
 /**
  * Convert raw HTML to the requested format.
@@ -35,28 +35,28 @@ const URL_ATTRIBUTES: ReadonlyArray<{ selector: string; attr: string }> = [
  */
 export function convertContent(html: string, baseURL: string, format: OutputFormat): string {
 	if (format === "html") {
-		return html;
+		return html
 	}
 
 	try {
-		const doc = domino.createDocument(html);
+		const doc = domino.createDocument(html)
 
 		// Strip boilerplate elements
 		for (const el of doc.querySelectorAll(BOILERPLATE_SELECTORS)) {
-			el.remove();
+			el.remove()
 		}
 
 		// Resolve relative URLs to absolute
-		resolveRelativeURLs(doc, baseURL);
+		resolveRelativeURLs(doc, baseURL)
 
 		if (format === "text") {
-			return extractText(doc);
+			return extractText(doc)
 		}
 
 		// format === "markdown"
-		return convertToMarkdown(doc);
+		return convertToMarkdown(doc)
 	} catch {
-		return "[Error: failed to parse HTML content]";
+		return "[Error: failed to parse HTML content]"
 	}
 }
 
@@ -66,10 +66,10 @@ export function convertContent(html: string, baseURL: string, format: OutputForm
 function resolveRelativeURLs(doc: Document, baseURL: string): void {
 	for (const { selector, attr } of URL_ATTRIBUTES) {
 		for (const el of doc.querySelectorAll(selector)) {
-			const value = el.getAttribute(attr);
+			const value = el.getAttribute(attr)
 			if (value) {
 				try {
-					el.setAttribute(attr, new URL(value, baseURL).href);
+					el.setAttribute(attr, new URL(value, baseURL).href)
 				} catch {
 					// Malformed URL — leave as-is
 				}
@@ -80,12 +80,42 @@ function resolveRelativeURLs(doc: Document, baseURL: string): void {
 
 /** Block-level elements that should produce line breaks in text output. */
 const BLOCK_ELEMENTS = new Set([
-	"address", "article", "aside", "blockquote", "details", "dialog", "dd",
-	"div", "dl", "dt", "fieldset", "figcaption", "figure", "form",
-	"h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr",
-	"li", "main", "ol", "p", "pre", "section", "table", "ul",
-	"tr", "td", "th", "br",
-]);
+	"address",
+	"article",
+	"aside",
+	"blockquote",
+	"details",
+	"dialog",
+	"dd",
+	"div",
+	"dl",
+	"dt",
+	"fieldset",
+	"figcaption",
+	"figure",
+	"form",
+	"h1",
+	"h2",
+	"h3",
+	"h4",
+	"h5",
+	"h6",
+	"header",
+	"hgroup",
+	"hr",
+	"li",
+	"main",
+	"ol",
+	"p",
+	"pre",
+	"section",
+	"table",
+	"ul",
+	"tr",
+	"td",
+	"th",
+	"br",
+])
 
 /**
  * Extract plain text from the document body.
@@ -102,38 +132,38 @@ const BLOCK_ELEMENTS = new Set([
  * mirroring what a spec-compliant `innerText` would produce.
  */
 function extractText(doc: Document): string {
-	const body = doc.body;
-	if (!body) return "";
+	const body = doc.body
+	if (!body) return ""
 
-	const parts: string[] = [];
-	walkNode(body, parts);
+	const parts: string[] = []
+	walkNode(body, parts)
 
 	return parts
 		.join("")
 		.split(/\n/)
 		.map((line) => line.replace(/\s+/g, " ").trim())
 		.filter((line) => line.length > 0)
-		.join("\n");
+		.join("\n")
 }
 
 function walkNode(node: Node, parts: string[]): void {
 	if (node.nodeType === 3 /* TEXT_NODE */) {
-		parts.push(node.nodeValue ?? "");
-		return;
+		parts.push(node.nodeValue ?? "")
+		return
 	}
 
-	if (node.nodeType !== 1 /* ELEMENT_NODE */) return;
+	if (node.nodeType !== 1 /* ELEMENT_NODE */) return
 
-	const tag = (node as Element).tagName?.toLowerCase() ?? "";
-	const isBlock = BLOCK_ELEMENTS.has(tag);
+	const tag = (node as Element).tagName?.toLowerCase() ?? ""
+	const isBlock = BLOCK_ELEMENTS.has(tag)
 
-	if (isBlock) parts.push("\n");
+	if (isBlock) parts.push("\n")
 
 	for (let child = node.firstChild; child; child = child.nextSibling) {
-		walkNode(child, parts);
+		walkNode(child, parts)
 	}
 
-	if (isBlock) parts.push("\n");
+	if (isBlock) parts.push("\n")
 }
 
 /**
@@ -146,13 +176,13 @@ function convertToMarkdown(doc: Document): string {
 		bulletListMarker: "-",
 		hr: "---",
 		emDelimiter: "*",
-	});
+	})
 
 	// Turndown's remove() skips elements during conversion — belt-and-suspenders
 	// since we already stripped these from the DOM, but this catches any that
 	// Turndown's own parser might re-encounter
-	td.remove(["script", "style", "meta", "link"]);
+	td.remove(["script", "style", "meta", "link"])
 
-	const bodyHTML = doc.body?.innerHTML ?? doc.documentElement?.innerHTML ?? "";
-	return td.turndown(bodyHTML);
+	const bodyHTML = doc.body?.innerHTML ?? doc.documentElement?.innerHTML ?? ""
+	return td.turndown(bodyHTML)
 }
