@@ -30,6 +30,27 @@ function getSubagentInvocation(args: string[]): { command: string; args: string[
 	return { command: process.execPath, args: [process.argv[1], ...args] }
 }
 
+// Parses a single JSON line from the subagent's --mode json stdout stream and
+// returns the text delta if present, or null otherwise.
+// The event shape (message_update / assistantMessageEvent / text_delta) is
+// internal to pi-coding-agent and may change across versions.
+export function parseSubagentEvent(line: string): string | null {
+	if (!line.trim()) return null
+	let event: Record<string, unknown>
+	try {
+		event = JSON.parse(line)
+	} catch {
+		return null
+	}
+	if (event.type === "message_update") {
+		const assistantEvent = event.assistantMessageEvent as Record<string, unknown> | undefined
+		if (assistantEvent?.type === "text_delta" && typeof assistantEvent.delta === "string") {
+			return assistantEvent.delta
+		}
+	}
+	return null
+}
+
 function spawnSubagent(
 	invocation: { command: string; args: string[] },
 	cwd: string,
@@ -47,23 +68,11 @@ function spawnSubagent(
 		let accumulated = ""
 		let stderr = ""
 
-		// Parses a single JSON line from the subagent's --mode json stdout stream.
-		// The event shape (message_update / assistantMessageEvent / text_delta) is
-		// internal to pi-coding-agent and may change across versions.
 		const processLine = (line: string) => {
-			if (!line.trim()) return
-			let event: Record<string, unknown>
-			try {
-				event = JSON.parse(line)
-			} catch {
-				return
-			}
-			if (event.type === "message_update") {
-				const assistantEvent = event.assistantMessageEvent as Record<string, unknown> | undefined
-				if (assistantEvent?.type === "text_delta" && typeof assistantEvent.delta === "string") {
-					accumulated += assistantEvent.delta
-					onToken(accumulated)
-				}
+			const delta = parseSubagentEvent(line)
+			if (delta !== null) {
+				accumulated += delta
+				onToken(accumulated)
 			}
 		}
 
@@ -86,7 +95,7 @@ function spawnSubagent(
 			resolve({ exitCode: code ?? 0, accumulated, stderr })
 		})
 
-		proc.on("error", () => resolve({ exitCode: 1, accumulated, stderr }))
+		proc.on("error", (err) => resolve({ exitCode: 1, accumulated, stderr: stderr || err.message }))
 
 		if (signal) {
 			const kill = () => {
@@ -96,7 +105,10 @@ function spawnSubagent(
 				}, 5000)
 			}
 			if (signal.aborted) kill()
-			else signal.addEventListener("abort", kill, { once: true })
+			else {
+				signal.addEventListener("abort", kill, { once: true })
+				proc.on("close", () => signal.removeEventListener("abort", kill))
+			}
 		}
 	})
 }
