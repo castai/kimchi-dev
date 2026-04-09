@@ -435,6 +435,21 @@ describe("fetchPage — Playwright path", () => {
 		}
 	});
 
+	it("classifies TimeoutError by error name even without 'timeout' in message", async () => {
+		const err = new Error("Navigation failed");
+		err.name = "TimeoutError";
+		mockPage({ gotoError: err });
+
+		try {
+			await fetchPage("https://slow.example.com/", { timeoutSeconds: 5 });
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(FetchError);
+			expect((err as FetchError).category).toBe("timeout");
+			expect((err as FetchError).message).toContain("timed out");
+		}
+	});
+
 	it("throws FetchError on DNS failure", async () => {
 		mockPage({
 			gotoError: new Error("net::ERR_NAME_NOT_RESOLVED"),

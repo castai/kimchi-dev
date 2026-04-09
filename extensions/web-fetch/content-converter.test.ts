@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+// @ts-expect-error — domino types are declared under 'domino', not '@mixmark-io/domino'
+import domino from "@mixmark-io/domino";
 import { convertContent } from "./content-converter.js";
 
 describe("convertContent", () => {
@@ -232,6 +234,56 @@ describe("convertContent", () => {
 			expect(text).toContain("Main text");
 			expect(text).toContain("Header section");
 			expect(text).toContain("Sidebar content");
+		});
+	});
+
+	describe("malformed HTML fallback", () => {
+		it("handles null input without throwing in markdown format", () => {
+			const result = convertContent(null as unknown as string, BASE_URL, "markdown");
+			expect(typeof result).toBe("string");
+		});
+
+		it("handles null input without throwing in text format", () => {
+			const result = convertContent(null as unknown as string, BASE_URL, "text");
+			expect(typeof result).toBe("string");
+		});
+
+		it("returns raw HTML unchanged for null input in html format", () => {
+			// html format is passthrough — returns input before parsing
+			const result = convertContent(null as unknown as string, BASE_URL, "html");
+			expect(result).toBeNull();
+		});
+
+		it("handles empty string without throwing", () => {
+			const mdResult = convertContent("", BASE_URL, "markdown");
+			expect(typeof mdResult).toBe("string");
+
+			const textResult = convertContent("", BASE_URL, "text");
+			expect(typeof textResult).toBe("string");
+		});
+
+		it("handles binary garbage without throwing", () => {
+			const garbage = "\x00\x01\x02\xFF\xFE\x80\x81";
+			const mdResult = convertContent(garbage, BASE_URL, "markdown");
+			expect(typeof mdResult).toBe("string");
+
+			const textResult = convertContent(garbage, BASE_URL, "text");
+			expect(typeof textResult).toBe("string");
+		});
+
+		it("returns fallback when domino.createDocument throws", () => {
+			const spy = vi.spyOn(domino, "createDocument").mockImplementation(() => {
+				throw new Error("Simulated parse failure");
+			});
+			try {
+				const mdResult = convertContent("<html>valid</html>", BASE_URL, "markdown");
+				expect(mdResult).toBe("[Error: failed to parse HTML content]");
+
+				const textResult = convertContent("<html>valid</html>", BASE_URL, "text");
+				expect(textResult).toBe("[Error: failed to parse HTML content]");
+			} finally {
+				spy.mockRestore();
+			}
 		});
 	});
 

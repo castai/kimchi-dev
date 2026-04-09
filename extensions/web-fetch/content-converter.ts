@@ -38,22 +38,26 @@ export function convertContent(html: string, baseURL: string, format: OutputForm
 		return html;
 	}
 
-	const doc = domino.createDocument(html);
+	try {
+		const doc = domino.createDocument(html);
 
-	// Strip boilerplate elements
-	for (const el of doc.querySelectorAll(BOILERPLATE_SELECTORS)) {
-		el.remove();
+		// Strip boilerplate elements
+		for (const el of doc.querySelectorAll(BOILERPLATE_SELECTORS)) {
+			el.remove();
+		}
+
+		// Resolve relative URLs to absolute
+		resolveRelativeURLs(doc, baseURL);
+
+		if (format === "text") {
+			return extractText(doc);
+		}
+
+		// format === "markdown"
+		return convertToMarkdown(doc);
+	} catch {
+		return "[Error: failed to parse HTML content]";
 	}
-
-	// Resolve relative URLs to absolute
-	resolveRelativeURLs(doc, baseURL);
-
-	if (format === "text") {
-		return extractText(doc);
-	}
-
-	// format === "markdown"
-	return convertToMarkdown(doc);
 }
 
 /**

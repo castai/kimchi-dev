@@ -216,8 +216,9 @@ async function fetchWithPlaywright(
 		};
 	} catch (err: unknown) {
 		if (err instanceof FetchError) throw err;
+		const name = err instanceof Error ? err.name : "";
 		const message = err instanceof Error ? err.message : String(err);
-		if (message.includes("Timeout") || message.includes("timeout")) {
+		if (name === "TimeoutError" || message.includes("Timeout") || message.includes("timeout")) {
 			throw new FetchError(
 				`Timeout: request to "${url}" timed out after ${options?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS} seconds`,
 				"timeout",
