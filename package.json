@@ -50,6 +50,9 @@
       "esbuild",
       "koffi",
       "protobufjs"
-    ]
+    ],
+    "patchedDependencies": {
+      "@mariozechner/pi-coding-agent": "patches/@mariozechner__pi-coding-agent.patch"
+    }
   }
 }

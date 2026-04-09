@@ -4,19 +4,18 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@mariozechner/pi-coding-agent':
+    hash: b966969e9ec0a9ab77fbeeae4e179380093a6acfb96e8249aa74cf4798e719d6
+    path: patches/@mariozechner__pi-coding-agent.patch
+
 importers:
 
   .:
     dependencies:
       '@mariozechner/pi-coding-agent':
         specifier: ^0.65.2
-        version: 0.65.2(ws@8.20.0)(zod@4.3.6)
-      '@mariozechner/pi-tui':
-        specifier: ^0.65.2
-        version: 0.65.2
-      '@sinclair/typebox':
-        specifier: ^0.34.49
-        version: 0.34.49
+        version: 0.65.2(patch_hash=b966969e9ec0a9ab77fbeeae4e179380093a6acfb96e8249aa74cf4798e719d6)(ws@8.20.0)(zod@4.3.6)
       undici:
         specifier: ^8.0.2
         version: 8.0.2
@@ -2277,7 +2276,7 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-coding-agent@0.65.2(ws@8.20.0)(zod@4.3.6)':
+  '@mariozechner/pi-coding-agent@0.65.2(patch_hash=b966969e9ec0a9ab77fbeeae4e179380093a6acfb96e8249aa74cf4798e719d6)(ws@8.20.0)(zod@4.3.6)':
     dependencies:
       '@mariozechner/jiti': 2.6.5
       '@mariozechner/pi-agent-core': 0.65.2(ws@8.20.0)(zod@4.3.6)
