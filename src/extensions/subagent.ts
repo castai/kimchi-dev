@@ -106,10 +106,7 @@ function formatFooterStatus(counts: Map<string, number>, theme: Theme): string {
 	const entries = [...counts.entries()]
 		.map(([model, n]) => `${model} [${n}]`)
 		.join(" | ")
-	const text = `subagents: ${entries}`
-	const terminalWidth = process.stdout.columns ?? 80
-	const padding = " ".repeat(Math.max(0, terminalWidth - visibleWidth(text)))
-	return theme.fg("dim", padding + text)
+	return theme.fg("dim", `subagents: ${entries}`)
 }
 
 const SubagentParams = Type.Object({
