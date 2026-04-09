@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { cacheClear, cacheSize } from "./cache.js";
 import { convertContent } from "./content-converter.js";
 import * as browserPool from "./browser-pool.js";
 import { fetchPage } from "./page-fetcher.js";
@@ -342,6 +343,7 @@ describe("integration: redirect final URL in metadata", () => {
 			registerTool: (tool: { execute: typeof toolExecute }) => {
 				toolExecute = tool.execute;
 			},
+			on: () => {},
 		} as unknown as ExtensionAPI;
 		webFetchExtension(mockPi);
 
@@ -366,6 +368,7 @@ describe("integration: web_fetch tool handler — timeout and truncation", () =>
 			registerTool: (tool: { execute: typeof toolExecute }) => {
 				toolExecute = tool.execute;
 			},
+			on: () => {},
 		} as unknown as ExtensionAPI;
 		webFetchExtension(mockPi);
 	});
@@ -423,6 +426,97 @@ describe("integration: web_fetch tool handler — timeout and truncation", () =>
 	});
 });
 
+describe("integration: session-scoped cache", () => {
+	let toolExecute: (id: string, params: Record<string, unknown>) => Promise<{ content: { type: string; text: string }[]; details: unknown }>;
+
+	beforeAll(() => {
+		const mockPi = {
+			registerTool: (tool: { execute: typeof toolExecute }) => {
+				toolExecute = tool.execute;
+			},
+			on: () => {},
+		} as unknown as ExtensionAPI;
+		webFetchExtension(mockPi);
+	});
+
+	beforeEach(() => {
+		cacheClear();
+	});
+
+	it("second fetch of same URL returns cache hit without re-fetching", async () => {
+		const first = await toolExecute("call-1", {
+			url: `${baseURL}/html`,
+			format: "markdown",
+		});
+		expect(first.content[0].text).toContain("Cache: miss");
+
+		const second = await toolExecute("call-2", {
+			url: `${baseURL}/html`,
+			format: "markdown",
+		});
+		expect(second.content[0].text).toContain("Cache: hit");
+		// Content should be the same (minus the cache status which differs only in stored version)
+		expect(second.content[0].text).toContain("Hello World");
+	});
+
+	it("different formats for same URL are cached separately", async () => {
+		await toolExecute("call-1", {
+			url: `${baseURL}/html`,
+			format: "markdown",
+		});
+
+		// Same URL, different format — should be a miss
+		const textResult = await toolExecute("call-2", {
+			url: `${baseURL}/html`,
+			format: "text",
+		});
+		expect(textResult.content[0].text).toContain("Cache: miss");
+		expect(textResult.content[0].text).toContain("Format: text");
+
+		// Now text format should hit
+		const textHit = await toolExecute("call-3", {
+			url: `${baseURL}/html`,
+			format: "text",
+		});
+		expect(textHit.content[0].text).toContain("Cache: hit");
+	});
+
+	it("cache is cleared by cacheClear (session shutdown)", async () => {
+		await toolExecute("call-1", {
+			url: `${baseURL}/html`,
+			format: "markdown",
+		});
+		expect(cacheSize()).toBeGreaterThan(0);
+
+		cacheClear();
+		expect(cacheSize()).toBe(0);
+
+		// After clearing, next fetch should be a miss
+		const result = await toolExecute("call-2", {
+			url: `${baseURL}/html`,
+			format: "markdown",
+		});
+		expect(result.content[0].text).toContain("Cache: miss");
+	});
+
+	it("errors are not cached", async () => {
+		await toolExecute("call-1", {
+			url: `${baseURL}/not-found`,
+			format: "markdown",
+		});
+		// The 404 should not be cached
+		const sizeAfterError = cacheSize();
+
+		const result = await toolExecute("call-2", {
+			url: `${baseURL}/not-found`,
+			format: "markdown",
+		});
+		// Still an error, still a miss
+		expect(result.content[0].text).toContain("Error:");
+		expect(cacheSize()).toBe(sizeAfterError);
+	});
+});
+
 describe("integration: native fetch fallback when Playwright is unavailable", () => {
 	let getBrowserSpy: ReturnType<typeof vi.spyOn>;
 
@@ -453,6 +547,7 @@ describe("integration: native fetch fallback when Playwright is unavailable", ()
 			registerTool: (tool: { execute: typeof toolExecute }) => {
 				toolExecute = tool.execute;
 			},
+			on: () => {},
 		} as unknown as ExtensionAPI;
 		webFetchExtension(mockPi);
 

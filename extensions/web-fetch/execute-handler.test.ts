@@ -1,5 +1,10 @@
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./cache.js", () => ({
+	cacheGet: vi.fn(() => undefined),
+	cacheSet: vi.fn(),
+}));
+
 vi.mock("./page-fetcher.js", () => ({
 	FetchError: class FetchError extends Error {
 		constructor(message: string, public readonly category: string) {
@@ -22,10 +27,13 @@ vi.mock("./content-converter.js", () => ({
 	convertContent: vi.fn((html: string) => html),
 }));
 
+import { cacheGet, cacheSet } from "./cache.js";
 import { executeWebFetch } from "./execute-handler.js";
 import { fetchPage } from "./page-fetcher.js";
 import { convertContent } from "./content-converter.js";
 
+const cacheGetMock = cacheGet as unknown as MockInstance;
+const cacheSetMock = cacheSet as unknown as MockInstance;
 const fetchPageMock = fetchPage as unknown as MockInstance;
 const convertContentMock = convertContent as unknown as MockInstance;
 
@@ -93,6 +101,24 @@ describe("executeWebFetch", () => {
 
 			expect(result.content[0].text).toContain("timed out");
 			expect(result.content[0].text).toContain("10 seconds");
+		});
+	});
+
+	describe("error handling", () => {
+		it("handles non-FetchError exceptions with readable message", async () => {
+			fetchPageMock.mockRejectedValue(new Error("connection refused"));
+
+			const result = await executeWebFetch({ url: "https://example.com/" });
+
+			expect(result.content[0].text).toBe("Error: connection refused");
+		});
+
+		it("handles non-Error thrown values", async () => {
+			fetchPageMock.mockRejectedValue("something broke");
+
+			const result = await executeWebFetch({ url: "https://example.com/" });
+
+			expect(result.content[0].text).toBe("Error: something broke");
 		});
 	});
 
@@ -221,6 +247,102 @@ describe("executeWebFetch", () => {
 			const text = result.content[0].text;
 
 			expect(text).not.toContain("Warning:");
+		});
+	});
+
+	describe("cache behavior", () => {
+		it("returns cached output on cache hit without fetching", async () => {
+			cacheGetMock.mockReturnValue("cached output with Cache: hit");
+
+			const result = await executeWebFetch({ url: "https://example.com/" });
+
+			expect(result.content[0].text).toBe("cached output with Cache: hit");
+			expect(fetchPageMock).not.toHaveBeenCalled();
+			expect(convertContentMock).not.toHaveBeenCalled();
+		});
+
+		it("includes Cache: miss in metadata on cache miss", async () => {
+			const body = "<p>Hello</p>";
+			fetchPageMock.mockResolvedValue(mockFetchResult(body));
+			convertContentMock.mockReturnValue("Hello");
+
+			const result = await executeWebFetch({ url: "https://example.com/" });
+
+			expect(result.content[0].text).toContain("Cache: miss");
+		});
+
+		it("stores result in cache with Cache: hit after successful fetch", async () => {
+			const body = "<p>Hello</p>";
+			fetchPageMock.mockResolvedValue(mockFetchResult(body));
+			convertContentMock.mockReturnValue("Hello");
+
+			await executeWebFetch({ url: "https://example.com/" });
+
+			expect(cacheSetMock).toHaveBeenCalledOnce();
+			const [url, format, output] = cacheSetMock.mock.calls[0];
+			expect(url).toBe("https://example.com/");
+			expect(format).toBe("markdown");
+			expect(output).toContain("Cache: hit");
+			expect(output).not.toContain("Cache: miss");
+		});
+
+		it("does not cache error responses", async () => {
+			const { FetchError } = await import("./page-fetcher.js");
+			fetchPageMock.mockRejectedValue(new FetchError("HTTP 404", "http"));
+
+			await executeWebFetch({ url: "https://example.com/missing" });
+
+			expect(cacheSetMock).not.toHaveBeenCalled();
+		});
+
+		it("caches with the correct format key", async () => {
+			fetchPageMock.mockResolvedValue(mockFetchResult("<p>Hello</p>"));
+			convertContentMock.mockReturnValue("Hello");
+
+			await executeWebFetch({ url: "https://example.com/", format: "text" });
+
+			expect(cacheSetMock).toHaveBeenCalledWith(
+				"https://example.com/",
+				"text",
+				expect.any(String),
+			);
+		});
+
+		it("checks cache with the correct format key", async () => {
+			cacheGetMock.mockReturnValue(undefined);
+			fetchPageMock.mockResolvedValue(mockFetchResult("<p>Hello</p>"));
+			convertContentMock.mockReturnValue("Hello");
+
+			await executeWebFetch({ url: "https://example.com/", format: "html" });
+
+			expect(cacheGetMock).toHaveBeenCalledWith("https://example.com/", "html");
+		});
+
+		it("does not check cache when URL validation fails", async () => {
+			const { validateURL } = await import("./url-validator.js");
+			(validateURL as unknown as MockInstance).mockReturnValueOnce({ valid: false, error: "bad url" });
+
+			await executeWebFetch({ url: "not-a-url" });
+
+			expect(cacheGetMock).not.toHaveBeenCalled();
+		});
+
+		it("does not corrupt page body containing literal 'Cache: miss' string", async () => {
+			const body = '<p>Status: Cache: miss — retry later</p>';
+			fetchPageMock.mockResolvedValue(mockFetchResult(body));
+			convertContentMock.mockReturnValue("Status: Cache: miss — retry later");
+
+			const result = await executeWebFetch({ url: "https://example.com/" });
+
+			// Immediate output has Cache: miss in metadata and in body
+			const text = result.content[0].text;
+			expect(text).toContain("Cache: miss");
+			expect(text).toContain("Status: Cache: miss — retry later");
+
+			// Cached output has Cache: hit in metadata but body is untouched
+			const [, , cachedOutput] = cacheSetMock.mock.calls[0];
+			expect(cachedOutput).toContain("Cache: hit");
+			expect(cachedOutput).toContain("Status: Cache: miss — retry later");
 		});
 	});
 
