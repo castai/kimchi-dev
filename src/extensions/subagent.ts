@@ -1,9 +1,8 @@
 import { spawn } from "node:child_process"
-import * as fs from "node:fs"
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
-import type { Theme } from "@mariozechner/pi-coding-agent"
-import { Container, Spacer, Text, visibleWidth } from "@mariozechner/pi-tui"
+import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent"
+import { Container, Spacer, Text } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
+import { isBunBinary } from "../env.js"
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 const PROMPT_MAX_LENGTH = 60
@@ -22,11 +21,13 @@ interface SubagentResult {
 }
 
 function getSubagentInvocation(args: string[]): { command: string; args: string[] } {
-	const currentScript = process.argv[1]
-	if (currentScript && fs.existsSync(currentScript)) {
-		return { command: process.execPath, args: [currentScript, ...args] }
+	if (isBunBinary) {
+		// In a compiled Bun binary, process.execPath is the binary itself —
+		// pass args directly without a script path.
+		return { command: process.execPath, args }
 	}
-	return { command: process.execPath, args }
+	// In Node.js dev mode, process.argv[1] is the script entrypoint.
+	return { command: process.execPath, args: [process.argv[1], ...args] }
 }
 
 function spawnSubagent(
@@ -46,6 +47,9 @@ function spawnSubagent(
 		let accumulated = ""
 		let stderr = ""
 
+		// Parses a single JSON line from the subagent's --mode json stdout stream.
+		// The event shape (message_update / assistantMessageEvent / text_delta) is
+		// internal to pi-coding-agent and may change across versions.
 		const processLine = (line: string) => {
 			if (!line.trim()) return
 			let event: Record<string, unknown>
@@ -73,7 +77,7 @@ function spawnSubagent(
 		proc.stderr.on("data", (data: Buffer) => {
 			stderr += data.toString()
 			if (stderr.length > STDERR_MAX) {
-				stderr = stderr.slice(-STDERR_MAX)
+				stderr = stderr.slice(0, STDERR_MAX)
 			}
 		})
 
@@ -103,10 +107,15 @@ function truncatePrompt(prompt: string): string {
 }
 
 function formatFooterStatus(counts: Map<string, number>, theme: Theme): string {
-	const entries = [...counts.entries()]
-		.map(([model, n]) => `${model} [${n}]`)
-		.join(" | ")
+	const entries = [...counts.entries()].map(([model, n]) => `${model} [${n}]`).join(" | ")
 	return theme.fg("dim", `subagents: ${entries}`)
+}
+
+function clearSpinner(state: SubagentState) {
+	if (state.spinnerInterval) {
+		clearInterval(state.spinnerInterval)
+		state.spinnerInterval = undefined
+	}
 }
 
 const SubagentParams = Type.Object({
@@ -135,11 +144,8 @@ export default function (pi: ExtensionAPI) {
 			const args = ["--mode", "json", "-p", "--no-session", "--model", params.model, params.prompt]
 			const invocation = getSubagentInvocation(args)
 
-			const { exitCode, accumulated, stderr } = await spawnSubagent(
-				invocation,
-				ctx.cwd,
-				signal,
-				(text) => onUpdate?.({ content: [{ type: "text", text }], details: undefined }),
+			const { exitCode, accumulated, stderr } = await spawnSubagent(invocation, ctx.cwd, signal, (text) =>
+				onUpdate?.({ content: [{ type: "text", text }], details: undefined }),
 			)
 
 			sessionCounts.set(params.model, (sessionCounts.get(params.model) ?? 0) + 1)
@@ -148,7 +154,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (exitCode !== 0) {
-				const errorMsg = accumulated || stderr.trim() || "(no output)"
+				const errorMsg = stderr.trim() || accumulated || "(no output)"
 				return {
 					content: [{ type: "text", text: `Subagent failed (exit ${exitCode}): ${errorMsg}` }],
 					details: undefined,
@@ -165,12 +171,9 @@ export default function (pi: ExtensionAPI) {
 		renderCall(args, theme, context) {
 			const state = context.state as SubagentState
 
-			if (context.executionStarted && !context.isPartial && state.spinnerInterval) {
-				clearInterval(state.spinnerInterval)
-				state.spinnerInterval = undefined
-			}
-
-			if (context.executionStarted && context.isPartial && !state.spinnerInterval) {
+			if (!context.executionStarted || !context.isPartial) {
+				clearSpinner(state)
+			} else if (!state.spinnerInterval) {
 				state.spinnerIdx = 0
 				state.spinnerInterval = setInterval(() => {
 					state.spinnerIdx = (state.spinnerIdx + 1) % SPINNER_FRAMES.length
@@ -195,15 +198,14 @@ export default function (pi: ExtensionAPI) {
 		renderResult(result, options, theme, context) {
 			const state = context.state as SubagentState
 
-			if (!options.isPartial && state.spinnerInterval) {
-				clearInterval(state.spinnerInterval)
-				state.spinnerInterval = undefined
+			if (!options.isPartial) {
+				clearSpinner(state)
 			}
 
-			const text = result.content.find((c) => c.type === "text")
-			if (!text || text.type !== "text" || !text.text) return new Text("", 0, 0)
+			const textContent = result.content.find((c): c is { type: "text"; text: string } => c.type === "text")
+			if (!textContent?.text) return new Text("", 0, 0)
 
-			const displayText = text.text.split("\n").slice(-5).join("\n")
+			const displayText = textContent.text.split("\n").slice(-5).join("\n")
 
 			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
 			component.clear()
