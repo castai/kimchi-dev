@@ -33,7 +33,7 @@ const extensionsDir = isBunBinary
 	: resolve(dirname(fileURLToPath(import.meta.url)), "extensions")
 
 const extensions = [
-	resolve(extensionsDir, "kimchi.js"),
+	resolve(extensionsDir, "subagent.js"),
 ]
 
 try {
