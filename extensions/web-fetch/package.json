@@ -14,6 +14,9 @@
     "turndown": "^7.2.0"
   },
   "devDependencies": {
-    "@types/turndown": "^5.0.5"
+    "@types/turndown": "^5.0.5",
+    "@mariozechner/pi-ai": "^0.65.2",
+    "@mariozechner/pi-coding-agent": "^0.65.2",
+    "@sinclair/typebox": "^0.34.49"
   }
 }

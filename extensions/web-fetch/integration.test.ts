@@ -1,7 +1,21 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { convertContent } from "./content-converter.js";
 import { fetchPage } from "./page-fetcher.js";
+
+// Allow 127.0.0.1 through URL validation for the tool handler integration tests
+vi.mock("./url-validator.js", () => ({
+	validateURL: (raw: string) => {
+		try {
+			return { valid: true, url: new URL(raw) };
+		} catch {
+			return { valid: false, error: `Invalid URL: "${raw}"` };
+		}
+	},
+}));
+
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import webFetchExtension from "./index.js";
 
 let server: Server;
 let baseURL: string;
@@ -106,6 +120,18 @@ function handler(req: IncomingMessage, res: ServerResponse) {
 			res.writeHead(200, { "Content-Type": "application/octet-stream" });
 			res.end(Buffer.from([0x00, 0x01, 0x02, 0x03]));
 			break;
+
+		case "/large": {
+			// Generate a large HTML page that converts to >100K characters of markdown
+			const paragraphCount = 5000;
+			const paragraphs = Array.from({ length: paragraphCount }, (_, i) =>
+				`<p>Paragraph ${i + 1}: ${"Lorem ipsum dolor sit amet. ".repeat(5)}</p>`,
+			).join("\n");
+			const largeHTML = `<!DOCTYPE html><html><body><h1>Large Page</h1>\n${paragraphs}\n</body></html>`;
+			res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+			res.end(largeHTML);
+			break;
+		}
 
 		default:
 			res.writeHead(404);
@@ -265,5 +291,70 @@ describe("integration: fetchPage + convertContent with format parameter", () => 
 
 		expect(asMarkdown).toBe(result.body);
 		expect(asText).toBe(result.body);
+	});
+});
+
+describe("integration: web_fetch tool handler — timeout and truncation", () => {
+	let toolExecute: (id: string, params: Record<string, unknown>) => Promise<{ content: { type: string; text: string }[]; details: unknown }>;
+
+	beforeAll(() => {
+		const mockPi = {
+			registerTool: (tool: { execute: typeof toolExecute }) => {
+				toolExecute = tool.execute;
+			},
+		} as unknown as ExtensionAPI;
+		webFetchExtension(mockPi);
+	});
+
+	it("respects custom timeout for slow endpoint", async () => {
+		const result = await toolExecute("call-1", {
+			url: `${baseURL}/slow?delay=5000`,
+			timeout: 0.2,
+		});
+
+		expect(result.content[0].text).toContain("Error:");
+		expect(result.content[0].text).toContain("timed out");
+	}, 10_000);
+
+	it("succeeds when timeout is long enough for slow endpoint", async () => {
+		const result = await toolExecute("call-1", {
+			url: `${baseURL}/slow?delay=100`,
+			timeout: 10,
+		});
+
+		expect(result.content[0].text).toContain("URL:");
+		expect(result.content[0].text).toContain("Slow response");
+		expect(result.content[0].text).not.toContain("Error:");
+	}, 15_000);
+
+	it("truncates large response with notice in metadata", async () => {
+		const result = await toolExecute("call-1", {
+			url: `${baseURL}/large`,
+			format: "markdown",
+		});
+
+		const text = result.content[0].text;
+
+		// Should have truncation metadata
+		expect(text).toContain("Truncated: content truncated to 100,000 of");
+		// Should have truncation notice at end
+		expect(text).toContain("[Content truncated: showing 100,000 of");
+		// Characters count should be the total, not truncated
+		expect(text).toMatch(/Characters: \d{3},\d{3}/);
+		// Should still contain the beginning of content
+		expect(text).toContain("# Large Page");
+	}, 15_000);
+
+	it("does not truncate responses under 100K characters", async () => {
+		const result = await toolExecute("call-1", {
+			url: `${baseURL}/html`,
+			format: "markdown",
+		});
+
+		const text = result.content[0].text;
+
+		expect(text).not.toContain("Truncated:");
+		expect(text).not.toContain("[Content truncated");
+		expect(text).toContain("Hello World");
 	});
 });

@@ -1,17 +1,14 @@
 /**
- * web_fetch extension — fetches web pages and returns content with metadata.
+ * web_fetch extension — registers the tool with pi-mono.
  *
- * Phase 2: native fetch() with HTML-to-markdown conversion, text extraction,
- * and HTML passthrough. Playwright (Phase 4) and caching (Phase 5) will be
- * added in later phases.
+ * This is a thin registration shell. All business logic lives in
+ * execute-handler.ts so it can be tested without pi-mono dependencies.
  */
 
 import { StringEnum } from "@mariozechner/pi-ai";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { type OutputFormat, convertContent } from "./content-converter.js";
-import { type FetchError, fetchPage } from "./page-fetcher.js";
-import { validateURL } from "./url-validator.js";
+import { executeWebFetch } from "./execute-handler.js";
 
 export default function webFetchExtension(pi: ExtensionAPI): void {
 	pi.registerTool({
@@ -31,53 +28,17 @@ export default function webFetchExtension(pi: ExtensionAPI): void {
 					default: "markdown",
 				}),
 			),
+			timeout: Type.Optional(
+				Type.Number({
+					description:
+						"Timeout in seconds for the page fetch. Default is 30 seconds, maximum is 120 seconds. " +
+						"Values above 120 are clamped to 120.",
+				}),
+			),
 		}),
 
 		async execute(_toolCallId, params) {
-			const format: OutputFormat = params.format ?? "markdown";
-
-			// Validate URL
-			const validation = validateURL(params.url);
-			if (!validation.valid) {
-				return {
-					content: [{ type: "text" as const, text: `Error: ${validation.error}` }],
-					details: {},
-				};
-			}
-
-			// Fetch
-			let result;
-			try {
-				result = await fetchPage(params.url);
-			} catch (err: unknown) {
-				const fetchErr = err as FetchError;
-				return {
-					content: [{ type: "text" as const, text: `Error: ${fetchErr.message}` }],
-					details: {},
-				};
-			}
-
-			// Convert content based on format (HTML content only; non-HTML returned as-is)
-			const content = result.isHTML
-				? convertContent(result.body, result.finalURL, format)
-				: result.body;
-
-			// Build metadata header
-			const lines = [
-				`URL: ${params.url}`,
-				...(result.finalURL !== params.url ? [`Final URL: ${result.finalURL}`] : []),
-				`Content-Type: ${result.contentType}`,
-				`Format: ${format}`,
-				`Characters: ${content.length}`,
-			];
-
-			const metadata = lines.join("\n");
-			const output = `${metadata}\n\n${content}`;
-
-			return {
-				content: [{ type: "text" as const, text: output }],
-				details: {},
-			};
+			return executeWebFetch(params);
 		},
 	});
 }
