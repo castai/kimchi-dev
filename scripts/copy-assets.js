@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url"
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, "..")
 
-// orchestration-prompt.md — read at runtime by prompt-transformer.ts
+// transformed-user-prompt.md — read at runtime by prompt-transformer.ts
 cpSync(
-	join(projectRoot, "src", "orchestration", "prompt-transformer", "orchestration-prompt.md"),
-	join(projectRoot, "dist", "orchestration", "prompt-transformer", "orchestration-prompt.md"),
+	join(projectRoot, "src", "orchestration", "prompt-transformer", "transformed-user-prompt.md"),
+	join(projectRoot, "dist", "orchestration", "prompt-transformer", "transformed-user-prompt.md"),
 )

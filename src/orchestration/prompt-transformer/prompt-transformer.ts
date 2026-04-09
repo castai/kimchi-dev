@@ -5,7 +5,7 @@ import type { ModelRegistry } from "../model-registry/index.js"
 import type { OrchestrationModelDescriptor } from "../model-registry/types.js"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const PROMPT_TEMPLATE_PATH = join(__dirname, "orchestration-prompt.md")
+const PROMPT_TEMPLATE_PATH = join(__dirname, "transformed-user-prompt.md")
 
 function formatModel(model: OrchestrationModelDescriptor): string {
 	const strengths = model.capabilities.strengths.join(", ")
