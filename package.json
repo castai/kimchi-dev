@@ -12,7 +12,7 @@
     "copy:assets": "cp package.json dist/ && cp -r src/modes/interactive/theme dist/theme && cp -r node_modules/@mariozechner/pi-coding-agent/dist/core/export-html dist/export-html",
     "build": "tsc && node scripts/copy-themes.js",
     "build:binary": "pnpm run clean && pnpm run build && bun build dist/cli.js --compile --outfile dist/kimchi-code && pnpm run copy:assets",
-    "dev": "tsc --watch",
+    "dev": "tsx src/cli.ts",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "check": "biome check src/ && tsc --noEmit",
@@ -32,6 +32,7 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^22.15.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.3",
     "vitest": "^3.1.1"
   },
