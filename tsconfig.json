@@ -3,18 +3,15 @@
     "target": "ES2023",
     "module": "Node16",
     "moduleResolution": "Node16",
-    "lib": ["ES2023"],
-    "outDir": "dist",
-    "rootDir": "src",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "noEmit": true,
+    "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
     "resolveJsonModule": true
   },
-  "include": ["src"],
+  "include": ["src", "extensions"],
   "exclude": ["node_modules", "dist"]
 }

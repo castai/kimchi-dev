@@ -5,13 +5,13 @@
   "type": "module",
   "license": "MIT",
   "bin": {
-    "kimchi-code": "dist/cli.js"
+    "kimchi-code": "src/cli.ts"
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "copy:assets": "cp package.json dist/ && cp -r src/modes/interactive/theme dist/theme && cp -r node_modules/@mariozechner/pi-coding-agent/dist/core/export-html dist/export-html",
-    "build": "tsc && node scripts/copy-themes.js",
-    "build:binary": "pnpm run clean && pnpm run build && bun build dist/cli.js --compile --outfile dist/kimchi-code && pnpm run copy:assets",
+    "copy:assets": "cp package.json dist/ && cp -r src/modes/interactive/theme dist/theme",
+    "build": "tsc --noEmit && node scripts/copy-themes.js",
+    "build:binary": "pnpm run clean && pnpm run build && bun build src/cli.ts --compile --outfile dist/kimchi-code --external chromium-bidi --external electron && pnpm run copy:assets",
     "dev": "tsx src/cli.ts",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",

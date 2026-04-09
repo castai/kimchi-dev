@@ -55,12 +55,11 @@ jobs:
 
       - name: Compile standalone binary
         run: |
-          bun build dist/cli.js --compile --target=${{ matrix.target }} --outfile dist/kimchi-code
+          bun build src/cli.ts --compile --target=${{ matrix.target }} --outfile dist/kimchi-code --external chromium-bidi --external electron
           cp package.json dist/
-          cp -r node_modules/@mariozechner/pi-coding-agent/dist/core/export-html dist/export-html
 
       - name: Package binary
-        run: tar -czf kimchi-code_${{ matrix.os }}_${{ matrix.arch }}.tar.gz -C dist kimchi-code package.json theme export-html
+        run: tar -czf kimchi-code_${{ matrix.os }}_${{ matrix.arch }}.tar.gz -C dist kimchi-code package.json theme
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
