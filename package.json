@@ -8,8 +8,10 @@
     "kimchi-code": "dist/cli.js"
   },
   "scripts": {
+    "clean": "rm -rf dist",
+    "copy:assets": "cp package.json dist/ && cp -r src/modes/interactive/theme dist/theme && cp -r node_modules/@mariozechner/pi-coding-agent/dist/core/export-html dist/export-html",
     "build": "tsc && node scripts/copy-themes.js",
-    "build:binary": "rm -rf dist && pnpm run build && bun build dist/cli.js --compile --outfile dist/kimchi-code && cp package.json dist/ && cp -r src/modes/interactive/theme dist/theme && cp -r node_modules/@mariozechner/pi-coding-agent/dist/core/export-html dist/export-html",
+    "build:binary": "pnpm run clean && pnpm run build && bun build dist/cli.js --compile --outfile dist/kimchi-code && pnpm run copy:assets",
     "dev": "tsc --watch",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
