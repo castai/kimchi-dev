@@ -1,127 +1,196 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { _setTTL, cacheClear, cacheGet, cacheKey, cacheSet, cacheSize } from "./cache.js";
+import { describe, expect, it, vi } from "vitest";
+import { Cache, MAX_ENTRIES } from "./cache.js";
 
-afterEach(() => {
-	cacheClear();
-	_setTTL(undefined); // reset to default
-	vi.restoreAllMocks();
-});
-
-describe("cacheKey", () => {
+describe("Cache.key", () => {
 	it("combines URL and format with :: separator", () => {
-		expect(cacheKey("https://example.com/", "markdown")).toBe("https://example.com/::markdown");
+		expect(Cache.key("https://example.com/", "markdown")).toBe("https://example.com/::markdown");
 	});
 
 	it("produces different keys for different formats", () => {
-		const md = cacheKey("https://example.com/", "markdown");
-		const txt = cacheKey("https://example.com/", "text");
-		const html = cacheKey("https://example.com/", "html");
+		const md = Cache.key("https://example.com/", "markdown");
+		const txt = Cache.key("https://example.com/", "text");
+		const html = Cache.key("https://example.com/", "html");
 		expect(md).not.toBe(txt);
 		expect(md).not.toBe(html);
 		expect(txt).not.toBe(html);
 	});
 
 	it("produces different keys for different URLs", () => {
-		const a = cacheKey("https://a.com/", "markdown");
-		const b = cacheKey("https://b.com/", "markdown");
+		const a = Cache.key("https://a.com/", "markdown");
+		const b = Cache.key("https://b.com/", "markdown");
 		expect(a).not.toBe(b);
 	});
 });
 
-describe("cacheGet / cacheSet", () => {
+describe("get / set", () => {
 	it("returns undefined on cache miss", () => {
-		expect(cacheGet("https://example.com/", "markdown")).toBeUndefined();
+		const cache = new Cache();
+		expect(cache.get("https://example.com/", "markdown")).toBeUndefined();
 	});
 
 	it("returns stored value on cache hit", () => {
-		cacheSet("https://example.com/", "markdown", "cached output");
-		expect(cacheGet("https://example.com/", "markdown")).toBe("cached output");
+		const cache = new Cache();
+		cache.set("https://example.com/", "markdown", "cached output");
+		expect(cache.get("https://example.com/", "markdown")).toBe("cached output");
 	});
 
 	it("returns undefined for same URL but different format", () => {
-		cacheSet("https://example.com/", "markdown", "md output");
-		expect(cacheGet("https://example.com/", "text")).toBeUndefined();
+		const cache = new Cache();
+		cache.set("https://example.com/", "markdown", "md output");
+		expect(cache.get("https://example.com/", "text")).toBeUndefined();
 	});
 
 	it("overwrites existing entry for same key", () => {
-		cacheSet("https://example.com/", "markdown", "first");
-		cacheSet("https://example.com/", "markdown", "second");
-		expect(cacheGet("https://example.com/", "markdown")).toBe("second");
+		const cache = new Cache();
+		cache.set("https://example.com/", "markdown", "first");
+		cache.set("https://example.com/", "markdown", "second");
+		expect(cache.get("https://example.com/", "markdown")).toBe("second");
 	});
 
 	it("stores entries for multiple URLs independently", () => {
-		cacheSet("https://a.com/", "markdown", "output A");
-		cacheSet("https://b.com/", "markdown", "output B");
-		expect(cacheGet("https://a.com/", "markdown")).toBe("output A");
-		expect(cacheGet("https://b.com/", "markdown")).toBe("output B");
+		const cache = new Cache();
+		cache.set("https://a.com/", "markdown", "output A");
+		cache.set("https://b.com/", "markdown", "output B");
+		expect(cache.get("https://a.com/", "markdown")).toBe("output A");
+		expect(cache.get("https://b.com/", "markdown")).toBe("output B");
 	});
 });
 
 describe("TTL expiry", () => {
 	it("returns undefined after TTL has elapsed", () => {
-		_setTTL(100); // 100ms TTL
-		cacheSet("https://example.com/", "markdown", "cached");
+		const cache = new Cache({ ttlMs: 100 });
+		cache.set("https://example.com/", "markdown", "cached");
 
-		// Advance time past TTL
 		vi.useFakeTimers();
 		vi.advanceTimersByTime(150);
 
-		expect(cacheGet("https://example.com/", "markdown")).toBeUndefined();
+		expect(cache.get("https://example.com/", "markdown")).toBeUndefined();
 		vi.useRealTimers();
 	});
 
 	it("returns value within TTL", () => {
-		_setTTL(1000); // 1s TTL
-		cacheSet("https://example.com/", "markdown", "cached");
+		const cache = new Cache({ ttlMs: 1000 });
+		cache.set("https://example.com/", "markdown", "cached");
 
-		// Time is still within TTL
-		expect(cacheGet("https://example.com/", "markdown")).toBe("cached");
+		expect(cache.get("https://example.com/", "markdown")).toBe("cached");
 	});
 
 	it("evicts expired entry on access", () => {
-		_setTTL(100);
-		cacheSet("https://example.com/", "markdown", "cached");
-		expect(cacheSize()).toBe(1);
+		const cache = new Cache({ ttlMs: 100 });
+		cache.set("https://example.com/", "markdown", "cached");
+		expect(cache.size).toBe(1);
 
 		vi.useFakeTimers();
 		vi.advanceTimersByTime(150);
 
-		cacheGet("https://example.com/", "markdown"); // triggers eviction
-		expect(cacheSize()).toBe(0);
+		cache.get("https://example.com/", "markdown"); // triggers eviction
+		expect(cache.size).toBe(0);
 		vi.useRealTimers();
 	});
 });
 
-describe("cacheClear", () => {
+describe("clear", () => {
 	it("removes all entries", () => {
-		cacheSet("https://a.com/", "markdown", "a");
-		cacheSet("https://b.com/", "text", "b");
-		cacheSet("https://c.com/", "html", "c");
-		expect(cacheSize()).toBe(3);
+		const cache = new Cache();
+		cache.set("https://a.com/", "markdown", "a");
+		cache.set("https://b.com/", "text", "b");
+		cache.set("https://c.com/", "html", "c");
+		expect(cache.size).toBe(3);
 
-		cacheClear();
-		expect(cacheSize()).toBe(0);
-		expect(cacheGet("https://a.com/", "markdown")).toBeUndefined();
-		expect(cacheGet("https://b.com/", "text")).toBeUndefined();
-		expect(cacheGet("https://c.com/", "html")).toBeUndefined();
+		cache.clear();
+		expect(cache.size).toBe(0);
+		expect(cache.get("https://a.com/", "markdown")).toBeUndefined();
+		expect(cache.get("https://b.com/", "text")).toBeUndefined();
+		expect(cache.get("https://c.com/", "html")).toBeUndefined();
 	});
 
 	it("is safe to call on empty cache", () => {
-		expect(cacheSize()).toBe(0);
-		cacheClear(); // should not throw
-		expect(cacheSize()).toBe(0);
+		const cache = new Cache();
+		expect(cache.size).toBe(0);
+		cache.clear(); // should not throw
+		expect(cache.size).toBe(0);
 	});
 });
 
-describe("cacheSize", () => {
+describe("size", () => {
 	it("returns 0 for empty cache", () => {
-		expect(cacheSize()).toBe(0);
+		const cache = new Cache();
+		expect(cache.size).toBe(0);
 	});
 
 	it("reflects number of stored entries", () => {
-		cacheSet("https://a.com/", "markdown", "a");
-		expect(cacheSize()).toBe(1);
-		cacheSet("https://b.com/", "text", "b");
-		expect(cacheSize()).toBe(2);
+		const cache = new Cache();
+		cache.set("https://a.com/", "markdown", "a");
+		expect(cache.size).toBe(1);
+		cache.set("https://b.com/", "text", "b");
+		expect(cache.size).toBe(2);
+	});
+});
+
+describe("cache eviction", () => {
+	it("evicts the oldest entry when inserting beyond maxEntries", () => {
+		const cache = new Cache();
+		for (let i = 0; i < MAX_ENTRIES; i++) {
+			cache.set(`https://${i}.com/`, "markdown", `output-${i}`);
+		}
+		expect(cache.size).toBe(MAX_ENTRIES);
+
+		// Insert one more — should evict entry 0 (the oldest)
+		cache.set("https://new.com/", "markdown", "new-output");
+		expect(cache.size).toBe(MAX_ENTRIES);
+		expect(cache.get("https://0.com/", "markdown")).toBeUndefined();
+		expect(cache.get("https://new.com/", "markdown")).toBe("new-output");
+	});
+
+	it("retains newest entries and evicts oldest", () => {
+		const cache = new Cache();
+		for (let i = 0; i < MAX_ENTRIES; i++) {
+			cache.set(`https://${i}.com/`, "markdown", `output-${i}`);
+		}
+
+		// Insert 3 more entries — should evict entries 0, 1, 2
+		cache.set("https://new-a.com/", "markdown", "a");
+		cache.set("https://new-b.com/", "markdown", "b");
+		cache.set("https://new-c.com/", "markdown", "c");
+
+		expect(cache.size).toBe(MAX_ENTRIES);
+
+		// Oldest 3 evicted
+		expect(cache.get("https://0.com/", "markdown")).toBeUndefined();
+		expect(cache.get("https://1.com/", "markdown")).toBeUndefined();
+		expect(cache.get("https://2.com/", "markdown")).toBeUndefined();
+
+		// Newest 3 present
+		expect(cache.get("https://new-a.com/", "markdown")).toBe("a");
+		expect(cache.get("https://new-b.com/", "markdown")).toBe("b");
+		expect(cache.get("https://new-c.com/", "markdown")).toBe("c");
+
+		// Last original entry still present
+		expect(cache.get(`https://${MAX_ENTRIES - 1}.com/`, "markdown")).toBe(`output-${MAX_ENTRIES - 1}`);
+	});
+
+	it("does not evict when overwriting an existing key at capacity", () => {
+		const cache = new Cache();
+		for (let i = 0; i < MAX_ENTRIES; i++) {
+			cache.set(`https://${i}.com/`, "markdown", `output-${i}`);
+		}
+
+		// Overwrite existing key — should NOT evict anything
+		cache.set("https://0.com/", "markdown", "updated");
+		expect(cache.size).toBe(MAX_ENTRIES);
+		expect(cache.get("https://0.com/", "markdown")).toBe("updated");
+		expect(cache.get("https://1.com/", "markdown")).toBe("output-1");
+	});
+
+	it("respects custom maxEntries option", () => {
+		const cache = new Cache({ maxEntries: 3 });
+		cache.set("https://a.com/", "markdown", "a");
+		cache.set("https://b.com/", "markdown", "b");
+		cache.set("https://c.com/", "markdown", "c");
+		cache.set("https://d.com/", "markdown", "d");
+
+		expect(cache.size).toBe(3);
+		expect(cache.get("https://a.com/", "markdown")).toBeUndefined();
+		expect(cache.get("https://d.com/", "markdown")).toBe("d");
 	});
 });

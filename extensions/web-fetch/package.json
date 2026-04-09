@@ -13,10 +13,14 @@
     "playwright": "^1.52.0",
     "turndown": "^7.2.0"
   },
+  "scripts": {
+    "test": "vitest run"
+  },
   "devDependencies": {
     "@types/turndown": "^5.0.5",
     "@mariozechner/pi-ai": "^0.65.2",
     "@mariozechner/pi-coding-agent": "^0.65.2",
-    "@sinclair/typebox": "^0.34.49"
+    "@sinclair/typebox": "^0.34.49",
+    "vitest": "^3.1.1"
   }
 }

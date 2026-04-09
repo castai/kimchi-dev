@@ -8,6 +8,9 @@
 /** Default TTL in milliseconds (15 minutes). */
 const DEFAULT_TTL_MS = 15 * 60 * 1000;
 
+/** Default maximum number of cache entries before eviction kicks in. */
+export const MAX_ENTRIES = 100;
+
 export interface CacheEntry {
 	/** The fully rendered tool output (metadata header + content body). */
 	output: string;
@@ -15,52 +18,97 @@ export interface CacheEntry {
 	storedAt: number;
 }
 
-/** Build a composite cache key from URL and format. */
-export function cacheKey(url: string, format: string): string {
-	return `${url}::${format}`;
+export interface CacheOptions {
+	ttlMs?: number;
+	maxEntries?: number;
 }
 
-const store = new Map<string, CacheEntry>();
+export class Cache {
+	private readonly store = new Map<string, CacheEntry>();
+	private readonly ttlMs: number;
+	private readonly maxEntries: number;
 
-let ttlMs = DEFAULT_TTL_MS;
-
-/**
- * Look up a cached result. Returns the output string on hit, or `undefined`
- * on miss or expiry. Expired entries are evicted on access.
- */
-export function cacheGet(url: string, format: string): string | undefined {
-	const key = cacheKey(url, format);
-	const entry = store.get(key);
-	if (!entry) return undefined;
-
-	if (Date.now() - entry.storedAt > ttlMs) {
-		store.delete(key);
-		return undefined;
+	constructor(options?: CacheOptions) {
+		this.ttlMs = options?.ttlMs ?? DEFAULT_TTL_MS;
+		this.maxEntries = options?.maxEntries ?? MAX_ENTRIES;
 	}
 
-	return entry.output;
+	/** Build a composite cache key from URL and format. */
+	static key(url: string, format: string): string {
+		return `${url}::${format}`;
+	}
+
+	/**
+	 * Look up a cached result. Returns the output string on hit, or `undefined`
+	 * on miss or expiry. Expired entries are evicted on access.
+	 */
+	get(url: string, format: string): string | undefined {
+		const key = Cache.key(url, format);
+		const entry = this.store.get(key);
+		if (!entry) return undefined;
+
+		if (Date.now() - entry.storedAt > this.ttlMs) {
+			this.store.delete(key);
+			return undefined;
+		}
+
+		return entry.output;
+	}
+
+	/** Store a result in the cache. Evicts the oldest entry when at capacity. */
+	set(url: string, format: string, output: string): void {
+		const key = Cache.key(url, format);
+
+		// Evict oldest entry if at capacity (skip if we're overwriting an existing key)
+		if (this.store.size >= this.maxEntries && !this.store.has(key)) {
+			let oldestKey: string | undefined;
+			let oldestTime = Infinity;
+			for (const [k, v] of this.store) {
+				if (v.storedAt < oldestTime) {
+					oldestTime = v.storedAt;
+					oldestKey = k;
+				}
+			}
+			if (oldestKey) this.store.delete(oldestKey);
+		}
+
+		this.store.set(key, { output, storedAt: Date.now() });
+	}
+
+	/** Clear all cached entries. Called on session shutdown. */
+	clear(): void {
+		this.store.clear();
+	}
+
+	/** Number of entries currently in the cache. */
+	get size(): number {
+		return this.store.size;
+	}
 }
 
-/** Store a result in the cache. */
+// ---------------------------------------------------------------------------
+// Default singleton — keeps the same module-level API for consumers.
+// ---------------------------------------------------------------------------
+
+const defaultCache = new Cache();
+
+/** Build a composite cache key from URL and format. */
+export function cacheKey(url: string, format: string): string {
+	return Cache.key(url, format);
+}
+
+export function cacheGet(url: string, format: string): string | undefined {
+	return defaultCache.get(url, format);
+}
+
 export function cacheSet(url: string, format: string, output: string): void {
-	const key = cacheKey(url, format);
-	store.set(key, { output, storedAt: Date.now() });
+	defaultCache.set(url, format, output);
 }
 
-/** Clear all cached entries. Called on session shutdown. */
 export function cacheClear(): void {
-	store.clear();
+	defaultCache.clear();
 }
 
-/** Number of entries currently in the cache (for testing). */
 export function cacheSize(): number {
-	return store.size;
-}
-
-/**
- * Override the TTL for testing. Pass `undefined` to reset to default.
- * @internal
- */
-export function _setTTL(ms: number | undefined): void {
-	ttlMs = ms ?? DEFAULT_TTL_MS;
+	return defaultCache.size;
 }

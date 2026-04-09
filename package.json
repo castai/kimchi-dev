@@ -16,7 +16,8 @@
     "check": "biome check src/ && tsc --noEmit",
     "test": "vitest run --dir src",
     "test:smoke": "vitest run --config tests/smoke/vitest.config.ts",
-    "verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:smoke"
+    "test:extensions": "cd extensions/web-fetch && pnpm test",
+    "verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:extensions && pnpm run test:smoke"
   },
   "piConfig": {
     "name": "kimchi",
