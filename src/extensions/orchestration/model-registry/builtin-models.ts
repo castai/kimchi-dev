@@ -37,18 +37,18 @@ Very fast inference thanks to only 4% parameter activation. \
 Best choice for coding tasks of any complexity where quality and speed both matter, \
 especially when the task is purely text-based with no visual inputs.`
 
-// const NEMOTRON_3_SUPER_DESCRIPTION = `\
-// 120B-parameter LatentMoE hybrid model (12B active), up to 1M token context, NVFP4 quantized. \
-// The weakest coding model in the pool - adequate for simple, well-scoped code changes \
-// but not reliable for complex multi-file bug fixes or feature implementations. \
-// Surprisingly strong reasoning for its size - handles advanced math and graduate-level \
-// science questions well. Decent at following instructions in agentic workflows, \
-// though struggles with autonomous web search and information retrieval tasks. \
-// Standout capability is its 1M token context window with near-perfect retrieval \
-// accuracy - can ingest entire large codebases, trace cross-file dependencies, \
-// and answer questions about massive documents in a single pass. \
-// Cheapest and fastest model in the pool. Best choice for codebase exploration, \
-// research, reading large files, and simple straightforward tasks.`
+const NEMOTRON_3_SUPER_DESCRIPTION = `\
+120B-parameter LatentMoE hybrid model (12B active), up to 1M token context, NVFP4 quantized. \
+The weakest coding model in the pool - adequate for simple, well-scoped code changes \
+but not reliable for complex multi-file bug fixes or feature implementations. \
+Surprisingly strong reasoning for its size - handles advanced math and graduate-level \
+science questions well. Decent at following instructions in agentic workflows, \
+though struggles with autonomous web search and information retrieval tasks. \
+Standout capability is its 1M token context window with near-perfect retrieval \
+accuracy - can ingest entire large codebases, trace cross-file dependencies, \
+and answer questions about massive documents in a single pass. \
+Cheapest and fastest model in the pool. Best choice for codebase exploration, \
+research, reading large files, and simple straightforward tasks.`
 
 export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [
 	{
@@ -73,16 +73,15 @@ export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [
 			description: MINIMAX_M25_DESCRIPTION,
 		},
 	},
-	// Uncomment after nemotron is available and configured in ~/.config/kimchi/harness/models.json
-	// {
-	// 	id: "nemotron-3-super-fp4",
-	// 	provider: "kimchi-dev",
-	// 	name: "Nemotron 3 Super",
-	// 	capabilities: {
-	// 		vision: false,
-	// 		strengths: ["build", "explore", "research"],
-	// 		tier: "light",
-	// 		description: NEMOTRON_3_SUPER_DESCRIPTION,
-	// 	},
-	// },
+	{
+		id: "nemotron-3-super-fp4",
+		provider: "kimchi-dev",
+		name: "Nemotron 3 Super",
+		capabilities: {
+			vision: false,
+			strengths: ["build", "explore", "research"],
+			tier: "light",
+			description: NEMOTRON_3_SUPER_DESCRIPTION,
+		},
+	},
 ] as const
