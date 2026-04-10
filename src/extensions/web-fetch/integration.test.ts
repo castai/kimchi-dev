@@ -19,6 +19,17 @@ vi.mock("./url-validator.js", () => ({
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import webFetchExtension from "./index.js"
 
+// Detect whether Playwright browsers are installed (they may be absent in CI).
+let hasPlaywrightBrowsers = false
+try {
+	const pw = await import("playwright")
+	const browser = await pw.chromium.launch({ headless: true })
+	await browser.close()
+	hasPlaywrightBrowsers = true
+} catch {
+	// Playwright not installed or no browsers available — SPA tests will be skipped.
+}
+
 let server: Server
 let baseURL: string
 
@@ -226,7 +237,7 @@ describe("integration: fetchPage with local HTTP server", () => {
 	}, 10_000)
 })
 
-describe("integration: Playwright SPA rendering", () => {
+describe.skipIf(!hasPlaywrightBrowsers)("integration: Playwright SPA rendering", () => {
 	it("renders JavaScript-populated content in SPA page", async () => {
 		const result = await fetchPage(`${baseURL}/spa`)
 		expect(result.isHTML).toBe(true)
