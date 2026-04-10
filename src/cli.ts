@@ -39,7 +39,10 @@ try {
 
 	// Ensure models.json exists with Cast AI provider configuration
 	const modelsJsonPath = resolve(agentDir, "models.json")
-	await updateModelsConfig(modelsJsonPath, config.apiKey)
+	const modelsResult = await updateModelsConfig(modelsJsonPath, config.apiKey)
+	if (modelsResult.source === "default") {
+		console.error(`Warning: using default models (${modelsResult.error})`)
+	}
 
 	// Suppress Node.js warnings (same as pi-mono's own cli.js)
 	process.emitWarning = () => {}

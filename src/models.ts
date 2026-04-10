@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 
 const CAST_AI_MODELS_API = "https://api.cast.ai/v1/llm/openai/models?providerName=AI%20Enabler"
-const CAST_AI_LLM_BASE_URL = "https://llm.cast.ai/openai/v1"
+const CAST_AI_LLM_BASE_URL = "https://llm.kimchi.dev/openai/v1"
+const FETCH_TIMEOUT_MS = 5000
 
 const EXCLUDED_MODEL_PATTERNS = [/^smoll/i, /^qwen/i]
 
@@ -24,12 +25,16 @@ function modelIdToName(id: string): string {
 async function fetchAvailableModels(apiKey: string): Promise<string[]> {
 	const response = await fetch(CAST_AI_MODELS_API, {
 		headers: { Authorization: `Bearer ${apiKey}` },
+		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
 	})
 	if (!response.ok) {
 		throw new Error(`Failed to fetch models: ${response.status} ${response.statusText}`)
 	}
-	const body = (await response.json()) as CastAIModelsResponse
-	return body.models
+	const body = await response.json()
+	if (!body || typeof body !== "object" || !Array.isArray(body.models)) {
+		throw new Error("Unexpected response shape from models API")
+	}
+	return (body as CastAIModelsResponse).models
 }
 
 function buildModelsConfig(models: string[]) {
@@ -63,7 +68,7 @@ function buildModelsConfig(models: string[]) {
 const DEFAULT_MODELS_CONFIG = {
 	providers: {
 		"kimchi-dev": {
-			baseUrl: "https://llm.cast.ai/openai/v1",
+			baseUrl: CAST_AI_LLM_BASE_URL,
 			apiKey: "KIMCHI_API_KEY",
 			api: "openai-completions",
 			authHeader: true,
@@ -125,7 +130,7 @@ export async function updateModelsConfig(modelsJsonPath: string, apiKey: string)
 		return {
 			source: "default",
 			models: DEFAULT_MODELS_CONFIG.providers["kimchi-dev"].models.map((m) => m.id),
-			error: "API returned empty model list",
+			error: fetched.length === 0 ? "API returned empty model list" : "API returned no usable models after filtering",
 		}
 	} catch (err) {
 		writeFileSync(modelsJsonPath, JSON.stringify(DEFAULT_MODELS_CONFIG, null, "\t"), "utf-8")

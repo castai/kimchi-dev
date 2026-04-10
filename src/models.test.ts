@@ -69,7 +69,7 @@ describe("updateModelsConfig", () => {
 		])
 	})
 
-	it("uses correct auth header when fetching models", async () => {
+	it("uses correct auth header and timeout when fetching models", async () => {
 		vi.mocked(fetch).mockResolvedValueOnce({
 			ok: true,
 			json: async () => ({ models: ["m1"] }),
@@ -77,9 +77,13 @@ describe("updateModelsConfig", () => {
 
 		await updateModelsConfig(modelsJsonPath, "my-api-key")
 
-		expect(fetch).toHaveBeenCalledWith("https://api.cast.ai/v1/llm/openai/models?providerName=AI%20Enabler", {
-			headers: { Authorization: "Bearer my-api-key" },
-		})
+		expect(fetch).toHaveBeenCalledWith(
+			"https://api.cast.ai/v1/llm/openai/models?providerName=AI%20Enabler",
+			expect.objectContaining({
+				headers: { Authorization: "Bearer my-api-key" },
+				signal: expect.any(AbortSignal),
+			}),
+		)
 	})
 
 	it("falls back to default models when fetch fails with network error", async () => {
@@ -143,6 +147,46 @@ describe("updateModelsConfig", () => {
 			"glm-5-fp8",
 			"minimax-m2.5",
 		])
+	})
+
+	it("falls back to default models when all fetched models are filtered out", async () => {
+		vi.mocked(fetch).mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ models: ["smollm2-360m", "qwen3-coder-next-fp8"] }),
+		} as Response)
+
+		const result = await updateModelsConfig(modelsJsonPath, "test-key")
+
+		expect(result).toEqual({
+			source: "default",
+			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.5"],
+			error: "API returned no usable models after filtering",
+		})
+	})
+
+	it("falls back to default models when response has unexpected shape", async () => {
+		vi.mocked(fetch).mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ data: "unexpected" }),
+		} as Response)
+
+		const result = await updateModelsConfig(modelsJsonPath, "test-key")
+
+		expect(result).toEqual({
+			source: "default",
+			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.5"],
+			error: "Unexpected response shape from models API",
+		})
+	})
+
+	it("falls back to default models on fetch timeout", async () => {
+		const abortError = new DOMException("The operation was aborted.", "AbortError")
+		vi.mocked(fetch).mockRejectedValueOnce(abortError)
+
+		const result = await updateModelsConfig(modelsJsonPath, "test-key")
+
+		expect(result.source).toBe("default")
+		expect(result.models).toEqual(["kimi-k2.5", "glm-5-fp8", "minimax-m2.5"])
 	})
 
 	it("sorts models alphabetically", async () => {
