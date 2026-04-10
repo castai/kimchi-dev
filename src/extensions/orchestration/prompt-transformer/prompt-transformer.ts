@@ -1,13 +1,8 @@
-import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
 import type { ModelRegistry } from "../model-registry/index.js"
 import type { OrchestrationModelDescriptor } from "../model-registry/types.js"
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const PROMPT_TEMPLATE_PATH = join(__dirname, "prompts", "transformed-user-prompt.md")
-const SYSTEM_PROMPT_PATH = join(__dirname, "prompts", "orchestrator-system-prompt.md")
-const SUBAGENT_SYSTEM_PROMPT_PATH = join(__dirname, "prompts", "subagent-system-prompt.md")
+import systemPromptTemplate from "./prompts/orchestrator-system-prompt.md"
+import subagentSystemPromptTemplate from "./prompts/subagent-system-prompt.md"
+import userPromptTemplate from "./prompts/transformed-user-prompt.md"
 
 const SUBAGENT_TOOL_NAME = "subagent"
 
@@ -37,31 +32,6 @@ function formatModelsSection(models: readonly OrchestrationModelDescriptor[]): s
 	return models.map(formatModel).join("\n\n")
 }
 
-// Cached after first read - templates don't change at runtime.
-let cachedTemplate: string | undefined
-function loadTemplate(): string {
-	if (!cachedTemplate) {
-		cachedTemplate = readFileSync(PROMPT_TEMPLATE_PATH, "utf-8")
-	}
-	return cachedTemplate
-}
-
-let cachedSystemPrompt: string | undefined
-function loadSystemPromptTemplate(): string {
-	if (!cachedSystemPrompt) {
-		cachedSystemPrompt = readFileSync(SYSTEM_PROMPT_PATH, "utf-8")
-	}
-	return cachedSystemPrompt
-}
-
-let cachedSubagentSystemPrompt: string | undefined
-function loadSubagentSystemPromptTemplate(): string {
-	if (!cachedSubagentSystemPrompt) {
-		cachedSubagentSystemPrompt = readFileSync(SUBAGENT_SYSTEM_PROMPT_PATH, "utf-8")
-	}
-	return cachedSubagentSystemPrompt
-}
-
 export interface ToolInfo {
 	name: string
 	description: string
@@ -73,7 +43,6 @@ export interface CurrentModelInfo {
 }
 
 export function transformPrompt(userPrompt: string, registry: ModelRegistry, currentModel?: CurrentModelInfo): string {
-	const template = loadTemplate()
 	const allModels = registry.getAll()
 
 	// Exclude the current orchestrator model from the subagent model list —
@@ -89,7 +58,7 @@ export function transformPrompt(userPrompt: string, registry: ModelRegistry, cur
 		? formatCurrentModelCapabilities(currentDescriptor)
 		: "No capability information available for this model."
 
-	return template
+	return userPromptTemplate
 		.replace("{{CURRENT_MODEL_NAME}}", () => currentModelName)
 		.replace("{{CURRENT_MODEL_CAPABILITIES}}", () => currentModelCapabilities)
 		.replace("{{MODELS}}", () => modelsSection)
@@ -97,16 +66,14 @@ export function transformPrompt(userPrompt: string, registry: ModelRegistry, cur
 }
 
 export function buildOrchestratorSystemPrompt(tools: readonly ToolInfo[]): string {
-	const template = loadSystemPromptTemplate()
 	const toolsSection = formatToolsSection(tools)
-	return template.replace("{{TOOLS}}", () => toolsSection)
+	return systemPromptTemplate.replace("{{TOOLS}}", () => toolsSection)
 }
 
 export function buildSubagentSystemPrompt(tools: readonly ToolInfo[]): string {
-	const template = loadSubagentSystemPromptTemplate()
 	const filtered = tools.filter((t) => t.name !== SUBAGENT_TOOL_NAME)
 	const toolsSection = formatToolsSection(filtered)
-	return template.replace("{{TOOLS}}", () => toolsSection)
+	return subagentSystemPromptTemplate.replace("{{TOOLS}}", () => toolsSection)
 }
 
 function formatToolsSection(tools: readonly ToolInfo[]): string {

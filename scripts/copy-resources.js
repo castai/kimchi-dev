@@ -1,9 +1,7 @@
 // Copy non-TypeScript resources that tsc doesn't handle.
 //
-// 1. Theme files: pi-mono resolves themes at <packageDir>/src/modes/interactive/theme/
-//    so we copy them from node_modules into our source tree.
-// 2. Prompt templates: .md files read at runtime by prompt-transformer.ts,
-//    copied from src/ into dist/.
+// Theme files: pi-mono resolves themes at <packageDir>/src/modes/interactive/theme/
+// so we copy them from node_modules into our source tree.
 
 import { cpSync, mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
@@ -30,10 +28,3 @@ mkdirSync(themeDest, { recursive: true })
 for (const file of ["dark.json", "light.json", "theme-schema.json"]) {
 	cpSync(join(themeSrc, file), join(themeDest, file))
 }
-
-// ── Prompt templates (src/ → dist/) ──────────────────────────────────
-cpSync(
-	join(projectRoot, "src", "extensions", "orchestration", "prompt-transformer", "prompts"),
-	join(projectRoot, "dist", "extensions", "orchestration", "prompt-transformer", "prompts"),
-	{ recursive: true },
-)
