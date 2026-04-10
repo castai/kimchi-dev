@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { ModelRegistry } from "./model-registry.js"
 import { BUILTIN_MODELS } from "./builtin-models.js"
+import { ModelRegistry } from "./model-registry.js"
 
 describe("ModelRegistry", () => {
 	it("returns all built-in models", () => {
@@ -12,10 +12,10 @@ describe("ModelRegistry", () => {
 		const registry = new ModelRegistry()
 		const kimi = registry.getAll().find((m) => m.id === "kimi-k2.5")
 		expect(kimi).toBeDefined()
-		expect(kimi!.name).toBe("Kimi K2.5")
-		expect(kimi!.provider).toBe("kimchi-dev")
-		expect(kimi!.capabilities.strengths).toContain("build")
-		expect(kimi!.capabilities.description).toBeTruthy()
+		expect(kimi?.name).toBe("Kimi K2.5")
+		expect(kimi?.provider).toBe("kimchi-dev")
+		expect(kimi?.capabilities.strengths).toContain("build")
+		expect(kimi?.capabilities.description).toBeTruthy()
 	})
 
 	it("every model has a valid tier", () => {

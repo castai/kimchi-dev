@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs"
-import { join, dirname } from "node:path"
+import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { ModelRegistry } from "../model-registry/index.js"
 import type { OrchestrationModelDescriptor } from "../model-registry/types.js"
@@ -78,17 +78,13 @@ export function transformPrompt(userPrompt: string, registry: ModelRegistry, cur
 
 	// Exclude the current orchestrator model from the subagent model list —
 	// the orchestrator doesn't need to see itself as a delegation target.
-	const subagentModels = currentModel
-		? allModels.filter((m) => m.id !== currentModel.id)
-		: allModels
+	const subagentModels = currentModel ? allModels.filter((m) => m.id !== currentModel.id) : allModels
 	const modelsSection = formatModelsSection(subagentModels)
 
 	const currentModelName = currentModel?.name ?? "unknown"
 
 	// Look up the current model's capabilities from our registry
-	const currentDescriptor = currentModel
-		? allModels.find((m) => m.id === currentModel.id)
-		: undefined
+	const currentDescriptor = currentModel ? allModels.find((m) => m.id === currentModel.id) : undefined
 	const currentModelCapabilities = currentDescriptor
 		? formatCurrentModelCapabilities(currentDescriptor)
 		: "No capability information available for this model."

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { transformPrompt, buildOrchestratorSystemPrompt, buildSubagentSystemPrompt } from "./prompt-transformer.js"
 import { ModelRegistry } from "../model-registry/index.js"
+import { buildOrchestratorSystemPrompt, buildSubagentSystemPrompt, transformPrompt } from "./prompt-transformer.js"
 
 describe("transformPrompt", () => {
 	const registry = new ModelRegistry()
@@ -79,8 +79,9 @@ describe("transformPrompt", () => {
 
 	it("includes current model capabilities when model is in registry", () => {
 		const result = transformPrompt("some task", registry, currentModel)
-		const kimi = registry.getAll().find((m) => m.id === "kimi-k2.5")!
-		expect(result).toContain(kimi.capabilities.description)
+		const kimi = registry.getAll().find((m) => m.id === "kimi-k2.5")
+		expect(kimi).toBeDefined()
+		expect(result).toContain(kimi?.capabilities.description)
 		expect(result).toContain("Tier: heavy")
 	})
 })

@@ -21,11 +21,11 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { ModelRegistry } from "../orchestration/model-registry/index.js"
 import {
-	transformPrompt,
+	type CurrentModelInfo,
 	buildOrchestratorSystemPrompt,
 	buildSubagentSystemPrompt,
 	isSubagent,
-	type CurrentModelInfo,
+	transformPrompt,
 } from "../orchestration/prompt-transformer/prompt-transformer.js"
 
 export default function (pi: ExtensionAPI) {
