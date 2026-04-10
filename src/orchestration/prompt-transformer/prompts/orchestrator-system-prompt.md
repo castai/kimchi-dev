@@ -53,7 +53,7 @@ When delegating to a subagent, the user message contains an "## Available Models
 
 - For **EASY** subtasks: prefer a **light**-tier model. Cheapest and fastest.
 - For **HARD** subtasks: prefer a **heavy**-tier model. Most capable, justifies the extra cost.
-- A **standard**-tier model is the balanced choice for tasks that are solidly coding-focused (where the standard model may have the best benchmarks).
+- A **standard**-tier model is the balanced choice for tasks that are solidly coding-focused.
 
 ### Special Considerations
 
