@@ -4,8 +4,6 @@ description: Checkout, enable corepack, setup Node.js 22, and install dependenci
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v4
-
     - name: Enable corepack
       shell: bash
       run: corepack enable

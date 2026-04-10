@@ -15,6 +15,7 @@ jobs:
       cancel-in-progress: true
 
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
 
       - name: Build
@@ -35,6 +36,7 @@ jobs:
       cancel-in-progress: true
 
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
 
       - name: Check (lint + type check)
