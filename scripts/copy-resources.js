@@ -33,7 +33,7 @@ for (const file of ["dark.json", "light.json", "theme-schema.json"]) {
 
 // ── Prompt templates (src/ → dist/) ──────────────────────────────────
 cpSync(
-	join(projectRoot, "src", "orchestration", "prompt-transformer", "prompts"),
-	join(projectRoot, "dist", "orchestration", "prompt-transformer", "prompts"),
+	join(projectRoot, "src", "extensions", "orchestration", "prompt-transformer", "prompts"),
+	join(projectRoot, "dist", "extensions", "orchestration", "prompt-transformer", "prompts"),
 	{ recursive: true },
 )

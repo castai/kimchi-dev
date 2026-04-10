@@ -26,9 +26,9 @@ process.title = "kimchi"
 process.env.PI_SKIP_VERSION_CHECK = "1"
 
 import { loadConfig } from "./config.js"
+import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
 import subagentExtension from "./extensions/subagent.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
-import promptEnrichmentExtension from "./extensions/prompt-enrichment/index.js"
 import { updateModelsConfig } from "./models.js"
 
 

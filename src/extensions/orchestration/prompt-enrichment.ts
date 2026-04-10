@@ -19,14 +19,14 @@
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
-import { ModelRegistry } from "../orchestration/model-registry/index.js"
+import { ModelRegistry } from "./model-registry/index.js"
 import {
 	type CurrentModelInfo,
 	buildOrchestratorSystemPrompt,
 	buildSubagentSystemPrompt,
 	isSubagent,
 	transformPrompt,
-} from "../orchestration/prompt-transformer/prompt-transformer.js"
+} from "./prompt-transformer/prompt-transformer.js"
 
 export default function (pi: ExtensionAPI) {
 	const subagentMode = isSubagent()
