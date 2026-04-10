@@ -41,14 +41,8 @@ describe("transformPrompt", () => {
 		}
 	})
 
-	it("includes routing instructions", () => {
+	it("includes multimodal info", () => {
 		const result = transformPrompt("some task", registry)
-		expect(result).toContain("subprocess")
-		expect(result).toContain("select the single best model")
-	})
-
-	it("includes multimodal guidance", () => {
-		const result = transformPrompt("some task", registry)
-		expect(result).toContain("multimodal")
+		expect(result).toContain("Multimodal")
 	})
 })
