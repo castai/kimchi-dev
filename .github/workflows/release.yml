@@ -9,7 +9,27 @@ permissions:
   contents: write
 
 jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          playwright: "true"
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Check (lint + type check)
+        run: pnpm run check
+
+      - name: Test
+        run: pnpm run test
+
   build:
+    needs: [checks]
     strategy:
       matrix:
         include:
@@ -34,29 +54,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Enable corepack
-        run: corepack enable
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - name: Build TypeScript
         run: pnpm run build
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Compile standalone binary
-        run: |
-          bun build src/cli.ts --compile --target=${{ matrix.target }} --outfile dist/kimchi-code --external chromium-bidi --external electron
-          cp package.json dist/
+        run: bun build src/cli.ts --compile --target=${{ matrix.target }} --outfile dist/kimchi-code --external chromium-bidi --external electron
+
+      - name: Copy assets
+        run: pnpm run copy:assets
 
       - name: Package binary
         run: tar -czf kimchi-code_${{ matrix.os }}_${{ matrix.arch }}.tar.gz -C dist kimchi-code package.json theme
@@ -67,8 +77,33 @@ jobs:
           name: kimchi-code_${{ matrix.os }}_${{ matrix.arch }}
           path: kimchi-code_${{ matrix.os }}_${{ matrix.arch }}.tar.gz
 
+  smoke-test:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Download linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: kimchi-code_linux_amd64
+
+      - name: Extract binary into dist/
+        run: |
+          mkdir -p dist
+          tar -xzf kimchi-code_linux_amd64.tar.gz -C dist
+
+      - name: Smoke tests
+        run: pnpm run test:smoke
+
   release:
-    needs: build
+    needs: [smoke-test]
     runs-on: ubuntu-latest
 
     steps:
@@ -84,7 +119,7 @@ jobs:
           sha256sum kimchi-code_*.tar.gz > checksums.txt
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
         with:
           files: |
             artifacts/kimchi-code_*.tar.gz

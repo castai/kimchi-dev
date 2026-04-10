@@ -1,0 +1,41 @@
+name: Setup
+description: Checkout, enable corepack, setup Node.js 22, install dependencies, and optionally install Playwright
+
+inputs:
+  playwright:
+    description: "Install Playwright Chromium browser"
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Enable corepack
+      shell: bash
+      run: corepack enable
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+        cache: "pnpm"
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+      env:
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+    - name: Cache Playwright browsers
+      if: inputs.playwright == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          playwright-${{ runner.os }}-
+
+    - name: Install Playwright Chromium
+      if: inputs.playwright == 'true'
+      shell: bash
+      run: npx playwright install chromium --with-deps

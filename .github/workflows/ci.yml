@@ -2,28 +2,23 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
 
 jobs:
-  build:
+  pr-checks:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: ci-pr-${{ github.head_ref }}
+      cancel-in-progress: true
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Enable corepack
-        run: corepack enable
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: ./.github/actions/setup
         with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          playwright: "true"
 
       - name: Build
         run: pnpm run build
@@ -33,3 +28,32 @@ jobs:
 
       - name: Test
         run: pnpm run test
+
+  master-checks:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ci-master
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          playwright: "true"
+
+      - name: Check (lint + type check)
+        run: pnpm run check
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Build binary
+        run: pnpm run build:binary
+
+      - name: Test
+        run: pnpm run test
+
+      - name: Smoke tests
+        run: pnpm run test:smoke
