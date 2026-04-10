@@ -7,9 +7,7 @@ const CAST_AI_LLM_BASE_URL = "https://llm.cast.ai/openai/v1"
 const EXCLUDED_MODEL_PATTERNS = [/^smoll/i, /^qwen/i]
 
 function filterAndSortModels(models: string[]): string[] {
-	return models
-		.filter((id) => !EXCLUDED_MODEL_PATTERNS.some((re) => re.test(id)))
-		.sort((a, b) => a.localeCompare(b))
+	return models.filter((id) => !EXCLUDED_MODEL_PATTERNS.some((re) => re.test(id))).sort((a, b) => a.localeCompare(b))
 }
 
 interface CastAIModelsResponse {
@@ -112,10 +110,7 @@ export type ModelsConfigResult =
  * fails. Always overwrites any existing file so the model list stays current
  * on every startup.
  */
-export async function updateModelsConfig(
-	modelsJsonPath: string,
-	apiKey: string,
-): Promise<ModelsConfigResult> {
+export async function updateModelsConfig(modelsJsonPath: string, apiKey: string): Promise<ModelsConfigResult> {
 	const dir = dirname(modelsJsonPath)
 	mkdirSync(dir, { recursive: true })
 

@@ -31,9 +31,7 @@ describe("updateModelsConfig", () => {
 		await updateModelsConfig(modelsJsonPath, "test-key")
 
 		const content = JSON.parse(readFileSync(modelsJsonPath, "utf-8"))
-		expect(content.providers["kimchi-dev"].models.map((m: { id: string }) => m.id)).toEqual([
-			"new-model",
-		])
+		expect(content.providers["kimchi-dev"].models.map((m: { id: string }) => m.id)).toEqual(["new-model"])
 	})
 
 	it("writes discovered models when fetch succeeds", async () => {
@@ -79,10 +77,9 @@ describe("updateModelsConfig", () => {
 
 		await updateModelsConfig(modelsJsonPath, "my-api-key")
 
-		expect(fetch).toHaveBeenCalledWith(
-			"https://api.cast.ai/v1/llm/openai/models?providerName=AI%20Enabler",
-			{ headers: { Authorization: "Bearer my-api-key" } },
-		)
+		expect(fetch).toHaveBeenCalledWith("https://api.cast.ai/v1/llm/openai/models?providerName=AI%20Enabler", {
+			headers: { Authorization: "Bearer my-api-key" },
+		})
 	})
 
 	it("falls back to default models when fetch fails with network error", async () => {
