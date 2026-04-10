@@ -36,7 +36,7 @@ Handle the task directly using your own tools when:
 ### Strategy 2: Delegate to a subagent
 
 Spawn a subagent when:
-- The task is HARD and would benefit from a model with specific strengths (e.g. better coding benchmarks, multimodal capabilities).
+- The task is HARD and would benefit from a model with specific strengths (e.g. better coding benchmarks, vision capabilities).
 - You want to run work in parallel - for example, splitting a large feature into independent subtasks that different subagents can work on simultaneously.
 - The task is self-contained and can be fully described in a single prompt without back-and-forth.
 
@@ -57,7 +57,7 @@ When delegating to a subagent, the user message contains an "## Available Models
 
 ### Special Considerations
 
-- **Multimodal input**: If the subtask involves images or visual content, you MUST select a model with `Multimodal: yes`. This overrides tier preference.
+- **Vision input**: If the subtask involves images or visual content, you MUST select a model with `Vision: yes`. This overrides tier preference.
 - **Long context**: For subtasks processing very large files, prefer models with larger context windows.
 - **Model strengths**: Match the model's listed strengths (build, explore, review, plan) to the nature of the subtask.
 

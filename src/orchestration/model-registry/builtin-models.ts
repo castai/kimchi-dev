@@ -17,12 +17,12 @@ export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [
 		provider: "kimchi-dev",
 		name: "Kimi K2.5",
 		capabilities: {
-			multimodal: true,
+			vision: true,
 			strengths: ["build", "explore"],
 			tier: "heavy",
 			description:
 				"1T-parameter MoE model (32B active), 256K context. " +
-				"The only multimodal model in the pool - can reason over images, generate code " +
+				"The only vision model in the pool - can reason over images, generate code " +
 				"from UI designs and screenshots, and process visual inputs. " +
 				"Strong at resolving real-world GitHub issues across multiple languages. " +
 				"Excels at deep mathematical and scientific reasoning, including graduate-level " +
@@ -39,7 +39,7 @@ export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [
 		provider: "kimchi-dev",
 		name: "Minimax M2.5",
 		capabilities: {
-			multimodal: false,
+			vision: false,
 			strengths: ["build"],
 			tier: "standard",
 			description:
@@ -62,7 +62,7 @@ export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [
 	// 	provider: "kimchi-dev",
 	// 	name: "Nemotron 3 Super",
 	// 	capabilities: {
-	// 		multimodal: false,
+	// 		vision: false,
 	// 		strengths: ["build", "explore", "research"],
 	// 		tier: "light",
 	// 		description:

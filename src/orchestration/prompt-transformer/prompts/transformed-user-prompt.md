@@ -14,7 +14,7 @@ All models (including yourself) are described with the following attributes:
 - `plan` — Architectural planning, breaking down complex tasks, writing specs.
 - `research` — Researching and investigating code, tracing dependencies, understanding large codebases.
 
-**Multimodal** indicates whether the model can process images and visual input.
+**Vision** indicates whether the model can process images, screenshots, and visual input.
 
 **Description** is a summary of the model's unique capabilities and what it excels at.
 

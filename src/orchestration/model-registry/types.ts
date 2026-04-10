@@ -23,13 +23,13 @@ export type ModelStrength = "review" | "build" | "plan" | "explore" | "research"
  *                  tasks that don't require the heaviest reasoning.
  *  - "heavy"    — largest active parameters, most expensive, reserved for
  *                  complex multi-step tasks or when special capabilities
- *                  (e.g. multimodal, agent swarm) are needed.
+ *                  (e.g. vision, agent swarm) are needed.
  */
 export type ModelTier = "light" | "standard" | "heavy"
 
 /** Injected into the Orchestrator LLM's context to steer model selection. */
 export interface ModelCapabilities {
-	multimodal: boolean
+	vision: boolean
 	strengths: ModelStrength[]
 	tier: ModelTier
 	description: string

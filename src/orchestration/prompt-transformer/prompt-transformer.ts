@@ -13,19 +13,19 @@ const SUBAGENT_TOOL_NAME = "subagent"
 
 function formatModel(model: OrchestrationModelDescriptor): string {
 	const strengths = model.capabilities.strengths.join(", ")
-	const multimodal = model.capabilities.multimodal ? "yes" : "no"
+	const vision = model.capabilities.vision ? "yes" : "no"
 	return [
 		`- **${model.name}** (id: \`${model.id}\`, provider: \`${model.provider}\`)`,
-		`  Tier: ${model.capabilities.tier} | Strengths: ${strengths} | Multimodal: ${multimodal}`,
+		`  Tier: ${model.capabilities.tier} | Strengths: ${strengths} | Vision: ${vision}`,
 		`  ${model.capabilities.description}`,
 	].join("\n")
 }
 
 function formatCurrentModelCapabilities(model: OrchestrationModelDescriptor): string {
 	const strengths = model.capabilities.strengths.join(", ")
-	const multimodal = model.capabilities.multimodal ? "yes" : "no"
+	const vision = model.capabilities.vision ? "yes" : "no"
 	return [
-		`Tier: ${model.capabilities.tier} | Strengths: ${strengths} | Multimodal: ${multimodal}`,
+		`Tier: ${model.capabilities.tier} | Strengths: ${strengths} | Vision: ${vision}`,
 		model.capabilities.description,
 	].join("\n")
 }

@@ -27,9 +27,9 @@ describe("transformPrompt", () => {
 		}
 	})
 
-	it("includes multimodal info", () => {
+	it("includes vision info", () => {
 		const result = transformPrompt("some task", registry)
-		expect(result).toContain("Multimodal")
+		expect(result).toContain("Vision")
 	})
 
 	it("includes tier info for every model", () => {
