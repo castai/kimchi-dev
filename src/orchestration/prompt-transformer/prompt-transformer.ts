@@ -17,7 +17,7 @@ function formatModel(model: OrchestrationModelDescriptor): string {
 	].join("\n")
 }
 
-function formatModelsSection(models: OrchestrationModelDescriptor[]): string {
+function formatModelsSection(models: readonly OrchestrationModelDescriptor[]): string {
 	if (models.length === 0) {
 		return "(No models available)"
 	}

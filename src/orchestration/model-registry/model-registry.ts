@@ -14,7 +14,7 @@ export class ModelRegistry {
 		this.models = [...BUILTIN_MODELS]
 	}
 
-	getAll(): OrchestrationModelDescriptor[] {
+	getAll(): readonly OrchestrationModelDescriptor[] {
 		return this.models
 	}
 }
