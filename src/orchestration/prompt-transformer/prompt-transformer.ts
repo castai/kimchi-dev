@@ -24,7 +24,7 @@ function formatModelsSection(models: OrchestrationModelDescriptor[]): string {
 	return models.map(formatModel).join("\n\n")
 }
 
-// Cached after first read — the template doesn't change at runtime.
+// Cached after first read - the template doesn't change at runtime.
 let cachedTemplate: string | undefined
 function loadTemplate(): string {
 	if (!cachedTemplate) {
@@ -38,5 +38,7 @@ export function transformPrompt(userPrompt: string, registry: ModelRegistry): st
 	const models = registry.getAll()
 	const modelsSection = formatModelsSection(models)
 
-	return template.replace("{{MODELS}}", modelsSection).replace("{{USER_PROMPT}}", userPrompt)
+	return template
+		.replace("{{MODELS}}", () => modelsSection)
+		.replace("{{USER_PROMPT}}", () => userPrompt)
 }
