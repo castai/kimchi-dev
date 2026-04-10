@@ -9,7 +9,24 @@ permissions:
   contents: write
 
 jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: ./.github/actions/setup
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Check (lint + type check)
+        run: pnpm run check
+
+      - name: Test
+        run: pnpm run test
+
   build:
+    needs: [checks]
     strategy:
       matrix:
         include:
@@ -54,9 +71,10 @@ jobs:
         uses: oven-sh/setup-bun@v2
 
       - name: Compile standalone binary
-        run: |
-          bun build src/cli.ts --compile --target=${{ matrix.target }} --outfile dist/kimchi-code --external chromium-bidi --external electron
-          cp package.json dist/
+        run: bun build src/cli.ts --compile --target=${{ matrix.target }} --outfile dist/kimchi-code --external chromium-bidi --external electron
+
+      - name: Copy assets
+        run: pnpm run copy:assets
 
       - name: Package binary
         run: tar -czf kimchi-code_${{ matrix.os }}_${{ matrix.arch }}.tar.gz -C dist kimchi-code package.json theme
@@ -67,8 +85,32 @@ jobs:
           name: kimchi-code_${{ matrix.os }}_${{ matrix.arch }}
           path: kimchi-code_${{ matrix.os }}_${{ matrix.arch }}.tar.gz
 
+  smoke-test:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: ./.github/actions/setup
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Download linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: kimchi-code_linux_amd64
+
+      - name: Extract binary into dist/
+        run: |
+          mkdir -p dist
+          tar -xzf kimchi-code_linux_amd64.tar.gz -C dist
+
+      - name: Smoke tests
+        run: pnpm run test:smoke
+
   release:
-    needs: build
+    needs: [smoke-test]
     runs-on: ubuntu-latest
 
     steps:
