@@ -31,7 +31,6 @@ import subagentExtension from "./extensions/subagent.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import { updateModelsConfig } from "./models.js"
 
-
 try {
 	const config = loadConfig()
 
