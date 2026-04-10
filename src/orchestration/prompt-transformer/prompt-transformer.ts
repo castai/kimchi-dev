@@ -21,6 +21,15 @@ function formatModel(model: OrchestrationModelDescriptor): string {
 	].join("\n")
 }
 
+function formatCurrentModelCapabilities(model: OrchestrationModelDescriptor): string {
+	const strengths = model.capabilities.strengths.join(", ")
+	const multimodal = model.capabilities.multimodal ? "yes" : "no"
+	return [
+		`Tier: ${model.capabilities.tier} | Strengths: ${strengths} | Multimodal: ${multimodal}`,
+		model.capabilities.description,
+	].join("\n")
+}
+
 function formatModelsSection(models: readonly OrchestrationModelDescriptor[]): string {
 	if (models.length === 0) {
 		return "(No models available)"
@@ -58,12 +67,35 @@ export interface ToolInfo {
 	description: string
 }
 
-export function transformPrompt(userPrompt: string, registry: ModelRegistry): string {
+export interface CurrentModelInfo {
+	id: string
+	name: string
+}
+
+export function transformPrompt(userPrompt: string, registry: ModelRegistry, currentModel?: CurrentModelInfo): string {
 	const template = loadTemplate()
-	const models = registry.getAll()
-	const modelsSection = formatModelsSection(models)
+	const allModels = registry.getAll()
+
+	// Exclude the current orchestrator model from the subagent model list —
+	// the orchestrator doesn't need to see itself as a delegation target.
+	const subagentModels = currentModel
+		? allModels.filter((m) => m.id !== currentModel.id)
+		: allModels
+	const modelsSection = formatModelsSection(subagentModels)
+
+	const currentModelName = currentModel?.name ?? "unknown"
+
+	// Look up the current model's capabilities from our registry
+	const currentDescriptor = currentModel
+		? allModels.find((m) => m.id === currentModel.id)
+		: undefined
+	const currentModelCapabilities = currentDescriptor
+		? formatCurrentModelCapabilities(currentDescriptor)
+		: "No capability information available for this model."
 
 	return template
+		.replace("{{CURRENT_MODEL_NAME}}", () => currentModelName)
+		.replace("{{CURRENT_MODEL_CAPABILITIES}}", () => currentModelCapabilities)
 		.replace("{{MODELS}}", () => modelsSection)
 		.replace("{{USER_PROMPT}}", () => userPrompt)
 }

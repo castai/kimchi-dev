@@ -25,6 +25,7 @@ import {
 	buildOrchestratorSystemPrompt,
 	buildSubagentSystemPrompt,
 	isSubagent,
+	type CurrentModelInfo,
 } from "../orchestration/prompt-transformer/prompt-transformer.js"
 
 export default function (pi: ExtensionAPI) {
@@ -34,12 +35,16 @@ export default function (pi: ExtensionAPI) {
 	if (!subagentMode) {
 		const registry = new ModelRegistry()
 
-		pi.on("input", async (event) => {
+		pi.on("input", async (event, ctx) => {
 			if (event.source === "extension") {
 				return { action: "continue" as const }
 			}
 
-			const enrichedPrompt = transformPrompt(event.text, registry)
+			const currentModel: CurrentModelInfo | undefined = ctx.model
+				? { id: ctx.model.id, name: ctx.model.name }
+				: undefined
+
+			const enrichedPrompt = transformPrompt(event.text, registry, currentModel)
 			return { action: "transform" as const, text: enrichedPrompt, images: event.images }
 		})
 	}

@@ -1,6 +1,6 @@
-## Available Models
+## Model Attributes
 
-Each model is described with the following attributes:
+All models (including yourself) are described with the following attributes:
 
 **Tier** indicates the model's cost-to-capability ratio:
 - `heavy` — Largest, most capable, and most expensive. Best for complex, multi-step, or ambiguous tasks.
@@ -12,10 +12,17 @@ Each model is described with the following attributes:
 - `explore` — Navigating codebases, searching for information, answering questions about code.
 - `review` — Code review, finding bugs, and suggesting improvements.
 - `plan` — Architectural planning, breaking down complex tasks, writing specs.
+- `research` — Researching and investigating code, tracing dependencies, understanding large codebases.
 
 **Multimodal** indicates whether the model can process images and visual input.
 
-**Description** is a free-text summary of the model's architecture, benchmark performance, and unique capabilities.
+**Description** is a summary of the model's unique capabilities and what it excels at.
+
+## You — {{CURRENT_MODEL_NAME}}
+
+{{CURRENT_MODEL_CAPABILITIES}}
+
+## Available Models for Subagents
 
 {{MODELS}}
 
