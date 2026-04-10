@@ -12,7 +12,7 @@ function formatModel(model: OrchestrationModelDescriptor): string {
 	const multimodal = model.capabilities.multimodal ? "yes" : "no"
 	return [
 		`- **${model.name}** (id: \`${model.id}\`, provider: \`${model.provider}\`)`,
-		`  Strengths: ${strengths} | Multimodal: ${multimodal}`,
+		`  Tier: ${model.capabilities.tier} | Strengths: ${strengths} | Multimodal: ${multimodal}`,
 		`  ${model.capabilities.description}`,
 	].join("\n")
 }

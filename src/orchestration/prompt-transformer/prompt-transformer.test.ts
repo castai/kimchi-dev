@@ -45,4 +45,17 @@ describe("transformPrompt", () => {
 		const result = transformPrompt("some task", registry)
 		expect(result).toContain("Multimodal")
 	})
+
+	it("includes tier info for every model", () => {
+		const result = transformPrompt("some task", registry)
+		expect(result).toContain("Tier: heavy")
+		expect(result).toContain("Tier: standard")
+		expect(result).toContain("Tier: light")
+	})
+
+	it("wraps content in structured sections", () => {
+		const result = transformPrompt("do something", registry)
+		expect(result).toContain("## Available Models")
+		expect(result).toContain("## Task")
+	})
 })
