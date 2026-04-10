@@ -28,7 +28,7 @@ process.env.PI_SKIP_VERSION_CHECK = "1"
 import { loadConfig } from "./config.js"
 import subagentExtension from "./extensions/subagent.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
-import { ensureModelsConfig } from "./models.js"
+import { updateModelsConfig } from "./models.js"
 
 try {
 	const config = loadConfig()
@@ -39,7 +39,10 @@ try {
 
 	// Ensure models.json exists with Cast AI provider configuration
 	const modelsJsonPath = resolve(agentDir, "models.json")
-	ensureModelsConfig(modelsJsonPath)
+	const modelsResult = await updateModelsConfig(modelsJsonPath, config.apiKey)
+	if (modelsResult.source === "default") {
+		console.error(`Warning: using default models (${modelsResult.error})`)
+	}
 
 	// Suppress Node.js warnings (same as pi-mono's own cli.js)
 	process.emitWarning = () => {}
@@ -50,7 +53,9 @@ try {
 
 	// Delegate to pi-mono's CLI main function, injecting the kimchi extension
 	const { main } = await import("@mariozechner/pi-coding-agent")
-	await main(process.argv.slice(2), { extensionFactories: [subagentExtension, webFetchExtension] })
+	await main(process.argv.slice(2), {
+		extensionFactories: [subagentExtension, webFetchExtension],
+	})
 } catch (err) {
 	console.error(err instanceof Error ? err.message : String(err))
 	process.exit(1)
