@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
-import { resolve } from "node:path"
+import { dirname, resolve } from "node:path"
 import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
@@ -22,30 +22,32 @@ interface SubagentResult {
 	stderr: string
 }
 
-// Walk up from the entry file to find node_modules/.bin/tsx.
-// Returns undefined if not found.
 function resolveTsx(): string | undefined {
-	const parts = process.argv[1].split("/")
-	for (let i = parts.length - 1; i > 0; i--) {
-		const candidate = resolve(parts.slice(0, i).join("/"), "node_modules/.bin/tsx")
+	let dir = dirname(process.argv[1])
+	while (true) {
+		const candidate = resolve(dir, "node_modules/.bin/tsx")
 		if (existsSync(candidate)) return candidate
+		if (existsSync(resolve(dir, "package.json"))) break
+		const parent = dirname(dir)
+		if (parent === dir) break
+		dir = parent
 	}
 	return undefined
 }
 
 function getSubagentInvocation(args: string[]): { command: string; args: string[] } {
 	if (isBunBinary) {
-		// In a compiled Bun binary, process.execPath is the binary itself.
 		return { command: process.execPath, args }
 	}
 	if (process.argv[1].endsWith(".ts")) {
-		// Dev mode: entry is a .ts file, so we need tsx to run it.
 		const tsx = resolveTsx()
 		if (tsx !== undefined) {
 			return { command: tsx, args: [process.argv[1], ...args] }
 		}
+		throw new Error(
+			"Dev mode requires tsx to spawn subagents, but node_modules/.bin/tsx was not found. Run `pnpm install`.",
+		)
 	}
-	// Compiled Node.js: entry is a .js file, run directly with node.
 	return { command: process.execPath, args: [process.argv[1], ...args] }
 }
 
