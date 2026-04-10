@@ -65,6 +65,13 @@ jobs:
       - name: Compile standalone binary
         run: bun build src/cli.ts --compile --outfile dist/kimchi-code --external chromium-bidi --external electron
 
+      # Bun build --compile produces binaries with an invalid code signature on macOS.
+      # The kernel kills badly-signed arm64 binaries immediately (SIGKILL, exit 137).
+      # Strip the corrupt signature and re-sign ad-hoc. See: https://github.com/oven-sh/bun/issues/7208
+      - name: Ad-hoc sign binary (macOS)
+        if: runner.os == 'macOS'
+        run: codesign --remove-signature dist/kimchi-code && codesign -s - dist/kimchi-code
+
       - name: Copy assets
         run: pnpm run copy:assets
 
