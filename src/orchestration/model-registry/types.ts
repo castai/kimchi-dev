@@ -1,3 +1,16 @@
+/**
+ * Task-type affinity used by the Orchestrator to match a model's strengths
+ * to the nature of the work.
+ *
+ *  - "build"    — writing, modifying, and refactoring code.
+ *  - "explore"  — navigating codebases, searching for information,
+ *                  answering questions about code.
+ *  - "review"   — code review, finding bugs, and suggesting improvements.
+ *  - "plan"     — architectural planning, breaking down complex tasks,
+ *                  writing specs.
+ *  - "research" — researching and investigating code, tracing dependencies,
+ *                  understanding large codebases.
+ */
 export type ModelStrength = "review" | "build" | "plan" | "explore" | "research"
 
 /**

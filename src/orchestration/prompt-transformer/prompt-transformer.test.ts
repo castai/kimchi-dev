@@ -34,9 +34,9 @@ describe("transformPrompt", () => {
 
 	it("includes tier info for every model", () => {
 		const result = transformPrompt("some task", registry)
-		expect(result).toContain("Tier: heavy")
-		expect(result).toContain("Tier: standard")
-		expect(result).toContain("Tier: light")
+		for (const model of registry.getAll()) {
+			expect(result).toContain(`Tier: ${model.capabilities.tier}`)
+		}
 	})
 
 	it("wraps content in structured sections", () => {
@@ -54,21 +54,21 @@ describe("transformPrompt", () => {
 
 	it("excludes the current model from the subagent models list", () => {
 		const result = transformPrompt("some task", registry, currentModel)
-		expect(result).toContain("Minimax M2.5")
-		expect(result).toContain("Nemotron 3 Super")
-		// Kimi's formatted model entry (with "- **Kimi K2.5** (id:") should not
-		// appear in the subagent models section, though Kimi's name and capabilities
-		// will appear in the "You" section.
+		// All models except the current one should appear in the subagent section
+		const otherModels = registry.getAll().filter((m) => m.id !== currentModel.id)
+		for (const model of otherModels) {
+			expect(result).toContain(model.name)
+		}
+		// Kimi's formatted model entry should not appear in the subagent section
 		const subagentSection = result.split("## Available Models for Subagents")[1].split("## Task")[0]
 		expect(subagentSection).not.toContain("Kimi K2.5")
 	})
 
 	it("includes all models when no current model is provided", () => {
 		const result = transformPrompt("some task", registry)
-		expect(result).toContain("Kimi K2.5")
-		expect(result).toContain("Minimax M2.5")
-		expect(result).toContain("Nemotron 3 Super")
-		expect(result).toContain("Tier: heavy")
+		for (const model of registry.getAll()) {
+			expect(result).toContain(model.name)
+		}
 	})
 
 	it("shows unknown when current model is not provided", () => {
