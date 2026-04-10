@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { transformPrompt, buildOrchestratorSystemPrompt } from "./prompt-transformer.js"
+import { transformPrompt, buildOrchestratorSystemPrompt, buildSubagentSystemPrompt } from "./prompt-transformer.js"
 import { ModelRegistry } from "../model-registry/index.js"
 
 describe("transformPrompt", () => {
@@ -97,5 +97,50 @@ describe("buildOrchestratorSystemPrompt", () => {
 		const result = buildOrchestratorSystemPrompt([])
 		expect(result).toContain("(No tools available)")
 		expect(result).not.toContain("{{TOOLS}}")
+	})
+})
+
+describe("buildSubagentSystemPrompt", () => {
+	const tools = [
+		{ name: "read", description: "Read file contents" },
+		{ name: "bash", description: "Execute bash commands" },
+		{ name: "edit", description: "Edit files" },
+		{ name: "write", description: "Write files" },
+		{ name: "subagent", description: "Spawn an isolated subagent process" },
+	]
+
+	it("excludes the subagent tool", () => {
+		const result = buildSubagentSystemPrompt(tools)
+		expect(result).not.toContain("subagent")
+	})
+
+	it("includes all other tools", () => {
+		const result = buildSubagentSystemPrompt(tools)
+		expect(result).toContain("- read: Read file contents")
+		expect(result).toContain("- bash: Execute bash commands")
+		expect(result).toContain("- edit: Edit files")
+		expect(result).toContain("- write: Write files")
+	})
+
+	it("replaces the {{TOOLS}} placeholder", () => {
+		const result = buildSubagentSystemPrompt(tools)
+		expect(result).not.toContain("{{TOOLS}}")
+	})
+
+	it("contains coding assistant instructions", () => {
+		const result = buildSubagentSystemPrompt(tools)
+		expect(result).toContain("expert coding assistant")
+	})
+
+	it("does not contain orchestration instructions", () => {
+		const result = buildSubagentSystemPrompt(tools)
+		expect(result).not.toContain("orchestrator")
+		expect(result).not.toContain("EASY")
+		expect(result).not.toContain("HARD")
+	})
+
+	it("handles tools list with only the subagent tool", () => {
+		const result = buildSubagentSystemPrompt([{ name: "subagent", description: "Spawn" }])
+		expect(result).toContain("(No tools available)")
 	})
 })

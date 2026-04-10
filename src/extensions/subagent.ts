@@ -62,6 +62,7 @@ function spawnSubagent(
 			cwd,
 			shell: false,
 			stdio: ["ignore", "pipe", "pipe"],
+			env: { ...process.env, KIMCHI_SUBAGENT: "1" },
 		})
 
 		let buffer = ""

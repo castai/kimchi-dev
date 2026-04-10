@@ -1,35 +1,62 @@
 /**
  * Orchestration prompt enrichment extension.
  *
- * - "input" event: wraps the user prompt with model capabilities so the
- *   orchestrator LLM can make routing decisions.
- * - "before_agent_start" event: replaces Pi's default system prompt with
- *   the orchestrator system prompt, injecting available tool definitions
- *   via {{TOOLS}}.
+ * Behavior depends on whether this process is the orchestrator or a subagent
+ * (detected via the KIMCHI_SUBAGENT env var set during subagent spawning).
+ *
+ * Orchestrator mode:
+ * - "input": wraps the user prompt with model capabilities for routing decisions.
+ * - "before_agent_start": replaces Pi's system prompt with the orchestrator
+ *   system prompt, injecting available tool definitions via {{TOOLS}}.
+ *
+ * Subagent mode:
+ * - "input": passes through unchanged (no model capability injection).
+ * - "before_agent_start": replaces Pi's system prompt with the subagent
+ *   system prompt. Filters out the subagent tool to prevent infinite loops.
  *
  * Steering messages are naturally excluded — they go through Agent.steer()
- * and never trigger the "input" event. Extension-sourced messages are
- * passed through unchanged to avoid re-transforming sub-agent output.
+ * and never trigger the "input" event.
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { ModelRegistry } from "../orchestration/model-registry/index.js"
-import { transformPrompt, buildOrchestratorSystemPrompt } from "../orchestration/prompt-transformer/prompt-transformer.js"
+import {
+	transformPrompt,
+	buildOrchestratorSystemPrompt,
+	buildSubagentSystemPrompt,
+	isSubagent,
+} from "../orchestration/prompt-transformer/prompt-transformer.js"
 
 export default function (pi: ExtensionAPI) {
-	const registry = new ModelRegistry()
+	const subagentMode = isSubagent()
 
-	pi.on("input", async (event) => {
-		if (event.source === "extension") {
-			return { action: "continue" as const }
-		}
+	// For sub agents we don't want to transform the prompt sent from parent with model capabilities
+	if (!subagentMode) {
+		const registry = new ModelRegistry()
 
-		const enrichedPrompt = transformPrompt(event.text, registry)
-		return { action: "transform" as const, text: enrichedPrompt, images: event.images }
-	})
+		pi.on("input", async (event) => {
+			if (event.source === "extension") {
+				return { action: "continue" as const }
+			}
+
+			const enrichedPrompt = transformPrompt(event.text, registry)
+			return { action: "transform" as const, text: enrichedPrompt, images: event.images }
+		})
+	}
 
 	pi.on("before_agent_start", async () => {
 		const tools = pi.getAllTools()
+
+		if (subagentMode) {
+			// Filter the subagent tool out of the active tool set to prevent
+			// the subagent from spawning further subagents.
+			const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
+			pi.setActiveTools(activeTools)
+
+			const systemPrompt = buildSubagentSystemPrompt(tools)
+			return { systemPrompt }
+		}
+
 		const systemPrompt = buildOrchestratorSystemPrompt(tools)
 		return { systemPrompt }
 	})

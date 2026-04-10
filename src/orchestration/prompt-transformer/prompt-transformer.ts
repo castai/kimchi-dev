@@ -7,6 +7,9 @@ import type { OrchestrationModelDescriptor } from "../model-registry/types.js"
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PROMPT_TEMPLATE_PATH = join(__dirname, "prompts", "transformed-user-prompt.md")
 const SYSTEM_PROMPT_PATH = join(__dirname, "prompts", "orchestrator-system-prompt.md")
+const SUBAGENT_SYSTEM_PROMPT_PATH = join(__dirname, "prompts", "subagent-system-prompt.md")
+
+const SUBAGENT_TOOL_NAME = "subagent"
 
 function formatModel(model: OrchestrationModelDescriptor): string {
 	const strengths = model.capabilities.strengths.join(", ")
@@ -42,6 +45,14 @@ function loadSystemPromptTemplate(): string {
 	return cachedSystemPrompt
 }
 
+let cachedSubagentSystemPrompt: string | undefined
+function loadSubagentSystemPromptTemplate(): string {
+	if (!cachedSubagentSystemPrompt) {
+		cachedSubagentSystemPrompt = readFileSync(SUBAGENT_SYSTEM_PROMPT_PATH, "utf-8")
+	}
+	return cachedSubagentSystemPrompt
+}
+
 export interface ToolInfo {
 	name: string
 	description: string
@@ -59,10 +70,22 @@ export function transformPrompt(userPrompt: string, registry: ModelRegistry): st
 
 export function buildOrchestratorSystemPrompt(tools: readonly ToolInfo[]): string {
 	const template = loadSystemPromptTemplate()
-	const toolsSection =
-		tools.length > 0
-			? tools.map((t) => `- ${t.name}: ${t.description}`).join("\n")
-			: "(No tools available)"
-
+	const toolsSection = formatToolsSection(tools)
 	return template.replace("{{TOOLS}}", () => toolsSection)
+}
+
+export function buildSubagentSystemPrompt(tools: readonly ToolInfo[]): string {
+	const template = loadSubagentSystemPromptTemplate()
+	const filtered = tools.filter((t) => t.name !== SUBAGENT_TOOL_NAME)
+	const toolsSection = formatToolsSection(filtered)
+	return template.replace("{{TOOLS}}", () => toolsSection)
+}
+
+function formatToolsSection(tools: readonly ToolInfo[]): string {
+	if (tools.length === 0) return "(No tools available)"
+	return tools.map((t) => `- ${t.name}: ${t.description}`).join("\n")
+}
+
+export function isSubagent(): boolean {
+	return process.env.KIMCHI_SUBAGENT === "1"
 }
