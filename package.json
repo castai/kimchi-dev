@@ -12,7 +12,7 @@
     "copy:assets": "cp package.json dist/ && cp -r src/modes/interactive/theme dist/theme",
     "build": "tsc --noEmit && node scripts/copy-resources.js",
     "build:binary": "pnpm run clean && pnpm run build && bun build src/cli.ts --compile --outfile dist/kimchi-code --external chromium-bidi --external electron && pnpm run copy:assets",
-    "dev": "tsx src/cli.ts",
+    "dev": "bun run src/cli.ts",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "check": "biome check src/ && tsc --noEmit",
