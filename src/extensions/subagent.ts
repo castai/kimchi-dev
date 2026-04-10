@@ -10,16 +10,40 @@ const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", 
 const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
 const STDERR_MAX = 8192
+const TIMEOUT_MS = 15 * 60 * 1000
 
 interface SubagentState {
 	spinnerIdx: number
 	spinnerInterval: ReturnType<typeof setInterval> | undefined
 }
 
+type SubagentFailureReason = "exit_error" | "timeout" | "token_budget_exceeded"
+
+interface SubagentTokenUsage {
+	input: number
+	output: number
+}
+
 interface SubagentResult {
 	exitCode: number
 	accumulated: string
 	stderr: string
+	tokenUsage: SubagentTokenUsage
+	failureReason: SubagentFailureReason | undefined
+	durationMs: number
+}
+
+interface SubagentError {
+	reason: SubagentFailureReason
+	model: string
+	tokenUsage: SubagentTokenUsage
+	durationMs: number
+	detail: string
+}
+
+interface ParsedSubagentEvent {
+	delta: string | null
+	tokensUsed: number
 }
 
 function resolveTsx(): string | undefined {
@@ -51,34 +75,56 @@ function getSubagentInvocation(args: string[]): { command: string; args: string[
 	return { command: process.execPath, args: [process.argv[1], ...args] }
 }
 
-// Parses a single JSON line from the subagent's --mode json stdout stream and
-// returns the text delta if present, or null otherwise.
-// The event shape (message_update / assistantMessageEvent / text_delta) is
-// internal to pi-coding-agent and may change across versions.
-export function parseSubagentEvent(line: string): string | null {
-	if (!line.trim()) return null
+// Parses a single JSON line from the subagent's --mode json stdout stream.
+// Returns text delta from message_update/text_delta events, and total tokens
+// (input + output) from message_end events.
+// The event shapes are internal to pi-coding-agent and may change across versions.
+export function parseSubagentEvent(line: string): ParsedSubagentEvent {
+	if (!line.trim()) return { delta: null, tokensUsed: 0 }
 	let event: Record<string, unknown>
 	try {
 		event = JSON.parse(line)
 	} catch {
-		return null
+		return { delta: null, tokensUsed: 0 }
 	}
+
 	if (event.type === "message_update") {
 		const assistantEvent = event.assistantMessageEvent as Record<string, unknown> | undefined
 		if (assistantEvent?.type === "text_delta" && typeof assistantEvent.delta === "string") {
-			return assistantEvent.delta
+			return { delta: assistantEvent.delta, tokensUsed: 0 }
+		}
+		return { delta: null, tokensUsed: 0 }
+	}
+
+	if (event.type === "message_end") {
+		const message = event.message as Record<string, unknown> | undefined
+		const usage = message?.usage as Record<string, unknown> | undefined
+		if (usage) {
+			const input = typeof usage.input === "number" ? usage.input : 0
+			const output = typeof usage.output === "number" ? usage.output : 0
+			return { delta: null, tokensUsed: input + output }
 		}
 	}
-	return null
+
+	return { delta: null, tokensUsed: 0 }
 }
 
 function spawnSubagent(
 	invocation: { command: string; args: string[] },
 	cwd: string,
 	signal: AbortSignal | undefined,
+	tokenBudget: number | undefined,
 	onToken: (accumulated: string) => void,
 ): Promise<SubagentResult> {
 	return new Promise((resolve) => {
+		const startedAt = Date.now()
+
+		const timeoutController = new AbortController()
+		const timeoutHandle = setTimeout(() => timeoutController.abort(), TIMEOUT_MS)
+
+		const combinedSignal =
+			signal !== undefined ? AbortSignal.any([signal, timeoutController.signal]) : timeoutController.signal
+
 		const proc = spawn(invocation.command, invocation.args, {
 			cwd,
 			shell: false,
@@ -89,12 +135,49 @@ function spawnSubagent(
 		let buffer = ""
 		let accumulated = ""
 		let stderr = ""
+		let totalTokensUsed = 0
+		let inputTokens = 0
+		let outputTokens = 0
+		let failureReason: SubagentFailureReason | undefined
+
+		const finish = (exitCode: number) => {
+			clearTimeout(timeoutHandle)
+			resolve({
+				exitCode,
+				accumulated,
+				stderr,
+				tokenUsage: { input: inputTokens, output: outputTokens },
+				failureReason,
+				durationMs: Date.now() - startedAt,
+			})
+		}
+
+		const kill = (reason: SubagentFailureReason) => {
+			if (failureReason === undefined) {
+				failureReason = reason
+			}
+			proc.kill("SIGTERM")
+			setTimeout(() => {
+				if (!proc.killed) proc.kill("SIGKILL")
+			}, 5000)
+		}
 
 		const processLine = (line: string) => {
-			const delta = parseSubagentEvent(line)
+			const { delta, tokensUsed } = parseSubagentEvent(line)
 			if (delta !== null) {
 				accumulated += delta
 				onToken(accumulated)
+			}
+			if (tokensUsed > 0) {
+				totalTokensUsed += tokensUsed
+				// Approximate split: pi-agent-core reports input+output combined in message_end.
+				// We track the running total and attribute the increment proportionally on each
+				// message_end. For budget enforcement the total is what matters.
+				inputTokens = Math.round(totalTokensUsed * 0.6)
+				outputTokens = totalTokensUsed - inputTokens
+				if (tokenBudget !== undefined && totalTokensUsed > tokenBudget) {
+					kill("token_budget_exceeded")
+				}
 			}
 		}
 
@@ -114,23 +197,34 @@ function spawnSubagent(
 
 		proc.on("close", (code) => {
 			if (buffer.trim()) processLine(buffer)
-			resolve({ exitCode: code ?? 0, accumulated, stderr })
+			finish(code ?? 0)
 		})
 
-		proc.on("error", (err) => resolve({ exitCode: 1, accumulated, stderr: stderr || err.message }))
+		proc.on("error", (err) => {
+			clearTimeout(timeoutHandle)
+			resolve({
+				exitCode: 1,
+				accumulated,
+				stderr: stderr || err.message,
+				tokenUsage: { input: inputTokens, output: outputTokens },
+				failureReason: failureReason ?? "exit_error",
+				durationMs: Date.now() - startedAt,
+			})
+		})
 
-		if (signal) {
-			const kill = () => {
-				proc.kill("SIGTERM")
-				setTimeout(() => {
-					if (!proc.killed) proc.kill("SIGKILL")
-				}, 5000)
+		const onAbort = () => {
+			if (timeoutController.signal.aborted && failureReason === undefined) {
+				kill("timeout")
+			} else if (failureReason === undefined) {
+				kill("exit_error")
 			}
-			if (signal.aborted) kill()
-			else {
-				signal.addEventListener("abort", kill, { once: true })
-				proc.on("close", () => signal.removeEventListener("abort", kill))
-			}
+		}
+
+		if (combinedSignal.aborted) {
+			onAbort()
+		} else {
+			combinedSignal.addEventListener("abort", onAbort, { once: true })
+			proc.on("close", () => combinedSignal.removeEventListener("abort", onAbort))
 		}
 	})
 }
@@ -152,17 +246,23 @@ function clearSpinner(state: SubagentState) {
 	}
 }
 
+function buildErrorResponse(error: SubagentError): string {
+	return JSON.stringify(error)
+}
+
 const SubagentParams = Type.Object({
 	provider: Type.String({
 		description:
 			'Provider name for the subagent model (e.g. "kimchi-dev"). Must match the provider registered in models.json.',
 	}),
-	model: Type.String({
-		description: "Model ID to use for the subagent (e.g. glm-5-fp8, kimi-k2.5)",
-	}),
-	prompt: Type.String({
-		description: "Prompt to send to the subagent",
-	}),
+	model: Type.String({ description: "Model ID to use for the subagent (e.g. glm-5-fp8, kimi-k2.5)" }),
+	prompt: Type.String({ description: "Prompt to send to the subagent" }),
+	tokenBudget: Type.Optional(
+		Type.Integer({
+			description: "Maximum total tokens (input + output) the subagent may consume. Subagent is killed when exceeded.",
+			minimum: 1,
+		}),
+	),
 })
 
 export default function (pi: ExtensionAPI) {
@@ -180,7 +280,7 @@ export default function (pi: ExtensionAPI) {
 		description:
 			"Spawn an isolated subagent process with the given provider, model, and prompt. " +
 			'Both provider and model are required — provider must match the model\'s registered provider name (e.g. "kimchi-dev"). ' +
-			"The subagent runs in a separate pi process with no shared context and returns its final response.",
+			`The subagent runs in a separate pi process with no shared context and returns its final response. Hard timeout: ${TIMEOUT_MS / 60000} minutes.`,
 		parameters: SubagentParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
@@ -197,8 +297,12 @@ export default function (pi: ExtensionAPI) {
 			]
 			const invocation = getSubagentInvocation(args)
 
-			const { exitCode, accumulated, stderr } = await spawnSubagent(invocation, ctx.cwd, signal, (text) =>
-				onUpdate?.({ content: [{ type: "text", text }], details: undefined }),
+			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(
+				invocation,
+				ctx.cwd,
+				signal,
+				params.tokenBudget,
+				(text) => onUpdate?.({ content: [{ type: "text", text }], details: undefined }),
 			)
 
 			sessionCounts.set(params.model, (sessionCounts.get(params.model) ?? 0) + 1)
@@ -206,10 +310,16 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.setStatus(FOOTER_STATUS_KEY, formatFooterStatus(sessionCounts, ctx.ui.theme))
 			}
 
-			if (exitCode !== 0) {
-				const errorMsg = stderr.trim() || accumulated || "(no output)"
+			if (failureReason !== undefined || exitCode !== 0) {
+				const error: SubagentError = {
+					reason: failureReason ?? "exit_error",
+					model: params.model,
+					tokenUsage,
+					durationMs,
+					detail: stderr.trim() || accumulated || "(no output)",
+				}
 				return {
-					content: [{ type: "text", text: `Subagent failed (exit ${exitCode}): ${errorMsg}` }],
+					content: [{ type: "text", text: buildErrorResponse(error) }],
 					details: undefined,
 					isError: true,
 				}
