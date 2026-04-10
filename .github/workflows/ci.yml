@@ -17,15 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright/package.json') }}
-
-      - name: Install Playwright Chromium
-        run: npx playwright install chromium --with-deps
+          playwright: "true"
 
       - name: Build
         run: pnpm run build
@@ -47,15 +40,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright/package.json') }}
-
-      - name: Install Playwright Chromium
-        run: npx playwright install chromium --with-deps
+          playwright: "true"
 
       - name: Check (lint + type check)
         run: pnpm run check
