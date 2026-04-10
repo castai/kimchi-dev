@@ -1,4 +1,4 @@
-export type ModelStrength = "review" | "build" | "plan" | "explore"
+export type ModelStrength = "review" | "build" | "plan" | "explore" | "research"
 
 /**
  * Relative cost/capability tier used by the Orchestrator to match task

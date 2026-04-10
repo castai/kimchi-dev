@@ -10,11 +10,17 @@ export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [
 			strengths: ["build", "explore"],
 			tier: "heavy",
 			description:
-				"1T-parameter MoE model (32B active), 256K context. Native multimodal with vision encoder - " +
-				"can reason over images, generate code from UI designs, and process visual inputs. " +
-				"Strong coding (SWE-Bench Verified 76.8%), math (AIME 2025 96.1%), and agentic search " +
-				"(BrowseComp 78.4% with agent swarm). Unique agent-swarm capability decomposes complex " +
-				"tasks into parallel sub-tasks. Most capable and most expensive model in the pool.",
+				"1T-parameter MoE model (32B active), 256K context. " +
+				"The only multimodal model in the pool - can reason over images, generate code " +
+				"from UI designs and screenshots, and process visual inputs. " +
+				"Strong at resolving real-world GitHub issues across multiple languages. " +
+				"Excels at deep mathematical and scientific reasoning, including graduate-level " +
+				"science questions and frontier-difficulty problems that most models cannot solve. " +
+				"Leading agentic capabilities - can autonomously browse the web, chain tool calls, " +
+				"and decompose complex tasks into parallel sub-tasks via its agent-swarm architecture. " +
+				"Most capable and most expensive model in the pool. Best choice for complex " +
+				"multi-step tasks, anything involving visual inputs, or problems that require " +
+				"deep reasoning and autonomous multi-tool workflows.",
 		},
 	},
 	{
@@ -27,10 +33,16 @@ export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [
 			tier: "standard",
 			description:
 				"230B-parameter MoE model (only ~10B active), 128K context, Lightning Attention. " +
-				"Best-in-class SWE-Bench Verified (80.2%) and strong multilingual coding across 10+ languages " +
-				"and 200K+ real-world environments. Spec-writing tendency - plans architecture before coding. " +
-				"Very efficient at 4% parameter activation, fast inference matching Claude Opus 4.6 speed. " +
-				"Best balance of coding quality and cost efficiency.",
+				"The strongest pure coding model in the pool - has the highest accuracy at resolving " +
+				"real-world GitHub issues, including complex multi-file bugs and hard edge cases. " +
+				"Strong across 10+ programming languages in 200K+ real-world environments. " +
+				"Plans architecture before coding with a natural spec-writing tendency. " +
+				"Excellent at autonomous tool calling and multi-step function chains - reliably " +
+				"formats tool calls correctly and handles extended multi-turn tool conversations. " +
+				"Solid mathematical and scientific reasoning, though slightly behind the heavy-tier model. " +
+				"Very fast inference thanks to only 4% parameter activation. " +
+				"Best choice for coding tasks of any complexity where quality and speed both matter, " +
+				"especially when the task is purely text-based with no visual inputs.",
 		},
 	},
 	{
@@ -39,13 +51,21 @@ export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [
 		name: "Nemotron 3 Super",
 		capabilities: {
 			multimodal: false,
-			strengths: ["build"],
+			strengths: ["build", "explore", "research"],
 			tier: "light",
 			description:
 				"120B-parameter LatentMoE hybrid model (12B active), up to 1M token context, NVFP4 quantized. " +
-				"Solid reasoning (AIME 2025 90.2%) and decent coding (SWE-Bench Verified 60.5%). " +
-				"Optimized for collaborative agents and high-volume workloads. Smallest active parameter " +
-				"count and quantized to NVFP4 for maximum throughput - cheapest to run in the pool.",
+				"The weakest coding model in the pool - adequate for simple, well-scoped code changes " +
+				"but not reliable for complex multi-file bug fixes or feature implementations. " +
+				"Surprisingly strong reasoning for its size - handles advanced math and graduate-level " +
+				"science questions well. Decent at following instructions in agentic workflows, " +
+				"though struggles with autonomous web search and information retrieval tasks. " +
+				"Standout capability is its 1M token context window with near-perfect retrieval " +
+				"accuracy - can ingest entire large codebases, trace cross-file dependencies, " +
+				"and answer questions about massive documents in a single pass. " +
+				"Cheapest and fastest model in the pool. Best choice for codebase exploration, " +
+				"research, reading large files, and simple straightforward tasks. " +
+				"Avoid for complex coding or multi-file changes.",
 		},
 	},
 ] as const
