@@ -50,6 +50,7 @@ kimchi-code respects `HTTP_PROXY` / `HTTPS_PROXY` environment variables for netw
 ### Prerequisites
 
 - Node.js 22 (LTS)
+- [Bun](https://bun.sh/) (used for dev server and binary compilation)
 - [corepack](https://nodejs.org/api/corepack.html) enabled (`corepack enable`)
 - pnpm (installed automatically via corepack)
 
@@ -67,7 +68,7 @@ pnpm install
 | Command | Description |
 |---------|-------------|
 | `pnpm run build` | Compile TypeScript to `dist/` and copy theme assets |
-| `pnpm run dev` | Watch mode (recompile on changes) |
+| `pnpm run dev` | Run the CLI locally via Bun |
 | `pnpm run check` | Biome lint + TypeScript type check |
 | `pnpm run lint` | Biome lint only |
 | `pnpm run lint:fix` | Biome lint with auto-fix |
@@ -75,18 +76,17 @@ pnpm install
 
 ### Running locally
 
-After building, run the CLI directly:
+Run the CLI directly via Bun:
 
 ```bash
-pnpm run build
-node dist/cli.js
+pnpm run dev
 ```
 
-Or link it as a global command:
+Or build a standalone binary and run it:
 
 ```bash
-pnpm link --global
-kimchi-code
+pnpm run build:binary
+./dist/kimchi-code
 ```
 
 ### Project structure
@@ -95,8 +95,10 @@ kimchi-code
 src/
   cli.ts          — Entry point
   config.ts       — Auth & config loading
+  env.ts          — Environment variable helpers
   models.ts       — Default model definitions
-  config.test.ts  — Config tests
+  extensions/     — Agent extensions (orchestration, web-fetch)
+  modes/          — Interactive mode & theme assets
 ```
 
 ## Release
