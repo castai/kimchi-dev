@@ -1,4 +1,4 @@
-import { accessSync, constants } from "node:fs"
+import { constants, accessSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { BINARY_PATH, runBinary } from "./harness.js"
 
@@ -29,15 +29,19 @@ describe("binary smoke tests", () => {
 		expect(result.stdout).toContain("Usage")
 	})
 
-	it.skipIf(!process.env.KIMCHI_API_KEY)(
-		"sends a request to a model via -p flag",
-		() => {
-			const result = runBinary(
-				["-p", "respond with only the word hello"],
-				{ KIMCHI_API_KEY: process.env.KIMCHI_API_KEY! },
-			)
-			expect(result.status).toBe(0)
-			expect(result.stdout.trim()).not.toBe("")
-		},
-	)
+	it("prompt templates are embedded in binary (no extension errors on startup)", () => {
+		const result = runBinary(["-p", "hello"], {
+			KIMCHI_API_KEY: "smoke-test-dummy",
+		})
+		// The orchestration extension fires "input" and "before_agent_start" events before API key validation, triggering template loading. If templates are missing from the compiled binary, the extension runner reports ENOENT via "Extension error" on stderr.
+		expect(result.stderr).not.toContain("Extension error")
+	})
+
+	it.skipIf(!process.env.KIMCHI_API_KEY)("sends a request to a model via -p flag", () => {
+		const result = runBinary(["-p", "respond with only the word hello"], {
+			KIMCHI_API_KEY: process.env.KIMCHI_API_KEY as string,
+		})
+		expect(result.status).toBe(0)
+		expect(result.stdout.trim()).not.toBe("")
+	})
 })
