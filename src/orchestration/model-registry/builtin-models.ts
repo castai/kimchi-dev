@@ -1,5 +1,16 @@
 import type { OrchestrationModelDescriptor } from "./types.js"
 
+/**
+ * Model descriptions are written as natural-language decision briefs, not
+ * benchmark data sheets. While the orchestrator LLM could interpret raw
+ * benchmark names and scores if we provided them with definitions, doing
+ * so would significantly bloat the user prompt - each model would need
+ * dozens of benchmark scores plus a glossary explaining what each one
+ * measures. Instead, we pre-digest the benchmark evidence into concise
+ * statements the orchestrator can act on directly: "strongest pure coding
+ * model in the pool", "reliably formats tool calls correctly",
+ * "near-perfect retrieval accuracy" etc.
+ */
 export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [
 	{
 		id: "kimi-k2.5",
@@ -65,8 +76,7 @@ export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [
 	// 			"accuracy - can ingest entire large codebases, trace cross-file dependencies, " +
 	// 			"and answer questions about massive documents in a single pass. " +
 	// 			"Cheapest and fastest model in the pool. Best choice for codebase exploration, " +
-	// 			"research, reading large files, and simple straightforward tasks. " +
-	// 			"Avoid for complex coding or multi-file changes.",
+	// 			"research, reading large files, and simple straightforward tasks. "
 	// 	},
 	// },
 ] as const
