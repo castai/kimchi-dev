@@ -63,7 +63,7 @@ jobs:
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Compile standalone binary
-        run: bun build src/cli.ts --compile --target=${{ matrix.target }} --outfile dist/kimchi-code --external chromium-bidi --external electron
+        run: bun build src/cli.ts --compile --outfile dist/kimchi-code --external chromium-bidi --external electron
 
       - name: Copy assets
         run: pnpm run copy:assets
