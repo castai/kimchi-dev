@@ -26,6 +26,7 @@ process.title = "kimchi"
 process.env.PI_SKIP_VERSION_CHECK = "1"
 
 import { loadConfig } from "./config.js"
+import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
 import subagentExtension from "./extensions/subagent.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import { updateModelsConfig } from "./models.js"
@@ -54,7 +55,7 @@ try {
 	// Delegate to pi-mono's CLI main function, injecting the kimchi extension
 	const { main } = await import("@mariozechner/pi-coding-agent")
 	await main(process.argv.slice(2), {
-		extensionFactories: [subagentExtension, webFetchExtension],
+		extensionFactories: [subagentExtension, webFetchExtension, promptEnrichmentExtension],
 	})
 } catch (err) {
 	console.error(err instanceof Error ? err.message : String(err))
