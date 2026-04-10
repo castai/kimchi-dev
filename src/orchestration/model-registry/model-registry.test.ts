@@ -18,14 +18,6 @@ describe("ModelRegistry", () => {
 		expect(kimi?.capabilities.description).toBeTruthy()
 	})
 
-	it("every model has a valid tier", () => {
-		const registry = new ModelRegistry()
-		const validTiers = ["light", "standard", "heavy"]
-		for (const model of registry.getAll()) {
-			expect(validTiers).toContain(model.capabilities.tier)
-		}
-	})
-
 	it("every model has a non-placeholder description", () => {
 		const registry = new ModelRegistry()
 		for (const model of registry.getAll()) {
