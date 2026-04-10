@@ -56,7 +56,7 @@ try {
 	// Delegate to pi-mono's CLI main function, injecting the kimchi extension
 	const { main } = await import("@mariozechner/pi-coding-agent")
 	await main(process.argv.slice(2), {
-		extensionFactories: [subagentExtension, webFetchExtension],
+		extensionFactories: [subagentExtension, webFetchExtension, promptEnrichmentExtension],
 	})
 } catch (err) {
 	console.error(err instanceof Error ? err.message : String(err))
