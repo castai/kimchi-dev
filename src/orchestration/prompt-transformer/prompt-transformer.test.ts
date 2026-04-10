@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { transformPrompt } from "./prompt-transformer.js"
+import { transformPrompt, buildOrchestratorSystemPrompt } from "./prompt-transformer.js"
 import { ModelRegistry } from "../model-registry/index.js"
 
 describe("transformPrompt", () => {
@@ -57,5 +57,45 @@ describe("transformPrompt", () => {
 		const result = transformPrompt("do something", registry)
 		expect(result).toContain("## Available Models")
 		expect(result).toContain("## Task")
+	})
+})
+
+describe("buildOrchestratorSystemPrompt", () => {
+	const tools = [
+		{ name: "read", description: "Read file contents" },
+		{ name: "bash", description: "Execute bash commands" },
+		{ name: "subagent", description: "Spawn an isolated subagent process" },
+	]
+
+	it("includes all tool names and descriptions", () => {
+		const result = buildOrchestratorSystemPrompt(tools)
+		for (const tool of tools) {
+			expect(result).toContain(tool.name)
+			expect(result).toContain(tool.description)
+		}
+	})
+
+	it("formats tools as a list", () => {
+		const result = buildOrchestratorSystemPrompt(tools)
+		expect(result).toContain("- read: Read file contents")
+		expect(result).toContain("- subagent: Spawn an isolated subagent process")
+	})
+
+	it("contains orchestration instructions", () => {
+		const result = buildOrchestratorSystemPrompt(tools)
+		expect(result).toContain("EASY")
+		expect(result).toContain("HARD")
+		expect(result).toContain("orchestrator")
+	})
+
+	it("replaces the {{TOOLS}} placeholder", () => {
+		const result = buildOrchestratorSystemPrompt(tools)
+		expect(result).not.toContain("{{TOOLS}}")
+	})
+
+	it("handles empty tools list", () => {
+		const result = buildOrchestratorSystemPrompt([])
+		expect(result).toContain("(No tools available)")
+		expect(result).not.toContain("{{TOOLS}}")
 	})
 })
