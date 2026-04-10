@@ -1,8 +1,12 @@
-import { defineConfig } from "vitest/config"
+import { defineConfig, mergeConfig } from "vitest/config"
+import rootConfig from "../../vitest.config.js"
 
-export default defineConfig({
-	test: {
-		include: ["tests/smoke/**/*.test.ts"],
-		testTimeout: 30_000,
-	},
-})
+export default mergeConfig(
+	rootConfig,
+	defineConfig({
+		test: {
+			include: ["tests/smoke/**/*.test.ts"],
+			testTimeout: 30_000,
+		},
+	}),
+)

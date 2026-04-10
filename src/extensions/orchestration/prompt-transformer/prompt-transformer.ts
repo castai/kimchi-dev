@@ -43,7 +43,6 @@ export interface CurrentModelInfo {
 }
 
 export function transformPrompt(userPrompt: string, registry: ModelRegistry, currentModel?: CurrentModelInfo): string {
-	const template = userPromptTemplate
 	const allModels = registry.getAll()
 
 	// Exclude the current orchestrator model from the subagent model list —
@@ -59,7 +58,7 @@ export function transformPrompt(userPrompt: string, registry: ModelRegistry, cur
 		? formatCurrentModelCapabilities(currentDescriptor)
 		: "No capability information available for this model."
 
-	return template
+	return userPromptTemplate
 		.replace("{{CURRENT_MODEL_NAME}}", () => currentModelName)
 		.replace("{{CURRENT_MODEL_CAPABILITIES}}", () => currentModelCapabilities)
 		.replace("{{MODELS}}", () => modelsSection)
@@ -67,16 +66,14 @@ export function transformPrompt(userPrompt: string, registry: ModelRegistry, cur
 }
 
 export function buildOrchestratorSystemPrompt(tools: readonly ToolInfo[]): string {
-	const template = systemPromptTemplate
 	const toolsSection = formatToolsSection(tools)
-	return template.replace("{{TOOLS}}", () => toolsSection)
+	return systemPromptTemplate.replace("{{TOOLS}}", () => toolsSection)
 }
 
 export function buildSubagentSystemPrompt(tools: readonly ToolInfo[]): string {
-	const template = subagentSystemPromptTemplate
 	const filtered = tools.filter((t) => t.name !== SUBAGENT_TOOL_NAME)
 	const toolsSection = formatToolsSection(filtered)
-	return template.replace("{{TOOLS}}", () => toolsSection)
+	return subagentSystemPromptTemplate.replace("{{TOOLS}}", () => toolsSection)
 }
 
 function formatToolsSection(tools: readonly ToolInfo[]): string {
