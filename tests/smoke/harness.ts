@@ -15,22 +15,31 @@ import { afterAll, beforeAll } from "vitest"
 
 export const BINARY_PATH = resolve("dist/kimchi-code")
 
-let tempHome: string
+let tempHome: string | undefined
 
 beforeAll(() => {
 	tempHome = mkdtempSync(join(tmpdir(), "kimchi-smoke-home-"))
 })
 
 afterAll(() => {
-	rmSync(tempHome, { recursive: true, force: true })
+	if (tempHome) {
+		rmSync(tempHome, { recursive: true, force: true })
+	}
 })
+
+function getTempHome(): string {
+	if (!tempHome) {
+		throw new Error("tempHome not initialized — getAgentDir/ensureAgentDir called outside of a test lifecycle")
+	}
+	return tempHome
+}
 
 /**
  * Returns the agent config dir that the binary will derive from tempHome.
  * Matches the logic in src/cli.ts: resolve(homedir(), ".config", "kimchi", "harness").
  */
 export function getAgentDir(): string {
-	return join(tempHome, ".config", "kimchi", "harness")
+	return join(getTempHome(), ".config", "kimchi", "harness")
 }
 
 /**
@@ -42,19 +51,40 @@ export function ensureAgentDir(): string {
 	return dir
 }
 
-export function runBinary(args: string[] = [], extraEnv: Record<string, string> = {}): SpawnSyncReturns<string> {
+const DEFAULT_TIMEOUT_MS = 14_000
+
+interface RunBinaryOptions {
+	args?: string[]
+	extraEnv?: Record<string, string>
+	timeoutMs?: number
+	/** When false, non-zero exit codes and signals don't throw. Useful for testing error paths. Defaults to true. */
+	throwOnError?: boolean
+}
+
+export function runBinary(opts: RunBinaryOptions = {}): SpawnSyncReturns<string> {
+	const { args = [], extraEnv = {}, timeoutMs = DEFAULT_TIMEOUT_MS, throwOnError = true } = opts
+	const home = getTempHome()
 	const result = spawnSync(BINARY_PATH, args, {
 		encoding: "utf-8",
-		timeout: 30_000,
+		timeout: timeoutMs,
 		env: {
 			PATH: process.env.PATH,
-			HOME: tempHome,
+			HOME: home,
 			...extraEnv,
 		},
 	})
-	if (result.status === null) {
-		const reason = result.signal ? `killed by ${result.signal}` : "timed out after 30s"
-		throw new Error(`runBinary ${reason}: ${BINARY_PATH} ${args.join(" ")}\nstderr: ${result.stderr ?? "(empty)"}`)
+	if (throwOnError) {
+		if (result.status === null) {
+			const code = (result.error as NodeJS.ErrnoException | undefined)?.code
+			throw new Error(
+				`runBinary failed (${code ?? result.signal ?? "unknown"}): ${BINARY_PATH} ${args.join(" ")}\nstdout: ${result.stdout ?? "(empty)"}\nstderr: ${result.stderr ?? "(empty)"}`,
+			)
+		}
+		if (result.status !== 0) {
+			throw new Error(
+				`runBinary exited with status ${result.status}: ${BINARY_PATH} ${args.join(" ")}\nstdout: ${result.stdout ?? "(empty)"}\nstderr: ${result.stderr ?? "(empty)"}`,
+			)
+		}
 	}
 	return result
 }
