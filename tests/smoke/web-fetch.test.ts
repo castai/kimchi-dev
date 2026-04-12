@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest"
 import { runBinary } from "./harness.js"
 
 describe("web_fetch smoke tests", () => {
-	it.skipIf(!process.env.KIMCHI_API_KEY)("web_fetch tool is registered and available", () => {
+	it.skipIf(!process.env.KIMCHI_API_KEY)("web_fetch tool is registered and available", { retry: 2 }, () => {
 		const result = runBinary({
 			args: ["-p", "List all your available tools, one per line. Just the tool names, nothing else."],
 			extraEnv: { KIMCHI_API_KEY: process.env.KIMCHI_API_KEY as string },
@@ -20,7 +20,7 @@ describe("web_fetch smoke tests", () => {
 		expect(result.stdout.toLowerCase()).toContain("web_fetch")
 	})
 
-	it.skipIf(!process.env.KIMCHI_API_KEY)("fetches a web page via the web_fetch tool", () => {
+	it.skipIf(!process.env.KIMCHI_API_KEY)("fetches a web page via the web_fetch tool", { retry: 2 }, () => {
 		const result = runBinary({
 			args: [
 				"-p",

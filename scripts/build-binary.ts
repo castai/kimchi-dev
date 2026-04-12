@@ -1,5 +1,5 @@
 // Build the CLI into a standalone Bun binary under dist/.
-// Steps: clean → typecheck + copy dev resources → compile → fix macOS codesign → copy binary resources.
+// Steps: clean → typecheck → compile → fix macOS codesign → copy binary resources.
 
 import { execSync } from "node:child_process"
 import { platform } from "node:os"
@@ -14,7 +14,7 @@ function run(label: string, cmd: string): void {
 }
 
 run("clean", "bun run clean")
-run("build", "bun run build")
+run("typecheck", "bun run typecheck")
 
 // Externalize packages that cannot be bundled into a Bun compiled binary (native addons, browser automation harnesses).
 // If a new dependency causes a build failure, check whether it also needs --external here.

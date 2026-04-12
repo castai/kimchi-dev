@@ -7,7 +7,6 @@ export default mergeConfig(
 		test: {
 			include: ["tests/smoke/**/*.test.ts"],
 			testTimeout: 15_000,
-			retry: 2,
 		},
 	}),
 )
