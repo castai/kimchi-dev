@@ -13,6 +13,6 @@
 		"resolveJsonModule": true,
 		"allowArbitraryExtensions": true
 	},
-	"include": ["src", "extensions"],
+	"include": ["src", "extensions", "scripts"],
 	"exclude": ["node_modules", "dist"]
 }
