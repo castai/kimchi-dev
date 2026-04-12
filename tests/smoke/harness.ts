@@ -7,7 +7,7 @@
  * path for tests that need to place settings files there.
  */
 
-import { spawnSync, type SpawnSyncReturns } from "node:child_process"
+import { type SpawnSyncReturns, spawnSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
@@ -42,11 +42,8 @@ export function ensureAgentDir(): string {
 	return dir
 }
 
-export function runBinary(
-	args: string[] = [],
-	extraEnv: Record<string, string> = {},
-): SpawnSyncReturns<string> {
-	return spawnSync(BINARY_PATH, args, {
+export function runBinary(args: string[] = [], extraEnv: Record<string, string> = {}): SpawnSyncReturns<string> {
+	const result = spawnSync(BINARY_PATH, args, {
 		encoding: "utf-8",
 		timeout: 30_000,
 		env: {
@@ -55,4 +52,9 @@ export function runBinary(
 			...extraEnv,
 		},
 	})
+	if (result.status === null) {
+		const reason = result.signal ? `killed by ${result.signal}` : "timed out after 30s"
+		throw new Error(`runBinary ${reason}: ${BINARY_PATH} ${args.join(" ")}\nstderr: ${result.stderr ?? "(empty)"}`)
+	}
+	return result
 }
