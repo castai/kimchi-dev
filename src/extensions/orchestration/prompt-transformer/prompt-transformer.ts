@@ -91,7 +91,7 @@ function formatToolsSection(tools: readonly ToolInfo[]): string {
 function formatProjectContext(contextFiles?: readonly ContextFile[]): string {
 	if (!contextFiles || contextFiles.length === 0) return ""
 	const combined = contextFiles.map((f) => f.content).join("\n\n")
-	return `# Project Context\n\n${combined}`
+	return `# Project Guidelines\n\n${combined}`
 }
 
 export function isSubagent(): boolean {

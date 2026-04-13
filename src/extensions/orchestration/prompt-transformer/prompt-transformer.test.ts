@@ -136,7 +136,7 @@ describe("buildOrchestratorSystemPrompt", () => {
 			{ path: "/repo/sub/CLAUDE.md", content: "Use pnpm, not npm." },
 		]
 		const result = buildOrchestratorSystemPrompt(tools, contextFiles)
-		expect(result).toContain("# Project Context")
+		expect(result).toContain("# Project Guidelines")
 		expect(result).toContain("Always run tests before committing.")
 		expect(result).toContain("Use pnpm, not npm.")
 		expect(result).not.toContain("/repo/AGENTS.md")
@@ -144,11 +144,11 @@ describe("buildOrchestratorSystemPrompt", () => {
 		expect(result).not.toContain("{{PROJECT_CONTEXT}}")
 	})
 
-	it("places project context after the guidelines section", () => {
+	it("places project guidelines after the guidelines section", () => {
 		const contextFiles = [{ path: "/repo/AGENTS.md", content: "custom rule" }]
 		const result = buildOrchestratorSystemPrompt(tools, contextFiles)
 		const guidelinesPos = result.indexOf("## Guidelines")
-		const contextPos = result.indexOf("# Project Context")
+		const contextPos = result.indexOf("# Project Guidelines")
 		expect(guidelinesPos).toBeLessThan(contextPos)
 	})
 })
@@ -202,19 +202,19 @@ describe("buildSubagentSystemPrompt", () => {
 		expect(result).not.toContain("{{PROJECT_CONTEXT}}")
 	})
 
-	it("injects project context files into the prompt", () => {
+	it("injects project guidelines files into the prompt", () => {
 		const contextFiles = [{ path: "/project/AGENTS.md", content: "Use TypeScript strict mode." }]
 		const result = buildSubagentSystemPrompt(tools, contextFiles)
-		expect(result).toContain("# Project Context")
+		expect(result).toContain("# Project Guidelines")
 		expect(result).toContain("Use TypeScript strict mode.")
 		expect(result).not.toContain("/project/AGENTS.md")
 	})
 
-	it("places project context after the guidelines section", () => {
+	it("places project guidelines after the guidelines section", () => {
 		const contextFiles = [{ path: "/repo/AGENTS.md", content: "rule" }]
 		const result = buildSubagentSystemPrompt(tools, contextFiles)
 		const guidelinesPos = result.indexOf("## Guidelines")
-		const contextPos = result.indexOf("# Project Context")
+		const contextPos = result.indexOf("# Project Guidelines")
 		expect(guidelinesPos).toBeLessThan(contextPos)
 	})
 })
