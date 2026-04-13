@@ -24,7 +24,7 @@ Most capable and most expensive model in the pool. Best choice for complex \
 multi-step tasks, anything involving visual inputs, or problems that require \
 deep reasoning and autonomous multi-tool workflows.`
 
-const MINIMAX_M25_DESCRIPTION = `\
+const MINIMAX_M27_DESCRIPTION = `\
 230B-parameter MoE model (only ~10B active), 128K context, Lightning Attention. \
 The strongest pure coding model in the pool - has the highest accuracy at resolving \
 real-world GitHub issues, including complex multi-file bugs and hard edge cases. \
@@ -63,14 +63,14 @@ export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [
 		},
 	},
 	{
-		id: "minimax-m2.5",
+		id: "minimax-m2.7",
 		provider: "kimchi-dev",
-		name: "Minimax M2.5",
+		name: "Minimax M2.7",
 		capabilities: {
 			vision: false,
 			strengths: ["build"],
 			tier: "standard",
-			description: MINIMAX_M25_DESCRIPTION,
+			description: MINIMAX_M27_DESCRIPTION,
 		},
 	},
 	{

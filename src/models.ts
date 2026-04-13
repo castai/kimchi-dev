@@ -92,8 +92,8 @@ const DEFAULT_MODELS_CONFIG = {
 					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 				},
 				{
-					id: "minimax-m2.5",
-					name: "Minimax M2.5",
+					id: "minimax-m2.7",
+					name: "Minimax M2.7",
 					reasoning: false,
 					input: ["text"],
 					contextWindow: 131072,
