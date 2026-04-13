@@ -27,7 +27,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (options.expanded) {
-				return baseDef.renderResult!(result, options, theme, context)
+				return baseDef.renderResult?.(result, options, theme, context) ?? new Text("", 0, 0)
 			}
 
 			const textContent = result.content.find((c): c is { type: "text"; text: string } => c.type === "text")
