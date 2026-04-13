@@ -22,11 +22,9 @@ export default function (pi: ExtensionAPI) {
 		},
 
 		renderResult(result, options, theme, context) {
-			const textContent = result.content.find((c): c is { type: "text"; text: string } => c.type === "text")
-			const text = textContent?.text ?? ""
-
 			if (options.isPartial) {
-				const displayText = text.split("\n").slice(-5).join("\n")
+				const textContent = result.content.find((c): c is { type: "text"; text: string } => c.type === "text")
+				const displayText = (textContent?.text ?? "").split("\n").slice(-5).join("\n")
 
 				const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
 				component.clear()
@@ -35,9 +33,13 @@ export default function (pi: ExtensionAPI) {
 				return component
 			}
 
-			const command = (context.args as { command?: string }).command ?? ""
-			const lineCount = text ? text.split("\n").length : 0
-			const summary = `- ${theme.fg("dim", truncateCommand(command))}  ${theme.fg("dim", `${lineCount} line${lineCount === 1 ? "" : "s"}`)}`
+			if (options.expanded) {
+				return baseDef.renderResult!(result, options, theme, context)
+			}
+
+			const textContent = result.content.find((c): c is { type: "text"; text: string } => c.type === "text")
+			const lineCount = textContent?.text ? textContent.text.split("\n").length : 0
+			const summary = `${theme.fg("dim", `${lineCount} line${lineCount === 1 ? "" : "s"}`)}  ${theme.fg("muted", "(ctrl+o to expand)")}`
 
 			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
 			component.clear()
