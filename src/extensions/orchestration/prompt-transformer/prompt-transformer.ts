@@ -1,6 +1,6 @@
-import type { ContextFile } from "./context-files.js"
 import type { ModelRegistry } from "../model-registry/index.js"
 import type { OrchestrationModelDescriptor } from "../model-registry/types.js"
+import type { ContextFile } from "./context-files.js"
 import systemPromptTemplate from "./prompts/orchestrator-system-prompt.md.template" with { type: "text" }
 import subagentSystemPromptTemplate from "./prompts/subagent-system-prompt.md.template" with { type: "text" }
 import userPromptTemplate from "./prompts/transformed-user-prompt.md.template" with { type: "text" }
@@ -66,7 +66,10 @@ export function transformPrompt(userPrompt: string, registry: ModelRegistry, cur
 		.replace("{{USER_PROMPT}}", () => userPrompt)
 }
 
-export function buildOrchestratorSystemPrompt(tools: readonly ToolInfo[], contextFiles?: readonly ContextFile[]): string {
+export function buildOrchestratorSystemPrompt(
+	tools: readonly ToolInfo[],
+	contextFiles?: readonly ContextFile[],
+): string {
 	const toolsSection = formatToolsSection(tools)
 	const projectContext = formatProjectContext(contextFiles)
 	return systemPromptTemplate

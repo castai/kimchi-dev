@@ -20,8 +20,8 @@
 
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
-import { loadProjectContextFiles } from "./prompt-transformer/context-files.js"
 import { ModelRegistry } from "./model-registry/index.js"
+import { loadProjectContextFiles } from "./prompt-transformer/context-files.js"
 import {
 	type CurrentModelInfo,
 	buildOrchestratorSystemPrompt,
