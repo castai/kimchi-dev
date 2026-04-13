@@ -17,7 +17,6 @@ interface SubagentState {
 	spinnerInterval: ReturnType<typeof setInterval> | undefined
 }
 
-// Fix 1: add "aborted" to distinguish user cancellation from process crash.
 type SubagentFailureReason = "exit_error" | "timeout" | "token_budget_exceeded" | "aborted"
 
 interface SubagentTokenUsage {
@@ -43,7 +42,6 @@ interface SubagentError {
 }
 
 interface ParsedSubagentEvent {
-	// Fix 3: delta is string | null — never a number.
 	delta: string | null
 	inputTokens: number
 	outputTokens: number
@@ -99,8 +97,6 @@ export function parseSubagentEvent(line: string): ParsedSubagentEvent {
 		return { delta: null, inputTokens: 0, outputTokens: 0 }
 	}
 
-	// Fix 4: track input and output tokens separately from message_end — the provider
-	// reports them as distinct fields, no approximation needed.
 	if (event.type === "message_end") {
 		const message = event.message as Record<string, unknown> | undefined
 		const usage = message?.usage as Record<string, unknown> | undefined
@@ -143,10 +139,8 @@ function spawnSubagent(
 		let inputTokens = 0
 		let outputTokens = 0
 		let failureReason: SubagentFailureReason | undefined
-		// Fix 7: track actual process exit, not whether .kill() was called.
 		let closed = false
 
-		// Fix 8: single exit path — cleans up timeout and abort listener.
 		const finish = (exitCode: number) => {
 			clearTimeout(timeoutHandle)
 			combinedSignal.removeEventListener("abort", onAbort)
@@ -165,7 +159,6 @@ function spawnSubagent(
 				failureReason = reason
 			}
 			proc.kill("SIGTERM")
-			// Fix 7: use `closed` to detect whether the process has actually exited.
 			setTimeout(() => {
 				if (!closed) proc.kill("SIGKILL")
 			}, 5000)
@@ -206,7 +199,6 @@ function spawnSubagent(
 			finish(code ?? 0)
 		})
 
-		// Fix 8: route proc error through finish for unified cleanup.
 		proc.on("error", (err) => {
 			closed = true
 			if (failureReason === undefined) failureReason = "exit_error"
@@ -214,7 +206,6 @@ function spawnSubagent(
 			finish(1)
 		})
 
-		// Fix 1 & 5: distinguish user-initiated abort from timeout.
 		const onAbort = () => {
 			if (timeoutController.signal.aborted) {
 				kill("timeout")
@@ -276,7 +267,6 @@ const SubagentParams = Type.Object({
 	}),
 	model: Type.String({ description: "Model ID to use for the subagent (e.g. glm-5-fp8, kimi-k2.5)" }),
 	prompt: Type.String({ description: "Prompt to send to the subagent" }),
-	// Fix 6: tokenBudget is truly optional — no silent default applied.
 	tokenBudget: Type.Optional(
 		Type.Integer({
 			description: "Maximum total tokens (input + output) the subagent may consume. Subagent is killed when exceeded.",
@@ -314,7 +304,6 @@ export default function (pi: ExtensionAPI) {
 			]
 			const invocation = getSubagentInvocation(args)
 
-			// Fix 6: pass tokenBudget only when explicitly provided.
 			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(
 				invocation,
 				ctx.cwd,
