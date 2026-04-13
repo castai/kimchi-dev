@@ -30,6 +30,7 @@ export default function (pi: ExtensionAPI) {
 				component.clear()
 				component.addChild(new Spacer(1))
 				component.addChild(new Text(theme.fg("toolOutput", displayText), 0, 0))
+				component.invalidate()
 				return component
 			}
 
@@ -44,6 +45,7 @@ export default function (pi: ExtensionAPI) {
 			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
 			component.clear()
 			component.addChild(new Text(summary, 0, 0))
+			component.invalidate()
 			return component
 		},
 	}
