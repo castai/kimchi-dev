@@ -3,14 +3,6 @@ import type { BashToolDetails } from "@mariozechner/pi-coding-agent"
 import type { ExtensionAPI, ToolDefinition } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text } from "@mariozechner/pi-tui"
 
-const COMMAND_MAX_LENGTH = 60
-
-function truncateCommand(command: string): string {
-	const firstLine = command.split("\n")[0]
-	if (firstLine.length <= COMMAND_MAX_LENGTH) return firstLine
-	return `${firstLine.slice(0, COMMAND_MAX_LENGTH)}...`
-}
-
 export default function (pi: ExtensionAPI) {
 	const baseDef = createBashToolDefinition(process.cwd())
 
