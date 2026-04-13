@@ -45,6 +45,9 @@ jobs:
           bun: "true"
           playwright: "true"
 
+      - name: Check (lint + type check)
+        run: pnpm run check
+
       - name: Build binary
         run: pnpm run build:binary
 
