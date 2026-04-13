@@ -124,6 +124,33 @@ describe("buildOrchestratorSystemPrompt", () => {
 		expect(result).toContain("(No tools available)")
 		expect(result).not.toContain("{{TOOLS}}")
 	})
+
+	it("replaces the {{PROJECT_CONTEXT}} placeholder when no context files", () => {
+		const result = buildOrchestratorSystemPrompt(tools)
+		expect(result).not.toContain("{{PROJECT_CONTEXT}}")
+	})
+
+	it("injects project context files into the prompt", () => {
+		const contextFiles = [
+			{ path: "/repo/AGENTS.md", content: "Always run tests before committing." },
+			{ path: "/repo/sub/CLAUDE.md", content: "Use pnpm, not npm." },
+		]
+		const result = buildOrchestratorSystemPrompt(tools, contextFiles)
+		expect(result).toContain("# Project Context")
+		expect(result).toContain("Always run tests before committing.")
+		expect(result).toContain("Use pnpm, not npm.")
+		expect(result).not.toContain("/repo/AGENTS.md")
+		expect(result).not.toContain("/repo/sub/CLAUDE.md")
+		expect(result).not.toContain("{{PROJECT_CONTEXT}}")
+	})
+
+	it("places project context after the guidelines section", () => {
+		const contextFiles = [{ path: "/repo/AGENTS.md", content: "custom rule" }]
+		const result = buildOrchestratorSystemPrompt(tools, contextFiles)
+		const guidelinesPos = result.indexOf("## Guidelines")
+		const contextPos = result.indexOf("# Project Context")
+		expect(guidelinesPos).toBeLessThan(contextPos)
+	})
 })
 
 describe("buildSubagentSystemPrompt", () => {
@@ -168,5 +195,26 @@ describe("buildSubagentSystemPrompt", () => {
 	it("handles tools list with only the subagent tool", () => {
 		const result = buildSubagentSystemPrompt([{ name: "subagent", description: "Spawn" }])
 		expect(result).toContain("(No tools available)")
+	})
+
+	it("replaces the {{PROJECT_CONTEXT}} placeholder when no context files", () => {
+		const result = buildSubagentSystemPrompt(tools)
+		expect(result).not.toContain("{{PROJECT_CONTEXT}}")
+	})
+
+	it("injects project context files into the prompt", () => {
+		const contextFiles = [{ path: "/project/AGENTS.md", content: "Use TypeScript strict mode." }]
+		const result = buildSubagentSystemPrompt(tools, contextFiles)
+		expect(result).toContain("# Project Context")
+		expect(result).toContain("Use TypeScript strict mode.")
+		expect(result).not.toContain("/project/AGENTS.md")
+	})
+
+	it("places project context after the guidelines section", () => {
+		const contextFiles = [{ path: "/repo/AGENTS.md", content: "rule" }]
+		const result = buildSubagentSystemPrompt(tools, contextFiles)
+		const guidelinesPos = result.indexOf("## Guidelines")
+		const contextPos = result.indexOf("# Project Context")
+		expect(guidelinesPos).toBeLessThan(contextPos)
 	})
 })

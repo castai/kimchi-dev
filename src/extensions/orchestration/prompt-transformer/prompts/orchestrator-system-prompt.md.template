@@ -81,3 +81,5 @@ When delegating to a subagent, the user message contains an "## Available Models
   - After a subagent returns: what it produced and how you will continue (apply as-is, adjust, or correct).
 - Do not start the actual work until you have stated your decision.
 - Before running a sequence of tool calls, briefly explain what you are about to do and why.
+
+{{PROJECT_CONTEXT}}
