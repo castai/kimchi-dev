@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process"
+import { existsSync } from "node:fs"
+import { dirname, resolve } from "node:path"
 import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
@@ -20,13 +22,32 @@ interface SubagentResult {
 	stderr: string
 }
 
+function resolveTsx(): string | undefined {
+	let dir = dirname(process.argv[1])
+	while (true) {
+		const candidate = resolve(dir, "node_modules/.bin/tsx")
+		if (existsSync(candidate)) return candidate
+		if (existsSync(resolve(dir, "package.json"))) break
+		const parent = dirname(dir)
+		if (parent === dir) break
+		dir = parent
+	}
+	return undefined
+}
+
 function getSubagentInvocation(args: string[]): { command: string; args: string[] } {
 	if (isBunBinary) {
-		// In a compiled Bun binary, process.execPath is the binary itself —
-		// pass args directly without a script path.
 		return { command: process.execPath, args }
 	}
-	// In Node.js dev mode, process.argv[1] is the script entrypoint.
+	if (process.argv[1].endsWith(".ts")) {
+		const tsx = resolveTsx()
+		if (tsx !== undefined) {
+			return { command: tsx, args: [process.argv[1], ...args] }
+		}
+		throw new Error(
+			"Dev mode requires tsx to spawn subagents, but node_modules/.bin/tsx was not found. Run `pnpm install`.",
+		)
+	}
 	return { command: process.execPath, args: [process.argv[1], ...args] }
 }
 
@@ -132,8 +153,16 @@ function clearSpinner(state: SubagentState) {
 }
 
 const SubagentParams = Type.Object({
-	model: Type.String({ description: "Model ID to use for the subagent (e.g. glm-5-fp8, kimi-k2.5)" }),
-	prompt: Type.String({ description: "Prompt to send to the subagent" }),
+	provider: Type.String({
+		description:
+			'Provider name for the subagent model (e.g. "kimchi-dev"). Must match the provider registered in models.json.',
+	}),
+	model: Type.String({
+		description: "Model ID to use for the subagent (e.g. glm-5-fp8, kimi-k2.5)",
+	}),
+	prompt: Type.String({
+		description: "Prompt to send to the subagent",
+	}),
 })
 
 export default function (pi: ExtensionAPI) {
@@ -149,12 +178,23 @@ export default function (pi: ExtensionAPI) {
 		name: "subagent",
 		label: "Subagent",
 		description:
-			"Spawn an isolated subagent process with the given model and prompt. " +
+			"Spawn an isolated subagent process with the given provider, model, and prompt. " +
+			'Both provider and model are required — provider must match the model\'s registered provider name (e.g. "kimchi-dev"). ' +
 			"The subagent runs in a separate pi process with no shared context and returns its final response.",
 		parameters: SubagentParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			const args = ["--mode", "json", "-p", "--no-session", "--model", params.model, params.prompt]
+			const args = [
+				"--mode",
+				"json",
+				"-p",
+				"--no-session",
+				"--provider",
+				params.provider,
+				"--model",
+				params.model,
+				params.prompt,
+			]
 			const invocation = getSubagentInvocation(args)
 
 			const { exitCode, accumulated, stderr } = await spawnSubagent(invocation, ctx.cwd, signal, (text) =>
@@ -200,7 +240,7 @@ export default function (pi: ExtensionAPI) {
 					: theme.fg("muted", "-")
 
 			const header = `${spinner} ${theme.fg("toolTitle", theme.bold("Subagent session"))}`
-			const modelLine = `  ${theme.fg("muted", "model:")}  ${theme.fg("accent", "`")}${theme.fg("accent", args.model ?? "")}${theme.fg("accent", "`")}`
+			const modelLine = `  ${theme.fg("muted", "model:")}  ${theme.fg("accent", "`")}${theme.fg("accent", `${args.provider ?? ""}/${args.model ?? ""}`)}${theme.fg("accent", "`")}`
 			const promptLine = `  ${theme.fg("muted", "prompt:")} ${theme.fg("dim", "`")}${theme.fg("dim", truncatePrompt(args.prompt ?? ""))}${theme.fg("dim", "`")}`
 
 			const component = context.lastComponent ?? new Text("", 0, 0)
