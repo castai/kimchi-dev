@@ -83,3 +83,5 @@ When delegating to a subagent, the user message contains an "## Available Models
 - Before running a sequence of tool calls, briefly explain what you are about to do and why.
 
 {{PROJECT_CONTEXT}}
+
+{{SKILLS}}

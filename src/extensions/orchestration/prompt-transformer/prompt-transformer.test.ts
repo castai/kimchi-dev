@@ -1,6 +1,17 @@
+import type { Skill } from "@mariozechner/pi-coding-agent"
 import { describe, expect, it } from "vitest"
 import { ModelRegistry } from "../model-registry/index.js"
 import { buildOrchestratorSystemPrompt, buildSubagentSystemPrompt, transformPrompt } from "./prompt-transformer.js"
+
+function createSkill(overrides: Partial<Skill> & { name: string; description: string }): Skill {
+	return {
+		filePath: `/skills/${overrides.name}/SKILL.md`,
+		baseDir: `/skills/${overrides.name}`,
+		sourceInfo: { path: `/skills/${overrides.name}/SKILL.md`, source: "local", scope: "project", origin: "top-level" },
+		disableModelInvocation: false,
+		...overrides,
+	}
+}
 
 describe("transformPrompt", () => {
 	const registry = new ModelRegistry()
@@ -151,6 +162,34 @@ describe("buildOrchestratorSystemPrompt", () => {
 		const contextPos = result.indexOf("# Project Guidelines")
 		expect(guidelinesPos).toBeLessThan(contextPos)
 	})
+
+	it("replaces the {{SKILLS}} placeholder when no skills", () => {
+		const result = buildOrchestratorSystemPrompt(tools)
+		expect(result).not.toContain("{{SKILLS}}")
+	})
+
+	it("injects skills into the prompt", () => {
+		const skills = [
+			createSkill({ name: "deploy", description: "Deploy the app to production" }),
+			createSkill({ name: "review", description: "Review a pull request" }),
+		]
+		const result = buildOrchestratorSystemPrompt(tools, undefined, skills)
+		expect(result).toContain("available_skills")
+		expect(result).toContain("deploy")
+		expect(result).toContain("Deploy the app to production")
+		expect(result).toContain("review")
+		expect(result).toContain("Review a pull request")
+	})
+
+	it("excludes skills with disableModelInvocation", () => {
+		const skills = [
+			createSkill({ name: "safe-skill", description: "Visible skill" }),
+			createSkill({ name: "hidden-skill", description: "Hidden skill", disableModelInvocation: true }),
+		]
+		const result = buildOrchestratorSystemPrompt(tools, undefined, skills)
+		expect(result).toContain("safe-skill")
+		expect(result).not.toContain("hidden-skill")
+	})
 })
 
 describe("buildSubagentSystemPrompt", () => {
@@ -216,5 +255,18 @@ describe("buildSubagentSystemPrompt", () => {
 		const guidelinesPos = result.indexOf("## Guidelines")
 		const contextPos = result.indexOf("# Project Guidelines")
 		expect(guidelinesPos).toBeLessThan(contextPos)
+	})
+
+	it("replaces the {{SKILLS}} placeholder when no skills", () => {
+		const result = buildSubagentSystemPrompt(tools)
+		expect(result).not.toContain("{{SKILLS}}")
+	})
+
+	it("injects skills into the prompt", () => {
+		const skills = [createSkill({ name: "deploy", description: "Deploy the app" })]
+		const result = buildSubagentSystemPrompt(tools, undefined, skills)
+		expect(result).toContain("available_skills")
+		expect(result).toContain("deploy")
+		expect(result).toContain("Deploy the app")
 	})
 })

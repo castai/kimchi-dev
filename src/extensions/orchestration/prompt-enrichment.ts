@@ -19,7 +19,7 @@
  */
 
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
+import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
 import { ModelRegistry } from "./model-registry/index.js"
 import { loadProjectContextFiles } from "./prompt-transformer/context-files.js"
 import {
@@ -74,6 +74,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", async (_event, ctx) => {
 		const tools = pi.getAllTools()
 		const contextFiles = loadProjectContextFiles(ctx.cwd)
+		const { skills } = loadSkills({ cwd: ctx.cwd })
 
 		if (subagentMode) {
 			// Filter the subagent tool out of the active tool set to prevent
@@ -81,11 +82,11 @@ export default function (pi: ExtensionAPI) {
 			const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
 			pi.setActiveTools(activeTools)
 
-			const systemPrompt = buildSubagentSystemPrompt(tools, contextFiles)
+			const systemPrompt = buildSubagentSystemPrompt(tools, contextFiles, skills)
 			return { systemPrompt }
 		}
 
-		const systemPrompt = buildOrchestratorSystemPrompt(tools, contextFiles)
+		const systemPrompt = buildOrchestratorSystemPrompt(tools, contextFiles, skills)
 		return { systemPrompt }
 	})
 }
