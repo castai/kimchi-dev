@@ -11,6 +11,7 @@ const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
 const STDERR_MAX = 8192
 const TIMEOUT_MS = 15 * 60 * 1000
+const DEFAULT_TOKEN_BUDGET = 10_000_000
 
 interface SubagentState {
 	spinnerIdx: number
@@ -246,6 +247,23 @@ function clearSpinner(state: SubagentState) {
 	}
 }
 
+interface SubagentStats {
+	durationMs: number
+	tokenUsage: SubagentTokenUsage
+}
+
+function formatDuration(ms: number): string {
+	if (ms < 1000) return `${ms}ms`
+	return `${(ms / 1000).toFixed(1)}s`
+}
+
+function formatStats(stats: SubagentStats, theme: Theme): string {
+	const duration = theme.fg("dim", formatDuration(stats.durationMs))
+	const input = theme.fg("dim", `↑${stats.tokenUsage.input.toLocaleString()}`)
+	const output = theme.fg("dim", `↓${stats.tokenUsage.output.toLocaleString()}`)
+	return `- ${duration}  ${input}  ${output}`
+}
+
 function buildErrorResponse(error: SubagentError): string {
 	return JSON.stringify(error)
 }
@@ -277,10 +295,7 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "subagent",
 		label: "Subagent",
-		description:
-			"Spawn an isolated subagent process with the given provider, model, and prompt. " +
-			'Both provider and model are required — provider must match the model\'s registered provider name (e.g. "kimchi-dev"). ' +
-			`The subagent runs in a separate pi process with no shared context and returns its final response. Hard timeout: ${TIMEOUT_MS / 60000} minutes.`,
+		description: `Spawn an isolated subagent process with the given provider, model, and prompt. Both provider and model are required — provider must match the model's registered provider name (e.g. "kimchi-dev"). The subagent runs in a separate pi process with no shared context and returns its final response. Hard timeout: ${TIMEOUT_MS / 60000} minutes.`,
 		parameters: SubagentParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
@@ -301,7 +316,7 @@ export default function (pi: ExtensionAPI) {
 				invocation,
 				ctx.cwd,
 				signal,
-				params.tokenBudget,
+				params.tokenBudget ?? DEFAULT_TOKEN_BUDGET,
 				(text) => onUpdate?.({ content: [{ type: "text", text }], details: undefined }),
 			)
 
@@ -309,6 +324,8 @@ export default function (pi: ExtensionAPI) {
 			if (ctx.hasUI) {
 				ctx.ui.setStatus(FOOTER_STATUS_KEY, formatFooterStatus(sessionCounts, ctx.ui.theme))
 			}
+
+			const stats: SubagentStats = { durationMs, tokenUsage }
 
 			if (failureReason !== undefined || exitCode !== 0) {
 				const error: SubagentError = {
@@ -320,14 +337,14 @@ export default function (pi: ExtensionAPI) {
 				}
 				return {
 					content: [{ type: "text", text: buildErrorResponse(error) }],
-					details: undefined,
+					details: stats,
 					isError: true,
 				}
 			}
 
 			return {
 				content: [{ type: "text", text: accumulated || "(no output)" }],
-				details: undefined,
+				details: stats,
 			}
 		},
 
@@ -374,6 +391,15 @@ export default function (pi: ExtensionAPI) {
 			component.clear()
 			component.addChild(new Spacer(1))
 			component.addChild(new Text(theme.fg("toolOutput", displayText), 0, 0))
+
+			if (!options.isPartial) {
+				const stats = result.details as SubagentStats | undefined
+				if (stats !== undefined) {
+					component.addChild(new Spacer(1))
+					component.addChild(new Text(formatStats(stats, theme), 0, 0))
+				}
+			}
+
 			return component
 		},
 	})
