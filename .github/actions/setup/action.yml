@@ -2,6 +2,10 @@ name: Setup
 description: Checkout, enable corepack, setup Node.js 22, install dependencies, and optionally install Playwright
 
 inputs:
+  bun:
+    description: "Install Bun runtime"
+    required: false
+    default: "false"
   playwright:
     description: "Install Playwright Chromium browser"
     required: false
@@ -25,6 +29,10 @@ runs:
       run: pnpm install --frozen-lockfile
       env:
         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+    - name: Setup Bun
+      if: inputs.bun == 'true'
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
     - name: Cache Playwright browsers
       if: inputs.playwright == 'true'

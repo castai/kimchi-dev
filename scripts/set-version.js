@@ -6,7 +6,7 @@
 // Strips the leading "v" and validates basic semver before writing.
 
 import { readFileSync, writeFileSync } from "node:fs"
-import { join, dirname } from "node:path"
+import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -26,6 +26,6 @@ if (!/^\d+\.\d+\.\d+/.test(version)) {
 
 const pkg = JSON.parse(readFileSync(packageJsonPath, "utf-8"))
 pkg.version = version
-writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + "\n")
+writeFileSync(packageJsonPath, `${JSON.stringify(pkg, null, 2)}\n`)
 
 console.log(`Set version to ${version}`)

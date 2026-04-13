@@ -1,16 +1,19 @@
 // Copy non-TypeScript resources that tsc doesn't handle.
 //
-// Theme files: pi-mono resolves themes at <packageDir>/src/modes/interactive/theme/
-// so we copy them from node_modules into our source tree.
+// --dev   (used by `build`):        theme files from node_modules → src/modes/interactive/theme/
+//                                   so `bun run src/cli.ts` resolves themes via pi-mono's getThemesDir()
+//
+// default (used by `build-binary`): theme files from node_modules → dist/theme/
+//                                   plus package.json → dist/
+//                                   so the compiled binary resolves assets next to its executable
 
 import { cpSync, mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const projectRoot = join(__dirname, "..")
+const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 
-// ── Theme files (node_modules → src/) ────────────────────────────────
+const themeFiles = ["dark.json", "light.json", "theme-schema.json"]
 const themeSrc = join(
 	projectRoot,
 	"node_modules",
@@ -21,10 +24,15 @@ const themeSrc = join(
 	"interactive",
 	"theme",
 )
-const themeDest = join(projectRoot, "src", "modes", "interactive", "theme")
+
+const isDev = process.argv.includes("--dev")
+const themeDest = isDev ? join(projectRoot, "src", "modes", "interactive", "theme") : join(projectRoot, "dist", "theme")
 
 mkdirSync(themeDest, { recursive: true })
-
-for (const file of ["dark.json", "light.json", "theme-schema.json"]) {
+for (const file of themeFiles) {
 	cpSync(join(themeSrc, file), join(themeDest, file))
+}
+
+if (!isDev) {
+	cpSync(join(projectRoot, "package.json"), join(projectRoot, "dist", "package.json"))
 }

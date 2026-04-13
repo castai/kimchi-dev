@@ -17,6 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
         with:
+          bun: "true"
           playwright: "true"
 
       - name: Build
@@ -55,28 +56,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
+        with:
+          bun: "true"
 
       - name: Set version from tag
         run: node scripts/set-version.js "$GITHUB_REF_NAME"
 
-      - name: Build TypeScript
-        run: pnpm run build
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-
-      - name: Compile standalone binary
-        run: bun build src/cli.ts --compile --outfile dist/kimchi-code --external chromium-bidi --external electron
-
-      # Bun build --compile produces binaries with an invalid code signature on macOS.
-      # The kernel kills badly-signed arm64 binaries immediately (SIGKILL, exit 137).
-      # Strip the corrupt signature and re-sign ad-hoc. See: https://github.com/oven-sh/bun/issues/7208
-      - name: Ad-hoc sign binary (macOS)
-        if: runner.os == 'macOS'
-        run: codesign --remove-signature dist/kimchi-code && codesign -s - dist/kimchi-code
-
-      - name: Copy assets
-        run: pnpm run copy:assets
+      - name: Build binary
+        run: pnpm run build:binary
 
       - name: Package binary
         run: tar -czf kimchi-code_${{ matrix.os }}_${{ matrix.arch }}.tar.gz -C dist kimchi-code package.json theme
@@ -95,9 +82,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun: "true"
 
       - name: Download linux binary
         uses: actions/download-artifact@v4
