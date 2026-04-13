@@ -1,20 +1,15 @@
-/**
- * Bash command log collapse extension.
- *
- * Overrides the built-in bash tool renderer so that:
- * - While a command is running, output is expanded so the user can follow progress.
- * - Once execution completes, the result collapses to the built-in 5-line preview.
- * - The user can still re-expand at any time with Ctrl+O.
- *
- * Extension tools override built-in tools with the same name, so registering
- * "bash" here shadows the built-in. The execute handler delegates to a
- * fresh definition built with the current session cwd so directory navigation
- * works correctly. Only the rendering behavior is modified.
- */
-
 import { createBashToolDefinition } from "@mariozechner/pi-coding-agent"
 import type { BashToolDetails } from "@mariozechner/pi-coding-agent"
 import type { ExtensionAPI, ToolDefinition } from "@mariozechner/pi-coding-agent"
+import { Container, Spacer, Text } from "@mariozechner/pi-tui"
+
+const COMMAND_MAX_LENGTH = 60
+
+function truncateCommand(command: string): string {
+	const firstLine = command.split("\n")[0]
+	if (firstLine.length <= COMMAND_MAX_LENGTH) return firstLine
+	return `${firstLine.slice(0, COMMAND_MAX_LENGTH)}...`
+}
 
 export default function (pi: ExtensionAPI) {
 	const baseDef = createBashToolDefinition(process.cwd())
@@ -23,16 +18,32 @@ export default function (pi: ExtensionAPI) {
 		...baseDef,
 
 		execute(toolCallId, params, signal, onUpdate, ctx) {
-			// Rebuild with the current session cwd so directory navigation is respected.
 			return createBashToolDefinition(ctx.cwd).execute(toolCallId, params, signal, onUpdate, ctx)
 		},
 
-		renderResult: baseDef.renderResult
-			? (result, options, theme, context) => {
-					const effectiveOptions = options.isPartial ? { ...options, expanded: true } : options
-					return baseDef.renderResult!(result, effectiveOptions, theme, context)
-				}
-			: undefined,
+		renderResult(result, options, theme, context) {
+			const textContent = result.content.find((c): c is { type: "text"; text: string } => c.type === "text")
+			const text = textContent?.text ?? ""
+
+			if (options.isPartial) {
+				const displayText = text.split("\n").slice(-5).join("\n")
+
+				const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
+				component.clear()
+				component.addChild(new Spacer(1))
+				component.addChild(new Text(theme.fg("toolOutput", displayText), 0, 0))
+				return component
+			}
+
+			const command = (context.args as { command?: string }).command ?? ""
+			const lineCount = text ? text.split("\n").length : 0
+			const summary = `- ${theme.fg("dim", truncateCommand(command))}  ${theme.fg("dim", `${lineCount} line${lineCount === 1 ? "" : "s"}`)}`
+
+			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
+			component.clear()
+			component.addChild(new Text(summary, 0, 0))
+			return component
+		},
 	}
 
 	pi.registerTool(def)
