@@ -25,7 +25,7 @@ multi-step tasks, anything involving visual inputs, or problems that require \
 deep reasoning and autonomous multi-tool workflows.`
 
 const MINIMAX_M27_DESCRIPTION = `\
-230B-parameter MoE model (only ~10B active), 128K context, Lightning Attention. \
+230B-parameter MoE model (only ~10B active), 192K context, Lightning Attention. \
 The strongest pure coding model in the pool - has the highest accuracy at resolving \
 real-world GitHub issues, including complex multi-file bugs and hard edge cases. \
 Strong across 10+ programming languages in 200K+ real-world environments. \

@@ -94,10 +94,10 @@ const DEFAULT_MODELS_CONFIG = {
 				{
 					id: "minimax-m2.7",
 					name: "Minimax M2.7",
-					reasoning: false,
+					reasoning: true,
 					input: ["text"],
-					contextWindow: 131072,
-					maxTokens: 16384,
+					contextWindow: 196608,
+					maxTokens: 32768,
 					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 				},
 			],
