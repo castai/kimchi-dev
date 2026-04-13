@@ -1,8 +1,8 @@
 import type { ModelRegistry } from "../model-registry/index.js"
 import type { OrchestrationModelDescriptor } from "../model-registry/types.js"
-import systemPromptTemplate from "./prompts/orchestrator-system-prompt.md"
-import subagentSystemPromptTemplate from "./prompts/subagent-system-prompt.md"
-import userPromptTemplate from "./prompts/transformed-user-prompt.md"
+import systemPromptTemplate from "./prompts/orchestrator-system-prompt.md.template" with { type: "text" }
+import subagentSystemPromptTemplate from "./prompts/subagent-system-prompt.md.template" with { type: "text" }
+import userPromptTemplate from "./prompts/transformed-user-prompt.md.template" with { type: "text" }
 
 const SUBAGENT_TOOL_NAME = "subagent"
 
