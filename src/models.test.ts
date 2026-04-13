@@ -93,7 +93,7 @@ describe("updateModelsConfig", () => {
 
 		expect(result).toEqual({
 			source: "default",
-			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.5"],
+			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.7"],
 			error: "network error",
 		})
 		expect(existsSync(modelsJsonPath)).toBe(true)
@@ -101,7 +101,7 @@ describe("updateModelsConfig", () => {
 		expect(config.providers["kimchi-dev"].models.map((m: { id: string }) => m.id)).toEqual([
 			"kimi-k2.5",
 			"glm-5-fp8",
-			"minimax-m2.5",
+			"minimax-m2.7",
 		])
 	})
 
@@ -116,7 +116,7 @@ describe("updateModelsConfig", () => {
 
 		expect(result).toEqual({
 			source: "default",
-			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.5"],
+			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.7"],
 			error: "Failed to fetch models: 401 Unauthorized",
 		})
 		expect(existsSync(modelsJsonPath)).toBe(true)
@@ -124,7 +124,7 @@ describe("updateModelsConfig", () => {
 		expect(config.providers["kimchi-dev"].models.map((m: { id: string }) => m.id)).toEqual([
 			"kimi-k2.5",
 			"glm-5-fp8",
-			"minimax-m2.5",
+			"minimax-m2.7",
 		])
 	})
 
@@ -138,14 +138,14 @@ describe("updateModelsConfig", () => {
 
 		expect(result).toEqual({
 			source: "default",
-			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.5"],
+			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.7"],
 			error: "API returned empty model list",
 		})
 		const config = JSON.parse(readFileSync(modelsJsonPath, "utf-8"))
 		expect(config.providers["kimchi-dev"].models.map((m: { id: string }) => m.id)).toEqual([
 			"kimi-k2.5",
 			"glm-5-fp8",
-			"minimax-m2.5",
+			"minimax-m2.7",
 		])
 	})
 
@@ -159,7 +159,7 @@ describe("updateModelsConfig", () => {
 
 		expect(result).toEqual({
 			source: "default",
-			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.5"],
+			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.7"],
 			error: "API returned no usable models after filtering",
 		})
 	})
@@ -174,7 +174,7 @@ describe("updateModelsConfig", () => {
 
 		expect(result).toEqual({
 			source: "default",
-			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.5"],
+			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.7"],
 			error: "Unexpected response shape from models API",
 		})
 	})
@@ -186,7 +186,7 @@ describe("updateModelsConfig", () => {
 		const result = await updateModelsConfig(modelsJsonPath, "test-key")
 
 		expect(result.source).toBe("default")
-		expect(result.models).toEqual(["kimi-k2.5", "glm-5-fp8", "minimax-m2.5"])
+		expect(result.models).toEqual(["kimi-k2.5", "glm-5-fp8", "minimax-m2.7"])
 	})
 
 	it("sorts models alphabetically", async () => {
