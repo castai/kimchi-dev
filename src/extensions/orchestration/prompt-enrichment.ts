@@ -31,6 +31,12 @@ import {
 export default function (pi: ExtensionAPI) {
 	const subagentMode = isSubagent()
 
+	pi.registerFlag("debug-prompts", {
+		type: "boolean",
+		description: "Print enriched prompts in the UI (default: hidden)",
+		default: false,
+	})
+
 	// For sub agents we don't want to transform the prompt sent from parent with model capabilities
 	if (!subagentMode) {
 		const registry = new ModelRegistry()
@@ -45,7 +51,19 @@ export default function (pi: ExtensionAPI) {
 				: undefined
 
 			const enrichedPrompt = transformPrompt(event.text, registry, currentModel)
-			return { action: "transform" as const, text: enrichedPrompt, images: event.images }
+
+			const debugPrompts = pi.getFlag("debug-prompts") === true
+			if (debugPrompts) {
+				return { action: "transform" as const, text: enrichedPrompt, images: event.images }
+			}
+
+			pi.sendMessage(
+				{ customType: "enriched-prompt", content: [{ type: "text", text: enrichedPrompt }], display: false },
+				{ deliverAs: "nextTurn" },
+			)
+			pi.sendUserMessage(event.text)
+
+			return { action: "handled" as const }
 		})
 	}
 
