@@ -4,7 +4,7 @@
 import { execSync } from "node:child_process"
 import { platform } from "node:os"
 
-function run(label: string, cmd: string): void {
+function run(label, cmd) {
 	console.log(`\n→ ${label}`)
 	try {
 		execSync(cmd, { stdio: "inherit" })
@@ -13,8 +13,8 @@ function run(label: string, cmd: string): void {
 	}
 }
 
-run("clean", "bun run clean")
-run("typecheck", "bun run typecheck")
+run("clean", "pnpm run clean")
+run("typecheck", "pnpm run typecheck")
 
 // Externalize packages that cannot be bundled into a Bun compiled binary (native addons, browser automation harnesses).
 // If a new dependency causes a build failure, check whether it also needs --external here.
@@ -28,4 +28,4 @@ if (platform() === "darwin") {
 	run("codesign (ad-hoc)", "codesign -s - dist/kimchi-code")
 }
 
-run("copy resources", "bun run scripts/copy-resources.ts")
+run("copy resources", "node scripts/copy-resources.js")

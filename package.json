@@ -1,62 +1,57 @@
 {
-  "name": "@kimchi-dev/cli",
-  "version": "0.1.0",
-  "description": "kimchi-code — a coding agent CLI powered by Cast AI",
-  "type": "module",
-  "license": "MIT",
-  "bin": {
-    "kimchi-code": "src/cli.ts"
-  },
-  "scripts": {
-    "clean": "rm -rf dist",
-    "build": "tsc --noEmit && bun run scripts/copy-resources.ts --dev",
-    "build:binary": "bun run scripts/build-binary.ts",
-    "dev": "bun run src/cli.ts",
-    "lint": "biome check src/ scripts/",
-    "lint:fix": "biome check --write src/ scripts/",
-    "typecheck": "tsc --noEmit",
-    "check": "pnpm run lint && pnpm run typecheck",
-    "test": "vitest run --dir src",
-    "test:smoke": "vitest run --config tests/smoke/vitest.config.ts",
-    "verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:smoke"
-  },
-  "piConfig": {
-    "name": "kimchi",
-    "configDir": ".config/kimchi/harness"
-  },
-  "dependencies": {
-    "@mariozechner/pi-coding-agent": "^0.65.2",
-    "@mariozechner/pi-tui": "^0.65.2",
-    "undici": "^8.0.2"
-  },
-  "peerDependencies": {
-    "@sinclair/typebox": "*"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
-    "@mariozechner/pi-ai": "^0.65.2",
-    "@mixmark-io/domino": "^2.2.0",
-    "@types/node": "^22.15.2",
-    "@types/turndown": "^5.0.5",
-    "playwright": "^1.52.0",
-    "tsx": "^4.21.0",
-    "turndown": "^7.2.0",
-    "typescript": "^5.7.3",
-    "vitest": "^3.1.1"
-  },
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "packageManager": "pnpm@10.8.1",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@biomejs/biome",
-      "esbuild",
-      "koffi",
-      "protobufjs"
-    ],
-    "patchedDependencies": {
-      "@mariozechner/pi-coding-agent": "patches/@mariozechner__pi-coding-agent.patch"
-    }
-  }
+	"name": "@kimchi-dev/cli",
+	"version": "0.1.0",
+	"description": "kimchi-code — a coding agent CLI powered by Cast AI",
+	"type": "module",
+	"license": "MIT",
+	"bin": {
+		"kimchi-code": "src/cli.ts"
+	},
+	"scripts": {
+		"clean": "rm -rf dist",
+		"build": "tsc --noEmit && node scripts/copy-resources.js --dev",
+		"build:binary": "node scripts/build-binary.js",
+		"dev": "bun run src/cli.ts",
+		"lint": "biome check src/ scripts/",
+		"lint:fix": "biome check --write src/ scripts/",
+		"typecheck": "tsc --noEmit",
+		"check": "pnpm run lint && pnpm run typecheck",
+		"test": "vitest run --dir src",
+		"test:smoke": "vitest run --config tests/smoke/vitest.config.ts",
+		"verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:smoke"
+	},
+	"piConfig": {
+		"name": "kimchi",
+		"configDir": ".config/kimchi/harness"
+	},
+	"dependencies": {
+		"@mariozechner/pi-coding-agent": "^0.65.2",
+		"@mariozechner/pi-tui": "^0.65.2",
+		"undici": "^8.0.2"
+	},
+	"peerDependencies": {
+		"@sinclair/typebox": "*"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
+		"@mariozechner/pi-ai": "^0.65.2",
+		"@mixmark-io/domino": "^2.2.0",
+		"@types/node": "^22.15.2",
+		"@types/turndown": "^5.0.5",
+		"playwright": "^1.52.0",
+		"tsx": "^4.21.0",
+		"turndown": "^7.2.0",
+		"typescript": "^5.7.3",
+		"vitest": "^3.1.1"
+	},
+	"engines": {
+		"node": ">=22.0.0"
+	},
+	"packageManager": "pnpm@10.8.1",
+	"pnpm": {
+		"onlyBuiltDependencies": ["@biomejs/biome", "esbuild", "koffi", "protobufjs"],
+		"patchedDependencies": {
+			"@mariozechner/pi-coding-agent": "patches/@mariozechner__pi-coding-agent.patch"
+		}
+	}
 }
