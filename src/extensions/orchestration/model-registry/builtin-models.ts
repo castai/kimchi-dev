@@ -47,7 +47,7 @@ export const MODEL_CAPABILITIES: ReadonlyMap<string, ModelCapabilities> = new Ma
 		"kimi-k2.5",
 		{
 			vision: true,
-			strengths: ["build", "explore", "research"],
+			strengths: ["explore", "research", "plan"],
 			tier: "heavy",
 			description: KIMI_K25_DESCRIPTION,
 		},
@@ -56,7 +56,7 @@ export const MODEL_CAPABILITIES: ReadonlyMap<string, ModelCapabilities> = new Ma
 		"minimax-m2.7",
 		{
 			vision: false,
-			strengths: ["build"],
+			strengths: ["build", "plan"],
 			tier: "standard",
 			description: MINIMAX_M27_DESCRIPTION,
 		},

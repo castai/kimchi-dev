@@ -173,7 +173,7 @@ function spawnSubagent(
 			if (lineInput > 0 || lineOutput > 0) {
 				inputTokens += lineInput
 				outputTokens += lineOutput
-				if (tokenBudget !== undefined && inputTokens + outputTokens > tokenBudget) {
+				if (tokenBudget !== undefined && tokenBudget > 0 && inputTokens + outputTokens > tokenBudget) {
 					kill("token_budget_exceeded")
 				}
 			}
@@ -269,7 +269,8 @@ const SubagentParams = Type.Object({
 	prompt: Type.String({ description: "Prompt to send to the subagent" }),
 	tokenBudget: Type.Optional(
 		Type.Integer({
-			description: "Maximum total tokens (input + output) the subagent may consume. Subagent is killed when exceeded.",
+			description:
+				"Maximum total tokens (input + output) the subagent may consume. Subagent is killed when exceeded. Omit unless you have an explicit reason to cap token usage — do not set this speculatively.",
 			minimum: 1,
 		}),
 	),
