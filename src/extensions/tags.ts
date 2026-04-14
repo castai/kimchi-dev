@@ -59,11 +59,6 @@ interface TagsConfig {
 	tags?: string[]
 }
 
-interface TagsState {
-	tags: string[]
-	staticTags: string[]
-}
-
 export class TagManager {
 	private tags: Set<string> = new Set()
 	private staticTags: Set<string> = new Set()

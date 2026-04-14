@@ -102,7 +102,6 @@ Track your current work phase and set the appropriate tag to enable usage analyt
 2. Transition to a new phase tag **immediately** when your work type changes
 3. Set the phase by outputting: `phase:<name>` (e.g., `phase:plan`) before taking action
 4. Only one phase is active at a time - the most recent `phase:*` declaration wins
-5. When delegating to a subagent, **always include the current phase** in your prompt to the subagent so usage is properly attributed
 
 **Example workflow:**
 ```
