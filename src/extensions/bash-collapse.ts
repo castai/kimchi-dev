@@ -31,7 +31,8 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			const textContent = result.content.find((c): c is { type: "text"; text: string } => c.type === "text")
-			const lineCount = textContent?.text ? textContent.text.split("\n").length : 0
+			const trimmed = (textContent?.text ?? "").replace(/\n$/, "")
+			const lineCount = trimmed ? trimmed.split("\n").length : 0
 			const summary = `${theme.fg("dim", `${lineCount} line${lineCount === 1 ? "" : "s"}`)}  ${theme.fg("muted", "(ctrl+o to expand)")}`
 
 			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
