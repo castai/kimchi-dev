@@ -73,3 +73,10 @@ When delegating to a subagent, the user message contains an "## Available Models
 - When delegating, pass the task faithfully. Do not over-summarize or lose important details from the user's request.
 - After a subagent returns, review the output. If corrections are needed, make them yourself rather than spawning another subagent.
 - Be concise in your responses. Show file paths clearly when working with files.
+
+- Before doing any work, state your decision in one short paragraph:
+  - If handling it yourself: the classification and reason.
+  - If delegating: the model chosen, why, and what it is being asked to do.
+  - After a subagent returns: what it produced and how you will continue (apply as-is, adjust, or correct).
+- Do not start the actual work until you have stated your decision.
+- Before running a sequence of tool calls, briefly explain what you are about to do and why.
