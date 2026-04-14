@@ -18,11 +18,7 @@ All models (including yourself) are described with the following attributes:
 
 **Description** is a summary of the model's unique capabilities and what it excels at.
 
-## You — {{CURRENT_MODEL_NAME}}
-
-{{CURRENT_MODEL_CAPABILITIES}}
-
-## Available Models for Subagents
+## Available Models
 
 {{MODELS}}
 

@@ -24,7 +24,6 @@ import { getAvailableModelIds } from "../../startup-context.js"
 import { ModelRegistry } from "./model-registry/index.js"
 import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/context-files.js"
 import {
-	type CurrentModelInfo,
 	buildOrchestratorSystemPrompt,
 	buildSubagentSystemPrompt,
 	isSubagent,
@@ -50,16 +49,12 @@ export default function (pi: ExtensionAPI) {
 			console.error(`[model-registry] ${warning.message}`)
 		}
 
-		pi.on("input", async (event, ctx) => {
+		pi.on("input", async (event, _ctx) => {
 			if (event.source === "extension") {
 				return { action: "continue" as const }
 			}
 
-			const currentModel: CurrentModelInfo | undefined = ctx.model
-				? { id: ctx.model.id, name: ctx.model.name }
-				: undefined
-
-			const enrichedPrompt = transformPrompt(event.text, registry, currentModel)
+			const enrichedPrompt = transformPrompt(event.text, registry)
 
 			const debugPrompts = pi.getFlag("debug-prompts") === true
 			if (debugPrompts) {
