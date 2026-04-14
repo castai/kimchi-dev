@@ -38,6 +38,7 @@ The following models are available through kimchi-dev:
 - `kimi-k2.5` — Kimi K2.5
 - `glm-5-fp8` — GLM 5 FP8
 - `minimax-m2.7` — Minimax M2.7
+- `nemotron-3-super-fp4` - Nemotron-3 Super FP4
 
 A default `models.json` is created automatically on first run at `~/.config/kimchi/harness/models.json`. You can edit this file to customize model settings.
 
