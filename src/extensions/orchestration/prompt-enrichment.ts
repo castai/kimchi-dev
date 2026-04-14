@@ -18,6 +18,7 @@
  * and never trigger the "input" event.
  */
 
+import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { ModelRegistry } from "./model-registry/index.js"
 import {
@@ -61,7 +62,9 @@ export default function (pi: ExtensionAPI) {
 				{ customType: "enriched-prompt", content: [{ type: "text", text: enrichedPrompt }], display: false },
 				{ deliverAs: "nextTurn" },
 			)
-			pi.sendUserMessage(event.text)
+			const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: event.text }]
+			if (event.images) userContent.push(...event.images)
+			pi.sendUserMessage(userContent)
 
 			return { action: "handled" as const }
 		})
