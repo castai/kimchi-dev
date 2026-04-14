@@ -12,17 +12,15 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { dirname } from "node:path"
-import { resolve } from "node:path"
-import { Type } from "@sinclair/typebox"
+import { dirname, resolve } from "node:path"
 import type {
-	BeforeProviderRequestEvent,
 	ExtensionAPI,
 	ExtensionCommandContext,
 	ExtensionContext,
 	Theme,
 	ThemeColor,
 } from "@mariozechner/pi-coding-agent"
+import { Type } from "@sinclair/typebox"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -66,21 +64,23 @@ interface TagsState {
 	staticTags: string[]
 }
 
-class TagManager {
+export class TagManager {
 	private tags: Set<string> = new Set()
 	private staticTags: Set<string> = new Set()
 	private persistedTags: Set<string> = new Set() // Tags persisted in config file (non-static)
 	private currentPhase: Phase | undefined = undefined
+	private readonly configFile: string
 
-	constructor() {
+	constructor(configFile: string = TAGS_CONFIG_FILE) {
+		this.configFile = configFile
 		this.loadTags()
 	}
 
 	private loadTags(): void {
 		// Load from config file
 		try {
-			if (existsSync(TAGS_CONFIG_FILE)) {
-				const content = readFileSync(TAGS_CONFIG_FILE, "utf-8")
+			if (existsSync(this.configFile)) {
+				const content = readFileSync(this.configFile, "utf-8")
 				const config = JSON.parse(content) as TagsConfig
 				if (Array.isArray(config.tags)) {
 					for (const tag of config.tags) {
@@ -126,12 +126,12 @@ class TagManager {
 			const config: TagsConfig = { tags: tagsToPersist }
 
 			// Ensure directory exists
-			const configDir = dirname(TAGS_CONFIG_FILE)
+			const configDir = dirname(this.configFile)
 			if (!existsSync(configDir)) {
 				mkdirSync(configDir, { recursive: true })
 			}
 
-			writeFileSync(TAGS_CONFIG_FILE, JSON.stringify(config, null, 2))
+			writeFileSync(this.configFile, JSON.stringify(config, null, 2))
 		} catch {
 			// Silent fail - don't break the app if we can't write config
 		}
@@ -161,12 +161,12 @@ class TagManager {
 			return { success: false, error: `Tag "${tag}" is a static tag and cannot be modified.` }
 		}
 
-		if (this.tags.size >= 10) {
-			return { success: false, error: "Maximum 10 tags allowed (including static tags)." }
-		}
-
 		if (this.tags.has(tag)) {
 			return { success: false, error: `Tag "${tag}" already exists.` }
+		}
+
+		if (this.tags.size >= 10) {
+			return { success: false, error: "Maximum 10 tags allowed (including static tags)." }
 		}
 
 		this.tags.add(tag)
@@ -455,7 +455,9 @@ export default function tagsExtension(pi: ExtensionAPI) {
 
 			if (!isValidPhase(phase)) {
 				return {
-					content: [{ type: "text", text: `Invalid phase: "${params.phase}". Valid phases: ${VALID_PHASES.join(", ")}` }],
+					content: [
+						{ type: "text", text: `Invalid phase: "${params.phase}". Valid phases: ${VALID_PHASES.join(", ")}` },
+					],
 					isError: true,
 					details: undefined,
 				}
@@ -486,22 +488,22 @@ export default function tagsExtension(pi: ExtensionAPI) {
 		if (!payload || typeof payload !== "object") return
 
 		const allTags = tagManager.getAllTags()
-		if (allTags.length === 0) return
 
-		// Add model tag dynamically if model is available
-		const tagsWithModel = [...allTags]
+		// Build reserved tags first (model + phase) so they are never dropped by the cap
+		const reservedTags: string[] = []
 		if (ctx.model?.id) {
-			tagsWithModel.push(`model:${ctx.model.id}`)
+			reservedTags.push(`model:${ctx.model.id}`)
 		}
-
-		// Add phase tag if a phase is set
 		const phaseTag = tagManager.getPhaseTag()
 		if (phaseTag) {
-			tagsWithModel.push(phaseTag)
+			reservedTags.push(phaseTag)
 		}
 
-		// Cap at 10 tags (AI Enabler limit)
-		const finalTags = tagsWithModel.slice(0, 10)
+		// Fill remaining slots (up to 10 total) with user tags
+		const remainingSlots = Math.max(0, 10 - reservedTags.length)
+		const finalTags = [...reservedTags, ...allTags.slice(0, remainingSlots)]
+
+		if (finalTags.length === 0) return
 
 		// Merge with any existing tags in the payload
 		const existing = Array.isArray(payload.tags) ? (payload.tags as string[]) : []

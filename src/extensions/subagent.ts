@@ -43,7 +43,7 @@ interface SubagentError {
 
 // Extract phase tag (e.g., "phase:explore") from the beginning of the prompt
 function extractPhase(prompt: string): { phase: string | undefined; cleanPrompt: string } {
-	const phaseMatch = prompt.match(/^(phase:\w+)\s*\n?/)
+	const phaseMatch = prompt.match(/^(phase:\w+)\s*/)
 	if (phaseMatch) {
 		return { phase: phaseMatch[1], cleanPrompt: prompt.slice(phaseMatch[0].length).trimStart() }
 	}
