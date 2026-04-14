@@ -396,6 +396,7 @@ export default function (pi: ExtensionAPI) {
 
 			if (!options.isPartial) {
 				clearSpinner(state)
+				state.lastToolCall = undefined
 			} else {
 				state.lastToolCall = result.details as string | undefined
 			}
