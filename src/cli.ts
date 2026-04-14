@@ -52,9 +52,10 @@ try {
 	await main(process.argv.slice(2), {
 		extensionFactories: [
 			subagentExtension,
-			mcpAdapterExtension,
-			webFetchExtension,
-			webSearchExtension, promptEnrichmentExtension, bashCollapseExtension,
+			mcpAdapterExtension,webFetchExtension,
+			webSearchExtension,
+			promptEnrichmentExtension,
+			bashCollapseExtension,
 		],
 	})
 } catch (err) {

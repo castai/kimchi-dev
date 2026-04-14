@@ -5,10 +5,7 @@
  * pi-mono framework packages (pi-coding-agent, typebox).
  */
 
-import {
-	truncateHead,
-	truncateLine,
-} from "@mariozechner/pi-coding-agent"
+import { truncateHead, truncateLine } from "@mariozechner/pi-coding-agent"
 
 export const SEARCH_ENDPOINT = "https://kimchi.dev/v1/search"
 export const SEARCH_TIMEOUT_MS = 25_000
@@ -88,9 +85,7 @@ async function fetchSearchResponse(body: object, apiKey: string, signal: AbortSi
 			let retryHint = " Try again in a moment."
 			if (retryAfter !== null) {
 				const seconds = Number(retryAfter)
-				retryHint = Number.isNaN(seconds)
-					? ` Retry after ${retryAfter}.`
-					: ` Retry after ${seconds} seconds.`
+				retryHint = Number.isNaN(seconds) ? ` Retry after ${retryAfter}.` : ` Retry after ${seconds} seconds.`
 			}
 			throw new Error(`Web search rate limited.${retryHint}`)
 		}
@@ -123,7 +118,7 @@ export async function executeWebSearch(params: WebSearchParams, signal?: AbortSi
 	try {
 		const data = await fetchSearchResponse(body, apiKey, combinedSignal)
 		const raw = formatForLLM(data)
-		const truncation = truncateHead(raw, { maxLines: MAX_LINES})
+		const truncation = truncateHead(raw, { maxLines: MAX_LINES })
 
 		let text = truncation.content || "No results found."
 		if (truncation.truncated) {

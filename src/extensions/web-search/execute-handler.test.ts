@@ -120,19 +120,25 @@ describe("executeWebSearch", () => {
 		it("throws rate limit error for 429 without Retry-After", async () => {
 			mockFetch(429, {})
 
-			await expect(executeWebSearch({ query: "test" })).rejects.toThrow("Web search rate limited. Try again in a moment.")
+			await expect(executeWebSearch({ query: "test" })).rejects.toThrow(
+				"Web search rate limited. Try again in a moment.",
+			)
 		})
 
 		it("includes Retry-After seconds in 429 error when header is a number", async () => {
 			mockFetch(429, {}, { "Retry-After": "30" })
 
-			await expect(executeWebSearch({ query: "test" })).rejects.toThrow("Web search rate limited. Retry after 30 seconds.")
+			await expect(executeWebSearch({ query: "test" })).rejects.toThrow(
+				"Web search rate limited. Retry after 30 seconds.",
+			)
 		})
 
 		it("includes Retry-After date in 429 error when header is an HTTP date", async () => {
 			mockFetch(429, {}, { "Retry-After": "Wed, 21 Oct 2025 07:28:00 GMT" })
 
-			await expect(executeWebSearch({ query: "test" })).rejects.toThrow("Web search rate limited. Retry after Wed, 21 Oct 2025 07:28:00 GMT.")
+			await expect(executeWebSearch({ query: "test" })).rejects.toThrow(
+				"Web search rate limited. Retry after Wed, 21 Oct 2025 07:28:00 GMT.",
+			)
 		})
 	})
 
@@ -206,5 +212,4 @@ describe("executeWebSearch", () => {
 			expect(text).toContain("[3]")
 		})
 	})
-
 })
