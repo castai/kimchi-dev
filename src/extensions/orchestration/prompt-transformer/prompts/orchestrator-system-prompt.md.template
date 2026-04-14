@@ -100,7 +100,7 @@ Track your current work phase and set the appropriate tag to enable usage analyt
 **Rules:**
 1. Start with `phase:explore` when beginning a new task
 2. Transition to a new phase tag **immediately** when your work type changes
-3. Set the phase by outputting: `phase:<name>` (e.g., `phase:plan`) before taking action
+3. Set the phase by using `set_phase` tool before taking action
 4. Only one phase is active at a time - the most recent `phase:*` declaration wins
 
 **Example workflow:**

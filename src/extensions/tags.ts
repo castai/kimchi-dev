@@ -460,9 +460,9 @@ export default function tagsExtension(pi: ExtensionAPI) {
 
 			tagManager.setPhase(phase)
 
-			// Update footer to show current phase
 			if (ctx.hasUI) {
 				updateFooterStatus(ctx)
+				ctx.ui.notify(`Phase changed to: ${phase}`, "info")
 			}
 
 			return {
