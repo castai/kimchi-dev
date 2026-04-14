@@ -10,7 +10,7 @@ import {
 	truncateLine,
 } from "@mariozechner/pi-coding-agent"
 
-export const SEARCH_ENDPOINT = "https://kimchi.dev/search/v1"
+export const SEARCH_ENDPOINT = "https://kimchi.dev/v1/search"
 export const SEARCH_TIMEOUT_MS = 25_000
 export const DEFAULT_LIMIT = 8
 const MAX_LINE_LENGTH = 240
@@ -97,7 +97,7 @@ async function fetchSearchResponse(body: object, apiKey: string, signal: AbortSi
 		throw new Error(`Web search failed with status ${response.status}`)
 	}
 
-	const data = await response.json()
+	const data = await response.json().catch(() => null)
 	if (!data || typeof data !== "object" || !Array.isArray(data.sources)) {
 		throw new Error("Search API returned unexpected response format")
 	}
