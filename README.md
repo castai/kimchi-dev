@@ -99,6 +99,47 @@ A `model:{model_id}` tag is automatically added to every LLM request (e.g., `mod
 
 Active tags are displayed in the footer, grouped by key with color coding for visual distinction. Tags with the same key are shown together (e.g., `project:api,web`).
 
+## Phase Tracking
+
+kimchi-code supports phase tracking for usage analytics and cost attribution. Phases represent the high-level type of work being done (exploration, planning, building, reviewing, or researching).
+
+### Available phases
+
+| Phase | Description |
+|-------|-------------|
+| `explore` | Exploring/navigating the codebase, reading files to understand structure |
+| `plan` | Planning, designing, breaking down tasks, writing specs |
+| `build` | Writing, modifying, or refactoring code |
+| `review` | Code review, analyzing output, verifying correctness |
+| `research` | Researching documentation, investigating issues |
+
+### Setting phases
+
+Use the `set_phase` tool to set the current phase:
+
+```
+set_phase({"phase": "explore"})
+```
+
+**Important:** Only the orchestrator (main agent) can set phases. Subagents receive the current phase from the orchestrator but cannot change it.
+
+### Phase lifecycle
+
+1. The orchestrator sets the phase at the start of work and when transitioning between activities
+2. The phase is displayed in the footer (e.g., `↳ explore`)
+3. The phase is included as a `phase:{name}` tag in all LLM requests for analytics
+4. When delegating to subagents, the current phase is passed automatically
+
+### Example workflow
+
+```
+User: "Add user authentication"
+→ set_phase({"phase": "explore"})     # Understand existing auth code
+→ set_phase({"phase": "plan"})        # Design auth flow
+→ set_phase({"phase": "build"})       # Implement the auth code
+→ set_phase({"phase": "review"})      # Verify the implementation
+```
+
 ## Development
 
 ### Prerequisites

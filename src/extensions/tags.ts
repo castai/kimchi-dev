@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname } from "node:path"
 import { resolve } from "node:path"
+import { Type } from "@sinclair/typebox"
 import type {
 	BeforeProviderRequestEvent,
 	ExtensionAPI,
@@ -29,6 +30,14 @@ const FOOTER_STATUS_KEY = "active-tags"
 const TAGS_CONFIG_FILE = resolve(homedir(), ".config", "kimchi", "tags.json")
 
 const TAG_COLORS: ThemeColor[] = ["accent", "mdLink", "success", "warning"]
+
+// Valid phases for phase tracking
+const VALID_PHASES = ["explore", "plan", "build", "review", "research"] as const
+type Phase = (typeof VALID_PHASES)[number]
+
+export function isValidPhase(phase: string): phase is Phase {
+	return VALID_PHASES.includes(phase as Phase)
+}
 
 // ─── Tag validation ───────────────────────────────────────────────────────────
 
@@ -61,6 +70,7 @@ class TagManager {
 	private tags: Set<string> = new Set()
 	private staticTags: Set<string> = new Set()
 	private persistedTags: Set<string> = new Set() // Tags persisted in config file (non-static)
+	private currentPhase: Phase | undefined = undefined
 
 	constructor() {
 		this.loadTags()
@@ -192,6 +202,18 @@ class TagManager {
 	isStatic(tag: string): boolean {
 		return this.staticTags.has(tag)
 	}
+
+	setPhase(phase: Phase | undefined): void {
+		this.currentPhase = phase
+	}
+
+	getPhase(): Phase | undefined {
+		return this.currentPhase
+	}
+
+	getPhaseTag(): string | undefined {
+		return this.currentPhase ? `phase:${this.currentPhase}` : undefined
+	}
 }
 
 const tagManager = new TagManager()
@@ -204,11 +226,7 @@ function getColorForKey(key: string): ThemeColor {
 	return TAG_COLORS[hash % TAG_COLORS.length]
 }
 
-function formatTagsForFooter(tags: string[], theme: Theme): string {
-	if (tags.length === 0) {
-		return theme.fg("muted", "tags: none")
-	}
-
+function formatTagsForFooter(tags: string[], theme: Theme, phase: Phase | undefined): string {
 	// Group tags by key for display
 	const grouped = new Map<string, string[]>()
 	for (const tag of tags) {
@@ -235,14 +253,32 @@ function formatTagsForFooter(tags: string[], theme: Theme): string {
 		parts.push(`${coloredKey}${coloredValues}`)
 	}
 
-	return theme.fg("dim", "tags: ") + parts.join(theme.fg("dim", " "))
+	// Build the status line
+	const statusParts: string[] = []
+
+	// Phase indicator (if set)
+	if (phase) {
+		statusParts.push(theme.fg("success", `↳ ${phase}`))
+	}
+
+	// Tags indicator
+	if (parts.length > 0) {
+		statusParts.push(theme.fg("dim", "tags: ") + parts.join(theme.fg("dim", " ")))
+	}
+
+	if (statusParts.length === 0) {
+		return theme.fg("muted", "tags: none")
+	}
+
+	return statusParts.join("  ")
 }
 
 function updateFooterStatus(ctx: ExtensionContext): void {
 	if (!ctx.hasUI) return
 
 	const allTags = tagManager.getAllTags()
-	const statusText = formatTagsForFooter(allTags, ctx.ui.theme)
+	const currentPhase = tagManager.getPhase()
+	const statusText = formatTagsForFooter(allTags, ctx.ui.theme, currentPhase)
 	ctx.ui.setStatus(FOOTER_STATUS_KEY, statusText)
 }
 
@@ -386,6 +422,15 @@ function handleTagsCommand(args: string, ctx: ExtensionCommandContext): void {
 	ctx.ui.notify(helpLines.join("\n"), "info")
 }
 
+// ─── Phase Tool Parameters ─────────────────────────────────────────────────────
+
+const SetPhaseParams = Type.Object({
+	phase: Type.String({
+		description: "The phase to set. Valid phases: explore, plan, build, review, research",
+		enum: ["explore", "plan", "build", "review", "research"],
+	}),
+})
+
 // ─── Extension entry point ─────────────────────────────────────────────────────
 
 export default function tagsExtension(pi: ExtensionAPI) {
@@ -394,6 +439,39 @@ export default function tagsExtension(pi: ExtensionAPI) {
 		description: "Manage LLM request tags for usage tracking",
 		handler: async (args, ctx) => {
 			handleTagsCommand(args, ctx)
+		},
+	})
+
+	// Register the set_phase tool
+	pi.registerTool({
+		name: "set_phase",
+		label: "Set Phase",
+		description:
+			"Set the current work phase for usage tracking and analytics. Call this when transitioning between phases (e.g., moving from exploration to planning, or planning to building). The phase will be included as a tag in subsequent LLM requests.",
+		parameters: SetPhaseParams,
+
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const phase = params.phase as Phase
+
+			if (!isValidPhase(phase)) {
+				return {
+					content: [{ type: "text", text: `Invalid phase: "${params.phase}". Valid phases: ${VALID_PHASES.join(", ")}` }],
+					isError: true,
+					details: undefined,
+				}
+			}
+
+			tagManager.setPhase(phase)
+
+			// Update footer to show current phase
+			if (ctx.hasUI) {
+				updateFooterStatus(ctx)
+			}
+
+			return {
+				content: [{ type: "text", text: `Phase set to: ${phase}` }],
+				details: undefined,
+			}
 		},
 	})
 
@@ -414,6 +492,12 @@ export default function tagsExtension(pi: ExtensionAPI) {
 		const tagsWithModel = [...allTags]
 		if (ctx.model?.id) {
 			tagsWithModel.push(`model:${ctx.model.id}`)
+		}
+
+		// Add phase tag if a phase is set
+		const phaseTag = tagManager.getPhaseTag()
+		if (phaseTag) {
+			tagsWithModel.push(phaseTag)
 		}
 
 		// Cap at 10 tags (AI Enabler limit)
