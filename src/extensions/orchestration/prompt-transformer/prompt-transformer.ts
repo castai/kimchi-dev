@@ -89,10 +89,18 @@ export function buildSubagentSystemPrompt(
 	const toolsSection = formatToolsSection(filtered)
 	const projectContext = formatProjectContext(contextFiles)
 	const skillsSection = formatSkills(skills)
+
+	// Inject phase section based on KIMCHI_PHASE env var (set by parent agent when spawning subagent)
+	const phaseTag = process.env.KIMCHI_PHASE
+	const phaseSection = phaseTag
+		? `The parent agent has assigned you to work phase: **${phaseTag}**.\n\nYou MUST begin your response with this phase declaration to ensure proper usage tracking:\n\n${phaseTag}\n\nThen proceed with your work.`
+		: "The parent agent has not assigned a specific phase. Select the appropriate phase based on your task and begin your response with the phase declaration:\n\n- If your task involves exploration → start with `phase:explore`\n- If your task is planning/design → start with `phase:plan`\n- If your task is writing code → start with `phase:build`\n- If your task is reviewing/analyzing → start with `phase:review`\n- If your task is research/investigation → start with `phase:research`\n\nExport the phase by including it at the start of your response (e.g., `phase:build` followed by your work)."
+
 	return subagentSystemPromptTemplate
 		.replace("{{TOOLS}}", () => toolsSection)
 		.replace("{{PROJECT_CONTEXT}}", () => projectContext)
 		.replace("{{SKILLS}}", () => skillsSection)
+		.replace("{{PHASE_SECTION}}", () => phaseSection)
 }
 
 function formatToolsSection(tools: readonly ToolInfo[]): string {

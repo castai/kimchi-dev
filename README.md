@@ -46,6 +46,36 @@ A default `models.json` is created automatically on first run at `~/.config/kimc
 
 kimchi-code respects `HTTP_PROXY` / `HTTPS_PROXY` environment variables for network requests.
 
+## Tags
+
+kimchi-code supports tagging LLM requests for usage tracking and cost attribution.
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `/tags` | List all active tags |
+| `/tags add key:value ...` | Add one or more tags (e.g., `/tags add project:myapp team:backend`) |
+| `/tags remove tag ...` | Remove one or more user-defined tags |
+| `/tags clear` | Remove all user-defined tags |
+
+### Tag format
+
+Tags use `key:value` format with these rules:
+- Only alphanumeric characters, hyphens (`-`), underscores (`_`), and dots (`.`) allowed
+- Key and value must each be 64 characters or less
+- Maximum 10 tags total (including static tags)
+
+### Static tags
+
+Tags can be set via the `KIMCHI_TAGS` environment variable (comma-separated):
+
+```bash
+export KIMCHI_TAGS="team:backend,project:api"
+```
+
+Static tags cannot be modified via `/tags` commands and take precedence over config file tags.
+
 ## Development
 
 ### Prerequisites

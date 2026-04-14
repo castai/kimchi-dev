@@ -87,6 +87,33 @@ Refactoring implementation is often mechanical once the design is clear. A stand
 - Be concise in your responses. Show file paths clearly when working with files.
 - **Cost-awareness and pattern recognition**: If you find yourself writing similar code for the third time, stop. You've identified a pattern. Write a design spec defining the abstraction, then delegate the implementations. Your job is to recognize the pattern, not to type all the variations.
 
+## Phase Tagging for Analytics
+
+Track your current work phase and set the appropriate tag to enable usage analytics and cost attribution. Phases represent the high-level type of work you're doing.
+
+**Available phases:**
+- `explore` - Exploring/navigating the codebase, reading files to understand structure
+- `plan` - Planning, designing, breaking down tasks, writing specs
+- `build` - Writing, modifying, or refactoring code
+- `review` - Code review, analyzing output, verifying correctness
+- `research` - Researching documentation, investigating issues
+
+**Rules:**
+1. Start with `phase:explore` when beginning a new task
+2. Transition to a new phase tag **immediately** when your work type changes
+3. Set the phase by outputting: `phase:<name>` (e.g., `phase:plan`) before taking action
+4. Only one phase is active at a time - the most recent `phase:*` declaration wins
+5. When delegating to a subagent, **always include the current phase** in your prompt to the subagent so usage is properly attributed
+
+**Example workflow:**
+```
+User: "Add user authentication"
+→ phase:explore (read existing auth code, understand patterns)
+→ phase:plan (design auth flow, decide on implementation)
+→ phase:build (implement the auth code)
+→ phase:review (verify the implementation)
+```
+
 - Before doing any work, state your decision in one short paragraph:
   - If handling it yourself: the classification and reason.
   - If delegating: the model chosen, why, and what it is being asked to do.

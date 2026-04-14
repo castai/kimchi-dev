@@ -41,6 +41,15 @@ interface SubagentError {
 	detail: string
 }
 
+// Extract phase tag (e.g., "phase:explore") from the beginning of the prompt
+function extractPhase(prompt: string): { phase: string | undefined; cleanPrompt: string } {
+	const phaseMatch = prompt.match(/^(phase:\w+)\s*\n?/)
+	if (phaseMatch) {
+		return { phase: phaseMatch[1], cleanPrompt: prompt.slice(phaseMatch[0].length).trimStart() }
+	}
+	return { phase: undefined, cleanPrompt: prompt }
+}
+
 interface ParsedSubagentEvent {
 	delta: string | null
 	inputTokens: number
@@ -116,6 +125,7 @@ function spawnSubagent(
 	signal: AbortSignal | undefined,
 	tokenBudget: number | undefined,
 	onToken: (accumulated: string) => void,
+	phaseTag: string | undefined,
 ): Promise<SubagentResult> {
 	return new Promise((resolve) => {
 		const startedAt = Date.now()
@@ -126,11 +136,15 @@ function spawnSubagent(
 		const combinedSignal =
 			signal !== undefined ? AbortSignal.any([signal, timeoutController.signal]) : timeoutController.signal
 
+		const envWithPhase = phaseTag
+			? { ...process.env, KIMCHI_SUBAGENT: "1", KIMCHI_PHASE: phaseTag }
+			: { ...process.env, KIMCHI_SUBAGENT: "1" }
+
 		const proc = spawn(invocation.command, invocation.args, {
 			cwd,
 			shell: false,
 			stdio: ["ignore", "pipe", "pipe"],
-			env: { ...process.env, KIMCHI_SUBAGENT: "1" },
+			env: envWithPhase,
 		})
 
 		let buffer = ""
@@ -291,6 +305,9 @@ export default function (pi: ExtensionAPI) {
 		parameters: SubagentParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+			// Extract phase from prompt and remove it from args (passed via env instead)
+			const { phase, cleanPrompt } = extractPhase(params.prompt)
+
 			const args = [
 				"--mode",
 				"json",
@@ -300,7 +317,7 @@ export default function (pi: ExtensionAPI) {
 				params.provider,
 				"--model",
 				params.model,
-				params.prompt,
+				cleanPrompt,
 			]
 			const invocation = getSubagentInvocation(args)
 
@@ -310,6 +327,7 @@ export default function (pi: ExtensionAPI) {
 				signal,
 				params.tokenBudget,
 				(text) => onUpdate?.({ content: [{ type: "text", text }], details: undefined }),
+				phase,
 			)
 
 			sessionCounts.set(params.model, (sessionCounts.get(params.model) ?? 0) + 1)
