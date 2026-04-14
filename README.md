@@ -48,7 +48,7 @@ kimchi-code respects `HTTP_PROXY` / `HTTPS_PROXY` environment variables for netw
 
 ## Tags
 
-kimchi-code supports tagging LLM requests for usage tracking and cost attribution.
+kimchi-code supports tagging LLM requests for usage tracking and cost attribution. Tags are automatically included with every LLM request and displayed in the footer of the interactive UI.
 
 ### Commands
 
@@ -59,22 +59,45 @@ kimchi-code supports tagging LLM requests for usage tracking and cost attributio
 | `/tags remove tag ...` | Remove one or more user-defined tags |
 | `/tags clear` | Remove all user-defined tags |
 
+Use `/tags` without arguments to see help and current static tag configuration.
+
 ### Tag format
 
 Tags use `key:value` format with these rules:
-- Only alphanumeric characters, hyphens (`-`), underscores (`_`), and dots (`.`) allowed
+- Must start and end with alphanumeric characters
+- Middle characters can include hyphens (`-`), underscores (`_`), and dots (`.`) 
 - Key and value must each be 64 characters or less
-- Maximum 10 tags total (including static tags)
+- Maximum 10 tags total (including static tags and the auto-added model tag)
+
+**Valid examples:** `project:myapp`, `team:backend`
 
 ### Static tags
 
-Tags can be set via the `KIMCHI_TAGS` environment variable (comma-separated):
+Static tags are set via the `KIMCHI_TAGS` environment variable (comma-separated):
 
 ```bash
 export KIMCHI_TAGS="team:backend,project:api"
 ```
 
-Static tags cannot be modified via `/tags` commands and take precedence over config file tags.
+Static tags are read-only within the session and cannot be added, removed, or cleared via `/tags` commands. They are displayed with a `[static]` marker when listing tags.
+
+### Persistence
+
+User-defined tags (those added via `/tags add`) are automatically persisted to:
+
+```
+~/.config/kimchi/tags.json
+```
+
+These tags persist across sessions. Static tags from `KIMCHI_TAGS` are not persisted and must be set via environment variable each session.
+
+### Auto model tagging
+
+A `model:{model_id}` tag is automatically added to every LLM request (e.g., `model:kimi-k2.5`). This tag does not count toward the 10 tag limit and cannot be removed.
+
+### Visual display
+
+Active tags are displayed in the footer, grouped by key with color coding for visual distinction. Tags with the same key are shown together (e.g., `project:api,web`).
 
 ## Development
 
