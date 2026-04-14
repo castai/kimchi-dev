@@ -47,7 +47,7 @@ export const MODEL_CAPABILITIES: ReadonlyMap<string, ModelCapabilities> = new Ma
 		"kimi-k2.5",
 		{
 			vision: true,
-			strengths: ["build", "explore"],
+			strengths: ["build", "explore", "research"],
 			tier: "heavy",
 			description: KIMI_K25_DESCRIPTION,
 		},
@@ -65,7 +65,7 @@ export const MODEL_CAPABILITIES: ReadonlyMap<string, ModelCapabilities> = new Ma
 		"nemotron-3-super-fp4",
 		{
 			vision: false,
-			strengths: ["build", "explore", "research"],
+			strengths: ["build"],
 			tier: "light",
 			description: NEMOTRON_3_SUPER_DESCRIPTION,
 		},
