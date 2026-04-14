@@ -35,9 +35,9 @@ describe("binary smoke tests", () => {
 			extraEnv: { KIMCHI_API_KEY: "smoke-test-dummy" },
 			throwOnError: false,
 		})
-		// The binary should fail with exit code 1 due to the dummy API key.
-		expect(result.status).toBe(1)
-		// The orchestration extension fires "input" and "before_agent_start" events before API key validation, triggering template loading. If templates are missing from the compiled binary, the extension runner reports ENOENT via "Extension error" on stderr.
+		// The orchestration extension intercepts the prompt (action: "handled"), so the binary exits cleanly without reaching the LLM API.
+		expect(result.status).toBe(0)
+		// The orchestration extension fires "input" and "before_agent_start" events, triggering template loading. If templates are missing from the compiled binary, the extension runner reports ENOENT via "Extension error" on stderr.
 		expect(result.stderr).not.toContain("Extension error")
 	})
 
