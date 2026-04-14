@@ -10,11 +10,12 @@ const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", 
 const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
 const STDERR_MAX = 8192
-const TIMEOUT_MS = 15 * 60 * 1000
+const TIMEOUT_MS = 30 * 60 * 1000
 
 interface SubagentState {
 	spinnerIdx: number
 	spinnerInterval: ReturnType<typeof setInterval> | undefined
+	lastToolCall: string | undefined
 }
 
 type SubagentFailureReason = "exit_error" | "timeout" | "token_budget_exceeded" | "aborted"
@@ -45,6 +46,7 @@ interface ParsedSubagentEvent {
 	delta: string | null
 	inputTokens: number
 	outputTokens: number
+	toolCall: { name: string; args: Record<string, unknown> } | null
 }
 
 function resolveTsx(): string | undefined {
@@ -81,20 +83,20 @@ function getSubagentInvocation(args: string[]): { command: string; args: string[
 // input/output token counts from message_end events.
 // The event shapes are internal to pi-coding-agent and may change across versions.
 export function parseSubagentEvent(line: string): ParsedSubagentEvent {
-	if (!line.trim()) return { delta: null, inputTokens: 0, outputTokens: 0 }
+	if (!line.trim()) return { delta: null, inputTokens: 0, outputTokens: 0, toolCall: null }
 	let event: Record<string, unknown>
 	try {
 		event = JSON.parse(line)
 	} catch {
-		return { delta: null, inputTokens: 0, outputTokens: 0 }
+		return { delta: null, inputTokens: 0, outputTokens: 0, toolCall: null }
 	}
 
 	if (event.type === "message_update") {
 		const assistantEvent = event.assistantMessageEvent as Record<string, unknown> | undefined
 		if (assistantEvent?.type === "text_delta" && typeof assistantEvent.delta === "string") {
-			return { delta: assistantEvent.delta, inputTokens: 0, outputTokens: 0 }
+			return { delta: assistantEvent.delta, inputTokens: 0, outputTokens: 0, toolCall: null }
 		}
-		return { delta: null, inputTokens: 0, outputTokens: 0 }
+		return { delta: null, inputTokens: 0, outputTokens: 0, toolCall: null }
 	}
 
 	if (event.type === "message_end") {
@@ -103,11 +105,19 @@ export function parseSubagentEvent(line: string): ParsedSubagentEvent {
 		if (usage) {
 			const inputTokens = typeof usage.input === "number" ? usage.input : 0
 			const outputTokens = typeof usage.output === "number" ? usage.output : 0
-			return { delta: null, inputTokens, outputTokens }
+			return { delta: null, inputTokens, outputTokens, toolCall: null }
 		}
 	}
 
-	return { delta: null, inputTokens: 0, outputTokens: 0 }
+	if (event.type === "tool_execution_start") {
+		const name = typeof event.toolName === "string" ? event.toolName : null
+		const args = event.args !== null && typeof event.args === "object" ? (event.args as Record<string, unknown>) : {}
+		if (name !== null) {
+			return { delta: null, inputTokens: 0, outputTokens: 0, toolCall: { name, args } }
+		}
+	}
+
+	return { delta: null, inputTokens: 0, outputTokens: 0, toolCall: null }
 }
 
 function spawnSubagent(
@@ -116,6 +126,7 @@ function spawnSubagent(
 	signal: AbortSignal | undefined,
 	tokenBudget: number | undefined,
 	onToken: (accumulated: string) => void,
+	onToolCall: (name: string, args: Record<string, unknown>, accumulated: string) => void,
 ): Promise<SubagentResult> {
 	return new Promise((resolve) => {
 		const startedAt = Date.now()
@@ -165,7 +176,7 @@ function spawnSubagent(
 		}
 
 		const processLine = (line: string) => {
-			const { delta, inputTokens: lineInput, outputTokens: lineOutput } = parseSubagentEvent(line)
+			const { delta, inputTokens: lineInput, outputTokens: lineOutput, toolCall } = parseSubagentEvent(line)
 			if (delta !== null) {
 				accumulated += delta
 				onToken(accumulated)
@@ -176,6 +187,9 @@ function spawnSubagent(
 				if (tokenBudget !== undefined && tokenBudget > 0 && inputTokens + outputTokens > tokenBudget) {
 					kill("token_budget_exceeded")
 				}
+			}
+			if (toolCall !== null) {
+				onToolCall(toolCall.name, toolCall.args, accumulated)
 			}
 		}
 
@@ -305,12 +319,20 @@ export default function (pi: ExtensionAPI) {
 			]
 			const invocation = getSubagentInvocation(args)
 
+			let lastToolCall: string | undefined
 			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(
 				invocation,
 				ctx.cwd,
 				signal,
 				params.tokenBudget,
-				(text) => onUpdate?.({ content: [{ type: "text", text }], details: undefined }),
+				(text) => onUpdate?.({ content: [{ type: "text", text }], details: lastToolCall }),
+				(name, toolArgs, text) => {
+					const firstArg = Object.values(toolArgs)[0]
+					const argHint =
+						typeof firstArg === "string" ? ` ${firstArg.slice(0, 60)}${firstArg.length > 60 ? "…" : ""}` : ""
+					lastToolCall = `${name}${argHint}`
+					onUpdate?.({ content: [{ type: "text", text }], details: lastToolCall })
+				},
 			)
 
 			sessionCounts.set(params.model, (sessionCounts.get(params.model) ?? 0) + 1)
@@ -362,9 +384,10 @@ export default function (pi: ExtensionAPI) {
 			const header = `${spinner} ${theme.fg("toolTitle", theme.bold("Subagent session"))}`
 			const modelLine = `  ${theme.fg("muted", "model:")}  ${theme.fg("accent", "`")}${theme.fg("accent", `${args.provider ?? ""}/${args.model ?? ""}`)}${theme.fg("accent", "`")}`
 			const promptLine = `  ${theme.fg("muted", "prompt:")} ${theme.fg("dim", "`")}${theme.fg("dim", truncatePrompt(args.prompt ?? ""))}${theme.fg("dim", "`")}`
+			const lines = [header, modelLine, promptLine]
 
 			const component = context.lastComponent ?? new Text("", 0, 0)
-			;(component as Text).setText([header, modelLine, promptLine].join("\n"))
+			;(component as Text).setText(lines.join("\n"))
 			return component
 		},
 
@@ -373,19 +396,28 @@ export default function (pi: ExtensionAPI) {
 
 			if (!options.isPartial) {
 				clearSpinner(state)
+			} else {
+				state.lastToolCall = result.details as string | undefined
 			}
 
 			const textContent = result.content.find((c): c is { type: "text"; text: string } => c.type === "text")
 			if (!textContent?.text) return new Text("", 0, 0)
 
-			const displayText = textContent.text.split("\n").slice(-5).join("\n")
+			const lines = options.isPartial ? textContent.text.split("\n").slice(-20) : textContent.text.split("\n")
+			const displayText = lines.filter((l) => l.trim()).join("\n")
 
 			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
 			component.clear()
 			component.addChild(new Spacer(1))
 			component.addChild(new Text(theme.fg("toolOutput", displayText), 0, 0))
 
-			if (!options.isPartial) {
+			if (options.isPartial) {
+				const toolCall = state.lastToolCall
+				if (toolCall) {
+					component.addChild(new Spacer(1))
+					component.addChild(new Text(theme.fg("dim", `> ${toolCall}`), 0, 0))
+				}
+			} else {
 				const stats = result.details as SubagentStats | undefined
 				if (stats !== undefined) {
 					component.addChild(new Spacer(1))
