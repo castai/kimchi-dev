@@ -41,16 +41,14 @@ function loadContextFileFromDir(dir: string): ContextFile | null {
  */
 export function loadProjectContextFiles(cwd: string): ContextFile[] {
 	const files: ContextFile[] = []
-	const seen = new Set<string>()
 
 	let dir = resolve(cwd)
 	const root = resolve("/")
 
 	while (true) {
 		const found = loadContextFileFromDir(dir)
-		if (found && !seen.has(found.path)) {
+		if (found) {
 			files.unshift(found)
-			seen.add(found.path)
 		}
 
 		if (dir === root) break
