@@ -19,8 +19,9 @@
  */
 
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
+import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
 import { ModelRegistry } from "./model-registry/index.js"
+import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/context-files.js"
 import {
 	type CurrentModelInfo,
 	buildOrchestratorSystemPrompt,
@@ -70,8 +71,13 @@ export default function (pi: ExtensionAPI) {
 		})
 	}
 
-	pi.on("before_agent_start", async () => {
+	let cachedContextFiles: ContextFile[] | undefined
+	let cachedSkills: Skill[] | undefined
+
+	pi.on("before_agent_start", async (_event, ctx) => {
 		const tools = pi.getAllTools()
+		cachedContextFiles ??= loadProjectContextFiles(ctx.cwd)
+		cachedSkills ??= loadSkills({ cwd: ctx.cwd }).skills
 
 		if (subagentMode) {
 			// Filter the subagent tool out of the active tool set to prevent
@@ -79,11 +85,11 @@ export default function (pi: ExtensionAPI) {
 			const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
 			pi.setActiveTools(activeTools)
 
-			const systemPrompt = buildSubagentSystemPrompt(tools)
+			const systemPrompt = buildSubagentSystemPrompt(tools, cachedContextFiles, cachedSkills)
 			return { systemPrompt }
 		}
 
-		const systemPrompt = buildOrchestratorSystemPrompt(tools)
+		const systemPrompt = buildOrchestratorSystemPrompt(tools, cachedContextFiles, cachedSkills)
 		return { systemPrompt }
 	})
 }

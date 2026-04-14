@@ -1,5 +1,7 @@
+import { type Skill, formatSkillsForPrompt } from "@mariozechner/pi-coding-agent"
 import type { ModelRegistry } from "../model-registry/index.js"
 import type { OrchestrationModelDescriptor } from "../model-registry/types.js"
+import type { ContextFile } from "./context-files.js"
 import systemPromptTemplate from "./prompts/orchestrator-system-prompt.md.template" with { type: "text" }
 import subagentSystemPromptTemplate from "./prompts/subagent-system-prompt.md.template" with { type: "text" }
 import userPromptTemplate from "./prompts/transformed-user-prompt.md.template" with { type: "text" }
@@ -65,20 +67,50 @@ export function transformPrompt(userPrompt: string, registry: ModelRegistry, cur
 		.replace("{{USER_PROMPT}}", () => userPrompt)
 }
 
-export function buildOrchestratorSystemPrompt(tools: readonly ToolInfo[]): string {
+export function buildOrchestratorSystemPrompt(
+	tools: readonly ToolInfo[],
+	contextFiles?: readonly ContextFile[],
+	skills?: readonly Skill[],
+): string {
 	const toolsSection = formatToolsSection(tools)
-	return systemPromptTemplate.replace("{{TOOLS}}", () => toolsSection)
+	const projectContext = formatProjectContext(contextFiles)
+	const skillsSection = formatSkills(skills)
+	return systemPromptTemplate
+		.replace("{{TOOLS}}", () => toolsSection)
+		.replace("{{PROJECT_CONTEXT}}", () => projectContext)
+		.replace("{{SKILLS}}", () => skillsSection)
 }
 
-export function buildSubagentSystemPrompt(tools: readonly ToolInfo[]): string {
+export function buildSubagentSystemPrompt(
+	tools: readonly ToolInfo[],
+	contextFiles?: readonly ContextFile[],
+	skills?: readonly Skill[],
+): string {
 	const filtered = tools.filter((t) => t.name !== SUBAGENT_TOOL_NAME)
 	const toolsSection = formatToolsSection(filtered)
-	return subagentSystemPromptTemplate.replace("{{TOOLS}}", () => toolsSection)
+	const projectContext = formatProjectContext(contextFiles)
+	const skillsSection = formatSkills(skills)
+	return subagentSystemPromptTemplate
+		.replace("{{TOOLS}}", () => toolsSection)
+		.replace("{{PROJECT_CONTEXT}}", () => projectContext)
+		.replace("{{SKILLS}}", () => skillsSection)
 }
 
 function formatToolsSection(tools: readonly ToolInfo[]): string {
 	if (tools.length === 0) return "(No tools available)"
 	return tools.map((t) => `- ${t.name}: ${t.description}`).join("\n")
+}
+
+function formatProjectContext(contextFiles?: readonly ContextFile[]): string {
+	if (!contextFiles || contextFiles.length === 0) return ""
+	const combined = contextFiles.map((f) => f.content).join("\n\n")
+	return `# Project Guidelines\n\n${combined}`
+}
+
+function formatSkills(skills?: readonly Skill[]): string {
+	if (!skills || skills.length === 0) return ""
+	// Cast required until upstream accepts readonly Skill[]
+	return formatSkillsForPrompt(skills as Skill[])
 }
 
 export function isSubagent(): boolean {
