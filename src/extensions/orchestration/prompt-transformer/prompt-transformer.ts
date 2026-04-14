@@ -45,17 +45,16 @@ export interface CurrentModelInfo {
 }
 
 export function transformPrompt(userPrompt: string, registry: ModelRegistry, currentModel?: CurrentModelInfo): string {
-	const allModels = registry.getAll()
-
-	// Subagent pool: only models with known capability entries, excluding the
-	// current orchestrator model (it doesn't need to delegate to itself).
-	const eligibleSubagents = registry.getSubagentModels()
-	const subagentModels = currentModel ? eligibleSubagents.filter((m) => m.id !== currentModel.id) : eligibleSubagents
+	const subagentModels = registry.getModelsWithCapabilities().filter((m) => m.id !== currentModel?.id)
 	const modelsSection = formatModelsSection(subagentModels)
 
 	const currentModelName = currentModel?.name ?? "unknown"
 
-	const currentDescriptor = currentModel ? allModels.find((m) => m.id === currentModel.id) : undefined
+	// Only show capabilities when the current model has a real capability entry.
+	// Unknown models get only the fallback text because generic defaults would be misleading.
+	const currentDescriptor = currentModel
+		? registry.getModelsWithCapabilities().find((m) => m.id === currentModel.id)
+		: undefined
 	const currentModelCapabilities = currentDescriptor
 		? formatCurrentModelCapabilities(currentDescriptor)
 		: "No capability information available for this model."

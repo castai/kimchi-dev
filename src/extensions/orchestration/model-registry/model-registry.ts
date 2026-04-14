@@ -13,9 +13,10 @@
  *   - A model in the API with a capability entry → full OrchestrationModelDescriptor.
  *   - A model in the API without a capability entry → generic descriptor + startup warning.
  *   - A model in the capability map but absent from the API → orphaned, excluded from
- *     the subagent pool (it cannot be called) + startup warning.
+ *     routing (it cannot be called) + startup warning.
  *
- * Subagent pool = intersection of availableModelIds ∩ MODEL_CAPABILITIES keys.
+ * Models with capabilities = intersection of availableModelIds ∩ MODEL_CAPABILITIES keys.
+ * Subagent pool           = models with capabilities, excluding the current orchestrator.
  * Orchestrator self-lookup = all models from the API (including unknown ones).
  */
 
@@ -48,8 +49,8 @@ export class ModelRegistry {
 	/** All models from the API, enriched where possible. Used for orchestrator self-lookup. */
 	private readonly allModels: OrchestrationModelDescriptor[]
 
-	/** Intersection of API models and capability map. Used for subagent routing. */
-	private readonly subagentModels: OrchestrationModelDescriptor[]
+	/** Models that have a real entry in MODEL_CAPABILITIES (API ∩ capability map). */
+	private readonly modelsWithCapabilities: OrchestrationModelDescriptor[]
 
 	/** Drift warnings emitted during construction. */
 	readonly warnings: readonly ModelRegistryWarning[]
@@ -91,26 +92,24 @@ export class ModelRegistry {
 			}
 		}
 
-		// Subagent pool: only models present in both the API and the capability map
-		this.subagentModels = this.allModels.filter((m) => MODEL_CAPABILITIES.has(m.id))
-
+		this.modelsWithCapabilities = this.allModels.filter((m) => MODEL_CAPABILITIES.has(m.id))
 		this.warnings = warnings
 	}
 
 	/**
 	 * All models available from the API, with capability enrichment where known.
-	 * Used to look up the current orchestrator model's own capabilities.
 	 */
 	getAll(): readonly OrchestrationModelDescriptor[] {
 		return this.allModels
 	}
 
 	/**
-	 * Models eligible for subagent delegation: the intersection of API-available
-	 * models and those with known capability entries. Unknown models are excluded
-	 * because generic descriptors provide no useful routing signal.
+	 * Models that have a real entry in MODEL_CAPABILITIES - the intersection of
+	 * the API model list and the local capability knowledge-base. Unknown models
+	 * (those with generic descriptors) are excluded.
 	 */
-	getSubagentModels(): readonly OrchestrationModelDescriptor[] {
-		return this.subagentModels
+	getModelsWithCapabilities(): readonly OrchestrationModelDescriptor[] {
+		return this.modelsWithCapabilities
 	}
+
 }

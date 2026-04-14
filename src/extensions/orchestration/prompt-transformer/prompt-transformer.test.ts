@@ -67,8 +67,8 @@ describe("transformPrompt", () => {
 
 	it("excludes the current model from the subagent models list", () => {
 		const result = transformPrompt("some task", registry, currentModel)
-		// All models except the current one should appear in the subagent section
-		const otherModels = registry.getAll().filter((m) => m.id !== currentModel.id)
+		// All models with capabilities except the current one should appear in the subagent section
+		const otherModels = registry.getModelsWithCapabilities().filter((m) => m.id !== currentModel.id)
 		for (const model of otherModels) {
 			expect(result).toContain(model.name)
 		}

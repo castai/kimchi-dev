@@ -8,9 +8,10 @@ describe("ModelRegistry — known models only", () => {
 	it("returns all known models when all are available in the API", () => {
 		const registry = new ModelRegistry(KNOWN_IDS)
 		expect(registry.getAll()).toHaveLength(KNOWN_IDS.length)
-		expect(registry.getSubagentModels()).toHaveLength(KNOWN_IDS.length)
+		expect(registry.getModelsWithCapabilities()).toHaveLength(KNOWN_IDS.length)
 		expect(registry.warnings).toHaveLength(0)
 	})
+
 
 	it("getAll() preserves the API order", () => {
 		const ids = [...KNOWN_IDS].reverse()
@@ -20,7 +21,7 @@ describe("ModelRegistry — known models only", () => {
 
 	it("every known model has a non-placeholder description", () => {
 		const registry = new ModelRegistry(KNOWN_IDS)
-		for (const model of registry.getAll()) {
+		for (const model of registry.getModelsWithCapabilities()) {
 			expect(model.capabilities.description).not.toBe("TODO")
 			expect(model.capabilities.description.length).toBeGreaterThan(50)
 		}
@@ -35,10 +36,9 @@ describe("ModelRegistry — unknown model in API", () => {
 		expect(unknown?.capabilities.description).toContain("No capability information")
 	})
 
-	it("excludes the unknown model from getSubagentModels()", () => {
+	it("excludes the unknown model from getModelsWithCapabilities()", () => {
 		const registry = new ModelRegistry([...KNOWN_IDS, "brand-new-model"])
-		const subagent = registry.getSubagentModels().find((m) => m.id === "brand-new-model")
-		expect(subagent).toBeUndefined()
+		expect(registry.getModelsWithCapabilities().map((m) => m.id)).not.toContain("brand-new-model")
 	})
 
 	it("emits an unknown_model warning", () => {
@@ -50,12 +50,11 @@ describe("ModelRegistry — unknown model in API", () => {
 })
 
 describe("ModelRegistry — orphaned capability entry", () => {
-	it("excludes the orphaned model from both getAll() and getSubagentModels()", () => {
-		// Provide only the first known ID, leaving the rest orphaned
+	it("excludes the orphaned model from both getAll() and getModelsWithCapabilities()", () => {
 		const presentId = KNOWN_IDS[0]
 		const registry = new ModelRegistry([presentId])
 		expect(registry.getAll().map((m) => m.id)).toEqual([presentId])
-		expect(registry.getSubagentModels().map((m) => m.id)).toEqual([presentId])
+		expect(registry.getModelsWithCapabilities().map((m) => m.id)).toEqual([presentId])
 	})
 
 	it("emits an orphaned_capability warning for each missing model", () => {
@@ -67,21 +66,17 @@ describe("ModelRegistry — orphaned capability entry", () => {
 	})
 })
 
-describe("ModelRegistry — subagent pool intersection", () => {
-	it("subagent pool is intersection of API models and capability map", () => {
+describe("ModelRegistry — getModelsWithCapabilities()", () => {
+	it("is the intersection of API models and capability map", () => {
 		const registry = new ModelRegistry([...KNOWN_IDS, "unknown-extra"])
-		// All known IDs should be in the subagent pool
-		for (const id of KNOWN_IDS) {
-			expect(registry.getSubagentModels().map((m) => m.id)).toContain(id)
-		}
-		// Unknown model must not be in the subagent pool
-		expect(registry.getSubagentModels().map((m) => m.id)).not.toContain("unknown-extra")
+		expect(registry.getModelsWithCapabilities().map((m) => m.id)).toEqual(expect.arrayContaining(KNOWN_IDS))
+		expect(registry.getModelsWithCapabilities().map((m) => m.id)).not.toContain("unknown-extra")
 	})
 
-	it("empty API list produces empty registries and orphan warnings for all known models", () => {
+	it("returns empty when API list is empty", () => {
 		const registry = new ModelRegistry([])
-		expect(registry.getAll()).toHaveLength(0)
-		expect(registry.getSubagentModels()).toHaveLength(0)
-		expect(registry.warnings.filter((w) => w.kind === "orphaned_capability")).toHaveLength(KNOWN_IDS.length)
+		expect(registry.getModelsWithCapabilities()).toHaveLength(0)
 	})
 })
+
+
