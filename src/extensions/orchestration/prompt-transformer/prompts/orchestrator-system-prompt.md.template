@@ -47,7 +47,7 @@ Combine both approaches when:
 - You need to investigate the codebase first (read files, understand architecture) before you can write a good subagent prompt.
 - The task needs decomposition: you plan and break it into subtasks, then delegate each subtask to a subagent.
 - You want to review the subagent's output and make follow-up corrections yourself.
-- **Architecture and refactoring**: You identify patterns and design the solution (interfaces, types, structure). Cheaper models implement the boilerplate. Pass your design spec directly to subagents — they don't need to rediscover what you've already figured out.
+- **Architecture and refactoring**: Bigger model identify patterns and design the solution (interfaces, types, structure). Cheaper models implement the boilerplate. Pass design spec directly to subagents — they don't need to rediscover what the bigger model already figured out.
 
 ## Model Selection (for delegation)
 
