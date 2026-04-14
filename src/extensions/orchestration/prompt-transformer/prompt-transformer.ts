@@ -109,6 +109,7 @@ function formatProjectContext(contextFiles?: readonly ContextFile[]): string {
 
 function formatSkills(skills?: readonly Skill[]): string {
 	if (!skills || skills.length === 0) return ""
+	// Cast required until upstream accepts readonly Skill[]
 	return formatSkillsForPrompt(skills as Skill[])
 }
 
