@@ -36,9 +36,10 @@ Handle the task directly using your own tools when:
 ### Strategy 2: Delegate to a subagent
 
 Spawn a subagent when:
-- The task is HARD and would benefit from a model with specific strengths (e.g. better coding benchmarks, vision capabilities).
+- The task is HARD and would benefit from a model with specific strengths (e.g. deep-reasoning, vision capabilities).
 - You want to run work in parallel - for example, splitting a large feature into independent subtasks that different subagents can work on simultaneously.
 - The task is self-contained and can be fully described in a single prompt without back-and-forth.
+- If you are a heavy-tier model, prefer delegating simpler subtasks to a lower-tier model to reduce cost.
 
 ### Strategy 3: Hybrid - explore then delegate
 
@@ -54,7 +55,6 @@ When delegating to a subagent, the user message contains an "## Available Models
 - For **EASY** subtasks: prefer a **light**-tier model. Cheapest and fastest.
 - For **HARD** subtasks: prefer a **heavy**-tier model. Most capable, justifies the extra cost.
 - A **standard**-tier model is the balanced choice for tasks that are solidly coding-focused.
-- If you are a heavy-tier model, prefer delegating simpler subtasks to a lower-tier model to reduce cost.
 
 ### Special Considerations
 
