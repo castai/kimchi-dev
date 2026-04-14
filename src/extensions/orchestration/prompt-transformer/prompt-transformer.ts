@@ -7,7 +7,6 @@ import subagentSystemPromptTemplate from "./prompts/subagent-system-prompt.md.te
 import userPromptTemplate from "./prompts/transformed-user-prompt.md.template" with { type: "text" }
 
 const SUBAGENT_TOOL_NAME = "subagent"
-const SET_PHASE_TOOL_NAME = "set_phase"
 
 function formatModel(model: OrchestrationModelDescriptor): string {
 	const strengths = model.capabilities.strengths.join(", ")
@@ -86,23 +85,14 @@ export function buildSubagentSystemPrompt(
 	contextFiles?: readonly ContextFile[],
 	skills?: readonly Skill[],
 ): string {
-	// Filter out subagent and set_phase tools - subagents should not spawn further subagents or manage phases
-	const filtered = tools.filter((t) => t.name !== SUBAGENT_TOOL_NAME && t.name !== SET_PHASE_TOOL_NAME)
+	const filtered = tools.filter((t) => t.name !== SUBAGENT_TOOL_NAME)
 	const toolsSection = formatToolsSection(filtered)
 	const projectContext = formatProjectContext(contextFiles)
 	const skillsSection = formatSkills(skills)
-
-	// Inject phase section based on KIMCHI_PHASE env var (set by parent agent when spawning subagent)
-	const phaseTag = process.env.KIMCHI_PHASE
-	const phaseSection = phaseTag
-		? `You are working in phase: **${phaseTag}**. This phase was set by the orchestrating agent and will be tracked for analytics. Proceed with your assigned task.`
-		: "No specific phase has been assigned for this task."
-
 	return subagentSystemPromptTemplate
 		.replace("{{TOOLS}}", () => toolsSection)
 		.replace("{{PROJECT_CONTEXT}}", () => projectContext)
 		.replace("{{SKILLS}}", () => skillsSection)
-		.replace("{{PHASE_SECTION}}", () => phaseSection)
 }
 
 function formatToolsSection(tools: readonly ToolInfo[]): string {

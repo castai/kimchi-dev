@@ -91,17 +91,15 @@ User-defined tags (those added via `/tags add`) are automatically persisted to:
 
 These tags persist across sessions. Static tags from `KIMCHI_TAGS` are not persisted and must be set via environment variable each session.
 
-### Auto model tagging
-
-A `model:{model_id}` tag is automatically added to every LLM request (e.g., `model:kimi-k2.5`). This tag does not count toward the 10 tag limit and cannot be removed.
-
 ### Visual display
 
 Active tags are displayed in the footer, grouped by key with color coding for visual distinction. Tags with the same key are shown together (e.g., `project:api,web`).
 
-## Phase Tracking
+## Auto-tagging
 
-kimchi-code supports phase tracking for usage analytics and cost attribution. Phases represent the high-level type of work being done (exploration, planning, building, reviewing, or researching).
+A `model:{model_id}` tag is automatically added to every LLM request (e.g., `model:kimi-k2.5`). This tag does not count toward the 10 tag limit and cannot be removed.
+
+A `phase:{phase}` tag is automatically added since kimchi-code supports phase tracking for usage analytics and cost attribution. Phases represent the high-level type of work being done (exploration, planning, building, reviewing, or researching).
 
 ### Available phases
 
