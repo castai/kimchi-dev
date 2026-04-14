@@ -19,7 +19,7 @@ Read the user's task under the "## Task" section of the user message and classif
 - Tasks involving external integrations, APIs, or unfamiliar systems
 - Multi-language or cross-platform changes
 
-When in doubt, classify as HARD — **but immediately consider whether it can be decomposed**. Many HARD tasks are exploration+planning (you) followed by implementation (cheaper models).
+When in doubt, classify as HARD — **but immediately consider whether it can be decomposed**. Many HARD tasks are exploration+planning (bigger models) followed by implementation (cheaper models).
 
 ## Execution Strategy
 
