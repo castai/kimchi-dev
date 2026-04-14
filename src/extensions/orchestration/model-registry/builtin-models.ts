@@ -1,4 +1,4 @@
-import type { OrchestrationModelDescriptor } from "./types.js"
+import type { ModelCapabilities } from "./types.js"
 
 /**
  * Model descriptions are written as natural-language decision briefs, not
@@ -10,7 +10,16 @@ import type { OrchestrationModelDescriptor } from "./types.js"
  * statements the orchestrator can act on directly: "strongest pure coding
  * model in the pool", "reliably formats tool calls correctly",
  * "near-perfect retrieval accuracy" etc.
+ *
+ * This map is a local capability knowledge-base keyed by model ID. It acts
+ * as an enrichment layer on top of the dynamic model list fetched from the
+ * API at startup. Models present in the API but absent here get a generic
+ * descriptor and a startup warning. Models present here but absent from the
+ * API are excluded from subagent routing (they cannot be called). The
+ * intention is to iterate on these descriptions locally and promote them to
+ * the API once the shape is stable.
  */
+
 const KIMI_K25_DESCRIPTION = `\
 The only model in the pool with vision support — use it when the task involves images, \
 screenshots, or visual input. Most capable and most expensive. \
@@ -27,38 +36,38 @@ can ingest entire large codebases in a single pass. \
 Weakest at coding; not reliable for complex multi-file changes. \
 Best for codebase exploration, research, and simple well-defined tasks.`
 
-export const BUILTIN_MODELS: readonly OrchestrationModelDescriptor[] = [
-	{
-		id: "kimi-k2.5",
-		provider: "kimchi-dev",
-		name: "Kimi K2.5",
-		capabilities: {
+/**
+ * Capability knowledge-base keyed by model ID. Used to enrich the dynamic
+ * model list from the API with orchestration metadata (tier, strengths,
+ * vision, description). Models not present here get a generic descriptor
+ * and a startup warning.
+ */
+export const MODEL_CAPABILITIES: ReadonlyMap<string, ModelCapabilities> = new Map([
+	[
+		"kimi-k2.5",
+		{
 			vision: true,
 			strengths: ["build", "explore"],
 			tier: "heavy",
 			description: KIMI_K25_DESCRIPTION,
 		},
-	},
-	{
-		id: "minimax-m2.7",
-		provider: "kimchi-dev",
-		name: "Minimax M2.7",
-		capabilities: {
+	],
+	[
+		"minimax-m2.7",
+		{
 			vision: false,
 			strengths: ["build"],
 			tier: "standard",
 			description: MINIMAX_M27_DESCRIPTION,
 		},
-	},
-	{
-		id: "nemotron-3-super-fp4",
-		provider: "kimchi-dev",
-		name: "Nemotron 3 Super",
-		capabilities: {
+	],
+	[
+		"nemotron-3-super-fp4",
+		{
 			vision: false,
 			strengths: ["build", "explore", "research"],
 			tier: "light",
 			description: NEMOTRON_3_SUPER_DESCRIPTION,
 		},
-	},
-] as const
+	],
+])

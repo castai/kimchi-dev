@@ -32,6 +32,7 @@ import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichm
 import subagentExtension from "./extensions/subagent.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import { updateModelsConfig } from "./models.js"
+import { setAvailableModelIds } from "./startup-context.js"
 
 try {
 	const config = loadConfig()
@@ -46,6 +47,10 @@ try {
 	if (modelsResult.source === "default") {
 		console.error(`Warning: using default models (${modelsResult.error})`)
 	}
+
+	// Share the discovered model IDs with extensions before main() runs.
+	// prompt-enrichment reads this to build ModelRegistry with live model IDs.
+	setAvailableModelIds(modelsResult.models)
 
 	// Suppress Node.js warnings (same as pi-mono's own cli.js)
 	process.emitWarning = () => {}

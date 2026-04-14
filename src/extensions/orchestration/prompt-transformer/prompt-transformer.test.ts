@@ -1,7 +1,9 @@
 import type { Skill } from "@mariozechner/pi-coding-agent"
 import { describe, expect, it } from "vitest"
-import { ModelRegistry } from "../model-registry/index.js"
+import { MODEL_CAPABILITIES, ModelRegistry } from "../model-registry/index.js"
 import { buildOrchestratorSystemPrompt, buildSubagentSystemPrompt, transformPrompt } from "./prompt-transformer.js"
+
+const ALL_KNOWN_IDS = [...MODEL_CAPABILITIES.keys()]
 
 function createSkill(overrides: Partial<Skill> & { name: string; description: string }): Skill {
 	return {
@@ -14,7 +16,7 @@ function createSkill(overrides: Partial<Skill> & { name: string; description: st
 }
 
 describe("transformPrompt", () => {
-	const registry = new ModelRegistry()
+	const registry = new ModelRegistry(ALL_KNOWN_IDS)
 	const currentModel = { id: "kimi-k2.5", name: "Kimi K2.5" }
 
 	it("includes the original user prompt", () => {

@@ -20,6 +20,7 @@
 
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
+import { getAvailableModelIds } from "../../startup-context.js"
 import { ModelRegistry } from "./model-registry/index.js"
 import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/context-files.js"
 import {
@@ -41,7 +42,14 @@ export default function (pi: ExtensionAPI) {
 
 	// For sub agents we don't want to transform the prompt sent from parent with model capabilities
 	if (!subagentMode) {
-		const registry = new ModelRegistry()
+		const registry = new ModelRegistry(getAvailableModelIds())
+
+		// Emit startup warnings for drift between the API model list and the
+		// capability knowledge-base. These surface in the terminal so the user
+		// knows when to add a capability entry or clean up a stale one.
+		for (const warning of registry.warnings) {
+			console.error(`Warning [model-registry]: ${warning.message}`)
+		}
 
 		pi.on("input", async (event, ctx) => {
 			if (event.source === "extension") {
