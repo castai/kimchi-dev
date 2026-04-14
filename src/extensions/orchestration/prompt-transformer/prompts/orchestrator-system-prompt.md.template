@@ -85,7 +85,7 @@ Refactoring implementation is often mechanical once the design is clear. A stand
 - When delegating, pass the task faithfully. Do not over-summarize or lose important details from the user's request.
 - After a subagent returns, review the output. If corrections are needed, make them yourself rather than spawning another subagent.
 - Be concise in your responses. Show file paths clearly when working with files.
-- **Cost-awareness and pattern recognition**: If you find yourself writing similar code for the third time (e.g., CreateGKE, CreateEKS, CreateAKS), stop. You've identified a pattern. Write a design spec defining the abstraction, then delegate the implementations. Your job is to recognize the pattern, not to type all the variations.
+- **Cost-awareness and pattern recognition**: If you find yourself writing similar code for the third time, stop. You've identified a pattern. Write a design spec defining the abstraction, then delegate the implementations. Your job is to recognize the pattern, not to type all the variations.
 
 - Before doing any work, state your decision in one short paragraph:
   - If handling it yourself: the classification and reason.
