@@ -3,9 +3,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import type { ImportKind, McpConfig, McpSettings, ServerEntry, ServerProvenance } from "./types.js"
+import { getAgentDir } from "./utils.js"
 
-const DEFAULT_CONFIG_PATH = join(homedir(), ".pi", "agent", "mcp.json")
-const PROJECT_CONFIG_NAME = ".pi/mcp.json"
+const DEFAULT_CONFIG_PATH = join(getAgentDir(), "mcp.json")
+const PROJECT_CONFIG_NAME = ".kimchi/mcp.json"
 
 // Import source paths for other tools
 const IMPORT_PATHS: Record<ImportKind, string> = {

@@ -13,12 +13,12 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs"
-import { homedir } from "node:os"
 import { dirname, extname, join, resolve, sep } from "node:path"
+import { getAgentDir } from "./utils.js"
 
 const CACHE_VERSION = 1
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
-const CACHE_PATH = join(homedir(), ".pi", "agent", "mcp-npx-cache.json")
+const CACHE_PATH = join(getAgentDir(), "mcp-npx-cache.json")
 
 interface NpxCacheEntry {
 	resolvedBin: string

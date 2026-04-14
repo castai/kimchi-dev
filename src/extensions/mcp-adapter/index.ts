@@ -1,5 +1,7 @@
-import type { ExtensionAPI, ToolInfo } from "@mariozechner/pi-coding-agent"
+import type { ExtensionAPI, ToolInfo, ToolRenderResultOptions } from "@mariozechner/pi-coding-agent"
+import { Theme, keyHint } from "@mariozechner/pi-coding-agent"
 import { Type } from "@sinclair/typebox"
+import { Text } from "@mariozechner/pi-tui"
 import { authenticateServer, openMcpPanel, reconnectServers, showStatus, showTools } from "./commands.js"
 import { loadMcpConfig } from "./config.js"
 import {
@@ -331,6 +333,69 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 				}
 				return executeStatus(state)
 			},
+			renderCall(args: { tool?: string; args?: string; connect?: string; describe?: string; search?: string; server?: string; action?: string }, theme: Theme, context: { lastComponent: unknown }) {
+				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0)
+				text.setText(formatMcpCall(args, theme))
+				return text
+			},
+			renderResult(result: unknown, options: ToolRenderResultOptions, theme: Theme, context: { lastComponent?: unknown }) {
+				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0)
+				text.setText(formatMcpResult(result, options, theme))
+				return text
+			},
 		})
 	}
+}
+
+const COLLAPSED_LINES = 10
+
+function formatMcpResult(result: unknown, options: ToolRenderResultOptions, theme: Theme): string {
+	const content = (result as { content?: Array<{ type: string; text?: string }> })?.content ?? []
+	const textParts = content
+		.filter((c): c is { type: "text"; text: string } => c.type === "text" && typeof c.text === "string")
+		.map((c) => c.text)
+	const combined = textParts.join("\n")
+	if (!combined) return ""
+
+	const lines = combined.split("\n")
+	const maxLines = options.expanded ? lines.length : COLLAPSED_LINES
+	const displayLines = lines.slice(0, maxLines)
+	const remaining = lines.length - maxLines
+
+	let text = `\n${displayLines.map((line) => theme.fg("toolOutput", line)).join("\n")}`
+	if (remaining > 0) {
+		text += `${theme.fg("muted", `\n... (${remaining} more lines,`)} ${keyHint("app.tools.expand", "to expand")})`
+	}
+	return text
+}
+
+function formatMcpCall(
+	params: { tool?: string; args?: string; connect?: string; describe?: string; search?: string; server?: string; action?: string },
+	theme: Theme,
+): string {
+	if (params.tool) {
+		// Parse server prefix from tool name: "grafana_prod_master_query_loki" -> server="grafana_prod_master", tool="query_loki"
+		// We display as-is since the full prefixed name is what the model uses
+		const toolDisplay = theme.fg("accent", params.tool)
+		let argsDisplay = ""
+		if (params.args) {
+			try {
+				const parsed = JSON.parse(params.args) as Record<string, unknown>
+				const parts = Object.entries(parsed).map(([k, v]) => {
+					const val = typeof v === "string" ? v.slice(0, 60) + (v.length > 60 ? "…" : "") : String(v).slice(0, 60)
+					return `${theme.fg("muted", k + ":")} ${theme.fg("toolOutput", val)}`
+				})
+				if (parts.length > 0) argsDisplay = `(${parts.join(", ")})`
+			} catch {
+				argsDisplay = `(${theme.fg("toolOutput", params.args.slice(0, 80))})`
+			}
+		}
+		return `${theme.bold("mcp")} ${toolDisplay}${argsDisplay}`
+	}
+	if (params.describe) return `${theme.bold("mcp")} ${theme.fg("muted", "describe:")} ${theme.fg("accent", params.describe)}`
+	if (params.search) return `${theme.bold("mcp")} ${theme.fg("muted", "search:")} ${theme.fg("toolOutput", params.search)}`
+	if (params.connect) return `${theme.bold("mcp")} ${theme.fg("muted", "connect:")} ${theme.fg("accent", params.connect)}`
+	if (params.server) return `${theme.bold("mcp")} ${theme.fg("muted", "list:")} ${theme.fg("accent", params.server)}`
+	if (params.action === "ui-messages") return `${theme.bold("mcp")} ${theme.fg("muted", "ui-messages")}`
+	return theme.bold("mcp")
 }

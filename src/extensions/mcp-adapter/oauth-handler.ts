@@ -1,12 +1,12 @@
 // oauth-handler.ts - OAuth token management for MCP servers
 import { existsSync, readFileSync } from "node:fs"
-import { homedir } from "node:os"
 import { join } from "node:path"
 import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"
+import { getAgentDir } from "./utils.js"
 
 // Token storage path for a server
 function getTokensPath(serverName: string): string {
-	return join(homedir(), ".pi", "agent", "mcp-oauth", serverName, "tokens.json")
+	return join(getAgentDir(), "mcp-oauth", serverName, "tokens.json")
 }
 
 /**

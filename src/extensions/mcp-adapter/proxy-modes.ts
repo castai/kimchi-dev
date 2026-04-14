@@ -1,4 +1,5 @@
 import type { AgentToolResult, ToolInfo } from "@mariozechner/pi-coding-agent"
+import { truncateTail } from "@mariozechner/pi-coding-agent"
 import {
 	getFailureAgeSeconds,
 	lazyConnect,
@@ -16,6 +17,23 @@ import { type UiSessionRuntime, maybeStartUiSession } from "./ui-session.js"
 import { truncateAtWord } from "./utils.js"
 
 type ProxyToolResult = AgentToolResult<Record<string, unknown>>
+
+import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
+
+type ContentBlock = TextContent | ImageContent
+
+function applyTruncation(content: ContentBlock[]): ContentBlock[] {
+	const textItems = content.filter((c): c is TextContent => c.type === "text")
+	if (textItems.length === 0) return content
+
+	const combined = textItems.map((c) => c.text).join("\n")
+	const result = truncateTail(combined)
+	if (!result.truncated) return content
+
+	const notice = `\n[Truncated: showing last ${result.outputLines} of ${result.totalLines} lines (${result.totalBytes.toLocaleString()} bytes total). Use mcp({ describe: "tool_name" }) to check parameters if needed.]`
+	const nonText = content.filter((c): c is ImageContent => c.type !== "text")
+	return [{ type: "text" as const, text: result.content + notice }, ...nonText]
+}
 
 type AutoAuthResult = { status: "skipped" } | { status: "success" } | { status: "failed"; message: string }
 
@@ -809,8 +827,9 @@ export async function executeCall(
 			}
 		}
 
+		const truncated = applyTruncation((content.length > 0 ? content : [{ type: "text" as const, text: "(empty result)" }]) as ContentBlock[])
 		return {
-			content: content.length > 0 ? content : [{ type: "text" as const, text: "(empty result)" }],
+			content: truncated,
 			details: { mode: "call", mcpResult: result, server: serverName, tool: toolMeta.originalName },
 		}
 	} catch (error) {

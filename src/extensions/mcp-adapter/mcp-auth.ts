@@ -9,8 +9,8 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs"
-import { homedir } from "os"
 import { join } from "path"
+import { getAgentDir } from "./utils.js"
 
 /** OAuth token storage format */
 export interface StoredTokens {
@@ -39,7 +39,7 @@ export interface AuthEntry {
 
 // Base directory for auth storage - can be overridden via env var for testing
 function getAuthBaseDir(): string {
-	return process.env.MCP_OAUTH_DIR ? process.env.MCP_OAUTH_DIR : join(homedir(), ".pi", "agent", "mcp-oauth")
+	return process.env.MCP_OAUTH_DIR ?? join(getAgentDir(), "mcp-oauth")
 }
 
 /**

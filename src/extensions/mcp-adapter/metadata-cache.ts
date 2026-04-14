@@ -1,17 +1,16 @@
 import { createHash } from "node:crypto"
 // metadata-cache.ts - Persistent MCP metadata cache
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
-import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { getToolUiResourceUri } from "@modelcontextprotocol/ext-apps/app-bridge"
 import { resourceNameToToolName } from "./resource-tools.js"
 import type { McpResource, McpTool, ServerEntry, ToolMetadata } from "./types.js"
 import { formatToolName, isToolExcluded } from "./types.js"
-import { extractToolUiStreamMode } from "./utils.js"
+import { extractToolUiStreamMode, getAgentDir } from "./utils.js"
 
 const CACHE_VERSION = 1
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-const CACHE_PATH = join(homedir(), ".pi", "agent", "mcp-cache.json")
+const CACHE_PATH = join(getAgentDir(), "mcp-cache.json")
 
 export interface CachedTool {
 	name: string
