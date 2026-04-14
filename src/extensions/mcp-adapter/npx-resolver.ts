@@ -18,7 +18,10 @@ import { getAgentDir } from "./utils.js"
 
 const CACHE_VERSION = 1
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
-const CACHE_PATH = join(getAgentDir(), "mcp-npx-cache.json")
+let _cachePath: string | undefined
+function getCachePath(): string {
+	return (_cachePath ??= join(getAgentDir(), "mcp-npx-cache.json"))
+}
 
 interface NpxCacheEntry {
 	resolvedBin: string
@@ -375,9 +378,9 @@ function getNpmCacheDir(): string | null {
 }
 
 function loadCache(): NpxCache | null {
-	if (!existsSync(CACHE_PATH)) return null
+	if (!existsSync(getCachePath())) return null
 	try {
-		const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"))
+		const raw = JSON.parse(readFileSync(getCachePath(), "utf-8"))
 		if (!raw || typeof raw !== "object") return null
 		if (raw.version !== CACHE_VERSION) return null
 		if (!raw.entries || typeof raw.entries !== "object") return null
@@ -388,13 +391,13 @@ function loadCache(): NpxCache | null {
 }
 
 function saveCacheEntry(key: string, entry: NpxCacheEntry): void {
-	const dir = dirname(CACHE_PATH)
+	const dir = dirname(getCachePath())
 	mkdirSync(dir, { recursive: true })
 
 	const merged: NpxCache = { version: CACHE_VERSION, entries: {} }
 	try {
-		if (existsSync(CACHE_PATH)) {
-			const existing = JSON.parse(readFileSync(CACHE_PATH, "utf-8")) as NpxCache
+		if (existsSync(getCachePath())) {
+			const existing = JSON.parse(readFileSync(getCachePath(), "utf-8")) as NpxCache
 			if (existing && existing.version === CACHE_VERSION && existing.entries) {
 				merged.entries = { ...existing.entries }
 			}
@@ -404,9 +407,9 @@ function saveCacheEntry(key: string, entry: NpxCacheEntry): void {
 	}
 
 	merged.entries[key] = entry
-	const tmpPath = `${CACHE_PATH}.${process.pid}.tmp`
+	const tmpPath = `${getCachePath()}.${process.pid}.tmp`
 	writeFileSync(tmpPath, JSON.stringify(merged, null, 2), "utf-8")
-	renameSync(tmpPath, CACHE_PATH)
+	renameSync(tmpPath, getCachePath())
 }
 
 function safeRealpath(path: string): string {

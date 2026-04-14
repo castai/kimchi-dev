@@ -5,7 +5,10 @@ import { dirname, join, resolve } from "node:path"
 import type { ImportKind, McpConfig, McpSettings, ServerEntry, ServerProvenance } from "./types.js"
 import { getAgentDir } from "./utils.js"
 
-const DEFAULT_CONFIG_PATH = join(getAgentDir(), "mcp.json")
+let _defaultConfigPath: string | undefined
+function getDefaultConfigPath(): string {
+	return (_defaultConfigPath ??= join(getAgentDir(), "mcp.json"))
+}
 const PROJECT_CONFIG_NAME = ".kimchi/mcp.json"
 
 // Import source paths for other tools
@@ -19,7 +22,7 @@ const IMPORT_PATHS: Record<ImportKind, string> = {
 }
 
 export function loadMcpConfig(overridePath?: string): McpConfig {
-	const configPath = overridePath ? resolve(overridePath) : DEFAULT_CONFIG_PATH
+	const configPath = overridePath ? resolve(overridePath) : getDefaultConfigPath()
 
 	// Load base config
 	let config: McpConfig = { mcpServers: {} }
@@ -129,7 +132,7 @@ function extractServers(config: unknown, kind: ImportKind): Record<string, Serve
 
 export function getServerProvenance(overridePath?: string): Map<string, ServerProvenance> {
 	const provenance = new Map<string, ServerProvenance>()
-	const userPath = overridePath ? resolve(overridePath) : DEFAULT_CONFIG_PATH
+	const userPath = overridePath ? resolve(overridePath) : getDefaultConfigPath()
 
 	let userConfig: McpConfig = { mcpServers: {} }
 	if (existsSync(userPath)) {

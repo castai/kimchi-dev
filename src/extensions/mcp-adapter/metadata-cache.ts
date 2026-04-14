@@ -10,7 +10,10 @@ import { extractToolUiStreamMode, getAgentDir } from "./utils.js"
 
 const CACHE_VERSION = 1
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-const CACHE_PATH = join(getAgentDir(), "mcp-cache.json")
+let _cachePath: string | undefined
+function getCachePath(): string {
+	return (_cachePath ??= join(getAgentDir(), "mcp-cache.json"))
+}
 
 export interface CachedTool {
 	name: string
@@ -39,13 +42,13 @@ export interface MetadataCache {
 }
 
 export function getMetadataCachePath(): string {
-	return CACHE_PATH
+	return getCachePath()
 }
 
 export function loadMetadataCache(): MetadataCache | null {
-	if (!existsSync(CACHE_PATH)) return null
+	if (!existsSync(getCachePath())) return null
 	try {
-		const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"))
+		const raw = JSON.parse(readFileSync(getCachePath(), "utf-8"))
 		if (!raw || typeof raw !== "object") return null
 		if (raw.version !== CACHE_VERSION) return null
 		if (!raw.servers || typeof raw.servers !== "object") return null
@@ -56,13 +59,13 @@ export function loadMetadataCache(): MetadataCache | null {
 }
 
 export function saveMetadataCache(cache: MetadataCache): void {
-	const dir = dirname(CACHE_PATH)
+	const dir = dirname(getCachePath())
 	mkdirSync(dir, { recursive: true })
 
 	const merged: MetadataCache = { version: CACHE_VERSION, servers: {} }
 	try {
-		if (existsSync(CACHE_PATH)) {
-			const existing = JSON.parse(readFileSync(CACHE_PATH, "utf-8")) as MetadataCache
+		if (existsSync(getCachePath())) {
+			const existing = JSON.parse(readFileSync(getCachePath(), "utf-8")) as MetadataCache
 			if (existing && existing.version === CACHE_VERSION && existing.servers) {
 				merged.servers = { ...existing.servers }
 			}
@@ -74,9 +77,9 @@ export function saveMetadataCache(cache: MetadataCache): void {
 	merged.version = CACHE_VERSION
 	merged.servers = { ...merged.servers, ...cache.servers }
 
-	const tmpPath = `${CACHE_PATH}.${process.pid}.tmp`
+	const tmpPath = `${getCachePath()}.${process.pid}.tmp`
 	writeFileSync(tmpPath, JSON.stringify(merged, null, 2), "utf-8")
-	renameSync(tmpPath, CACHE_PATH)
+	renameSync(tmpPath, getCachePath())
 }
 
 export function computeServerHash(definition: ServerEntry): string {
