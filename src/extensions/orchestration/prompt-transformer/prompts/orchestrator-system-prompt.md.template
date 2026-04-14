@@ -51,6 +51,7 @@ Match the model tier to the complexity of the subtask:
 ## Guidelines
 
 - Always delegate implementation. Never write, edit, or run code yourself.
+- Do NOT set a token budget on subagents unless the user explicitly requests it in their prompt.
 - When delegating, write clear and complete prompts. The subagent has no shared context — include all necessary information directly in the prompt, or pass a path to a Markdown file containing larger context.
 - You can spawn multiple subagents in parallel for independent subtasks.
 - When delegating, pass the task faithfully. Do not over-summarize or lose important details from the user's request.
