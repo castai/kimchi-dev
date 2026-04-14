@@ -66,9 +66,7 @@ export class ModelRegistry {
 				warnings.push({
 					kind: "unknown_model",
 					modelId: id,
-					message: `Model "${id}" is available via the API but has no capability entry. ` +
-						`It can be used as the orchestrator model but will not be offered as a subagent. ` +
-						`Add an entry to MODEL_CAPABILITIES in builtin-models.ts to enable subagent routing.`,
+					message: `Model "${id}" is available via the API but has no capability entry. It can be used as the orchestrator model but will not be offered as a subagent. Add an entry to MODEL_CAPABILITIES in builtin-models.ts to enable subagent routing.`,
 				})
 				return {
 					id,
@@ -86,8 +84,7 @@ export class ModelRegistry {
 				warnings.push({
 					kind: "orphaned_capability",
 					modelId: capabilityId,
-					message: `Model "${capabilityId}" has a capability entry but was not returned by the API. ` +
-						`It may have been renamed or removed. Update MODEL_CAPABILITIES in builtin-models.ts.`,
+					message: `Model "${capabilityId}" has a capability entry but was not returned by the API. It may have been renamed or removed. Update MODEL_CAPABILITIES in builtin-models.ts.`,
 				})
 			}
 		}
@@ -111,5 +108,4 @@ export class ModelRegistry {
 	getModelsWithCapabilities(): readonly OrchestrationModelDescriptor[] {
 		return this.modelsWithCapabilities
 	}
-
 }

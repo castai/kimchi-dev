@@ -12,7 +12,6 @@ describe("ModelRegistry — known models only", () => {
 		expect(registry.warnings).toHaveLength(0)
 	})
 
-
 	it("getAll() preserves the API order", () => {
 		const ids = [...KNOWN_IDS].reverse()
 		const registry = new ModelRegistry(ids)
@@ -78,5 +77,3 @@ describe("ModelRegistry — getModelsWithCapabilities()", () => {
 		expect(registry.getModelsWithCapabilities()).toHaveLength(0)
 	})
 })
-
-
