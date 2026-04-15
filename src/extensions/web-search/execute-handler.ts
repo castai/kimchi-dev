@@ -7,7 +7,7 @@
 
 import { truncateHead, truncateLine } from "@mariozechner/pi-coding-agent"
 
-export const SEARCH_ENDPOINT = "https://kimchi.dev/v1/search"
+export const SEARCH_ENDPOINT = "https://llm.kimchi.dev/v1/search"
 export const SEARCH_TIMEOUT_MS = 25_000
 export const DEFAULT_LIMIT = 8
 export const DEFAULT_MAX_CONTENT_CHARS = 2000
