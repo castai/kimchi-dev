@@ -250,7 +250,7 @@ export function executeStatus(state: McpExtensionState): ProxyToolResult {
 	}
 
 	if (servers.length > 0) {
-		text += `\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search`
+		text += `\nmcp({ search: "..." }) to find tools, mcp({ describe: "tool_name" }) to get schema`
 	}
 
 	return {
@@ -314,7 +314,7 @@ export function executeDescribe(
 	}
 
 	if (injectedNames.length > 0) {
-		text += `\n\nInjected into context — call directly as: ${injectedNames[0]}`
+		text += `\n\nInjected into context. Call it using the exact name shown above (do NOT add any prefix): ${injectedNames[0]}`
 	}
 
 	return {
@@ -487,7 +487,7 @@ export function executeSearch(
 	}
 
 	if (injectedNames.length > 0) {
-		text += `\nInjected into context (call directly by name): ${injectedNames.join(", ")}`
+		text += `\nInjected into context. Call using the exact names shown above (do NOT add any prefix): ${injectedNames.join(", ")}`
 	}
 
 	return {

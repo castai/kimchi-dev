@@ -21,9 +21,7 @@ import {
 	executeCall,
 	executeConnect,
 	executeDescribe,
-	executeList,
 	executeSearch,
-	executeStatus,
 	executeUiMessages,
 } from "./proxy-modes.js"
 import type { McpExtensionState } from "./state.js"
@@ -201,7 +199,6 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 					const { strategy, bm25K1, bm25B, fieldWeights } = kimchiConfig.mcpSearch
 					const entries = buildToolEntries(nextState.toolMetadata)
 					state.searchStrategy = buildStrategy(entries, { strategy, k1: bm25K1, b: bm25B, fieldWeights })
-					console.error(`[mcp-adapter] search strategy=${strategy}, indexed ${entries.length} tools`)
 				} catch {
 					// loadConfig throws if no API key; fall back to default strategy
 					const entries = buildToolEntries(nextState.toolMetadata)
@@ -321,7 +318,7 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 				),
 				limit: Type.Optional(Type.Number({ description: "Max number of search results to return (default: 5)" })),
 				server: Type.Optional(
-					Type.String({ description: "Filter to specific server (also disambiguates tool calls)" }),
+					Type.String({ description: "Filter search/describe/call to a specific server" }),
 				),
 				action: Type.Optional(
 					Type.String({ description: "Action: 'ui-messages' to retrieve prompts/intents from UI sessions" }),
@@ -412,10 +409,10 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 					registerAndActivate(specs.map((s) => ({ ...s, prefixedName: formatToolName(s.originalName, s.serverName, prefix) })))
 				)
 				}
-				if (params.server) {
-					return executeList(state, params.server)
+				return {
+					content: [{ type: "text" as const, text: `Workflow Error: Missing action parameter.\nTo use MCP tools, you must first discover them and their schemas.\nUse mcp({ search: "..." }) to find tools, or mcp({ describe: "tool_name" }) to get a schema. Matched tools will then be injected for you to call directly.` }],
+					details: { error: "missing_action" },
 				}
-				return executeStatus(state)
 			},
 			renderCall(args: { tool?: string; args?: string; connect?: string; describe?: string; search?: string; limit?: number; server?: string; action?: string }, theme: Theme, context: { lastComponent: unknown }) {
 				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0)
@@ -482,7 +479,7 @@ function formatMcpCall(
 		return `${theme.bold("mcp")} ${theme.fg("muted", "search:")} ${theme.fg("toolOutput", params.search)}${limitSuffix}`
 	}
 	if (params.connect) return `${theme.bold("mcp")} ${theme.fg("muted", "connect:")} ${theme.fg("accent", params.connect)}`
-	if (params.server) return `${theme.bold("mcp")} ${theme.fg("muted", "list:")} ${theme.fg("accent", params.server)}`
+	if (params.server) return `${theme.bold("mcp")} ${theme.fg("muted", "server:")} ${theme.fg("accent", params.server)}`
 	if (params.action === "ui-messages") return `${theme.bold("mcp")} ${theme.fg("muted", "ui-messages")}`
 	return theme.bold("mcp")
 }
