@@ -3,6 +3,7 @@ import { Theme, keyHint } from "@mariozechner/pi-coding-agent"
 import { Type } from "@sinclair/typebox"
 import { Text } from "@mariozechner/pi-tui"
 import { authenticateServer, openMcpPanel, reconnectServers, showStatus, showTools } from "./commands.js"
+import { loadConfig } from "../../config.js"
 import { loadMcpConfig } from "./config.js"
 import {
 	buildProxyDescription,
@@ -277,7 +278,7 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 				},
 				_signal,
 				_onUpdate,
-				_ctx,
+				ctx,
 			) {
 				let parsedArgs: Record<string, unknown> | undefined
 				if (params.args) {
@@ -316,8 +317,15 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 				if (params.action === "ui-messages") {
 					return executeUiMessages(state)
 				}
+				let maxToolResultChars = 10_000
+				try {
+					const kimchiConfig = loadConfig()
+					maxToolResultChars = kimchiConfig.maxToolResultChars
+				} catch {
+					// loadConfig throws when API key is missing; default is fine here
+				}
 				if (params.tool) {
-					return executeCall(state, params.tool, parsedArgs, params.server)
+					return executeCall(state, params.tool, parsedArgs, params.server, ctx, maxToolResultChars)
 				}
 				if (params.connect) {
 					return executeConnect(state, params.connect)
