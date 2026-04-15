@@ -4,6 +4,7 @@ import { tmpdir, userInfo } from "node:os"
 import { dirname, join } from "node:path"
 import type { AgentToolResult, ExtensionContext, ToolInfo } from "@mariozechner/pi-coding-agent"
 import { truncateTail } from "@mariozechner/pi-coding-agent"
+import type { SearchStrategy } from "./bm25.js"
 import {
 	getFailureAgeSeconds,
 	lazyConnect,
@@ -306,59 +307,84 @@ export function executeSearch(
 	server?: string,
 	includeSchemas?: boolean,
 	getPiTools?: () => ToolInfo[],
+	limit = 5,
+	strategy?: SearchStrategy,
 ): ProxyToolResult {
 	const showSchemas = includeSchemas !== false
 
-	const matches: Array<{ server: string; tool: ToolMetadata }> = []
-
-	let pattern: RegExp
-	try {
-		if (regex) {
-			pattern = new RegExp(query, "i")
-		} else {
-			const terms = query
-				.trim()
-				.split(/\s+/)
-				.filter((t) => t.length > 0)
-			if (terms.length === 0) {
-				return {
-					content: [{ type: "text" as const, text: "Search query cannot be empty" }],
-					details: { mode: "search", error: "empty_query" },
-				}
-			}
-			const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-			pattern = new RegExp(escaped.join("|"), "i")
-		}
-	} catch {
+	// Validate query upfront for both paths
+	const trimmed = query.trim()
+	if (trimmed.length === 0) {
 		return {
-			content: [{ type: "text" as const, text: `Invalid regex: ${query}` }],
-			details: { mode: "search", error: "invalid_pattern", query },
+			content: [{ type: "text" as const, text: "Search query cannot be empty" }],
+			details: { mode: "search", error: "empty_query" },
 		}
 	}
 
+	// Pi tool search always uses regex (they're not in the MCP index)
 	const piMatches: Array<{ name: string; description: string }> = []
 	if (!server && getPiTools) {
-		const piTools = getPiTools()
-		for (const tool of piTools) {
-			if (tool.name === "mcp") continue
-
-			if (pattern.test(tool.name) || pattern.test(tool.description ?? "")) {
-				piMatches.push({
-					name: tool.name,
-					description: tool.description ?? "",
-				})
+		let piPattern: RegExp
+		try {
+			if (regex) {
+				piPattern = new RegExp(trimmed, "i")
+			} else {
+				const escaped = trimmed
+					.split(/\s+/)
+					.filter((t) => t.length > 0)
+					.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+				piPattern = new RegExp(escaped.join("|"), "i")
 			}
+			for (const tool of getPiTools()) {
+				if (tool.name === "mcp") continue
+				if (piPattern.test(tool.name) || piPattern.test(tool.description ?? "")) {
+					piMatches.push({ name: tool.name, description: tool.description ?? "" })
+				}
+			}
+		} catch {
+			// invalid regex — skip pi tools
 		}
 	}
 
-	for (const [serverName, metadata] of state.toolMetadata.entries()) {
-		if (server && serverName !== server) continue
-		for (const tool of metadata) {
-			if (pattern.test(tool.name) || pattern.test(tool.description)) {
-				matches.push({
-					server: serverName,
-					tool,
-				})
+	// MCP tool search: use strategy (BM25/regex) unless regex flag forces legacy path
+	const matches: Array<{ server: string; tool: ToolMetadata }> = []
+
+	if (!regex && strategy) {
+		// Strategy-based search across all MCP tools, then filter by server if needed
+		const results = strategy.search(trimmed, server ? Number.MAX_SAFE_INTEGER : limit)
+		for (const result of results) {
+			if (server && result.entry.server !== server) continue
+			const serverMeta = state.toolMetadata.get(result.entry.server)
+			const toolMeta = serverMeta?.find((t) => t.name === result.entry.name)
+			if (toolMeta) {
+				matches.push({ server: result.entry.server, tool: toolMeta })
+			}
+		}
+	} else {
+		// Legacy regex path (when regex=true or no strategy available)
+		let pattern: RegExp
+		try {
+			if (regex) {
+				pattern = new RegExp(trimmed, "i")
+			} else {
+				const escaped = trimmed
+					.split(/\s+/)
+					.filter((t) => t.length > 0)
+					.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+				pattern = new RegExp(escaped.join("|"), "i")
+			}
+		} catch {
+			return {
+				content: [{ type: "text" as const, text: `Invalid regex: ${query}` }],
+				details: { mode: "search", error: "invalid_pattern", query },
+			}
+		}
+		for (const [serverName, metadata] of state.toolMetadata.entries()) {
+			if (server && serverName !== server) continue
+			for (const tool of metadata) {
+				if (pattern.test(tool.name) || pattern.test(tool.description)) {
+					matches.push({ server: serverName, tool })
+				}
 			}
 		}
 	}
@@ -373,9 +399,19 @@ export function executeSearch(
 		}
 	}
 
-	let text = `Found ${totalCount} tool${totalCount === 1 ? "" : "s"} matching "${query}":\n\n`
+	// Apply limit: fill from piMatches first, then MCP matches
+	const piLimit = Math.min(piMatches.length, limit)
+	const mcpLimit = Math.min(matches.length, limit - piLimit)
+	const limitedPiMatches = piMatches.slice(0, piLimit)
+	const limitedMatches = matches.slice(0, mcpLimit)
+	const shownCount = limitedPiMatches.length + limitedMatches.length
+	const truncated = totalCount > shownCount
 
-	for (const match of piMatches) {
+	let text = truncated
+		? `Found ${totalCount} tool${totalCount === 1 ? "" : "s"} matching "${query}" (showing ${shownCount}, refine your query for more):\n\n`
+		: `Found ${totalCount} tool${totalCount === 1 ? "" : "s"} matching "${query}":\n\n`
+
+	for (const match of limitedPiMatches) {
 		if (showSchemas) {
 			text += `[pi tool] ${match.name}\n`
 			text += `  ${match.description || "(no description)"}\n`
@@ -390,7 +426,7 @@ export function executeSearch(
 		}
 	}
 
-	for (const match of matches) {
+	for (const match of limitedMatches) {
 		if (showSchemas) {
 			text += `${match.tool.name}\n`
 			text += `  ${match.tool.description || "(no description)"}\n`
@@ -414,10 +450,11 @@ export function executeSearch(
 		details: {
 			mode: "search",
 			matches: [
-				...piMatches.map((m) => ({ server: "pi", tool: m.name })),
-				...matches.map((m) => ({ server: m.server, tool: m.tool.name })),
+				...limitedPiMatches.map((m) => ({ server: "pi", tool: m.name })),
+				...limitedMatches.map((m) => ({ server: m.server, tool: m.tool.name })),
 			],
 			count: totalCount,
+			shown: shownCount,
 			query,
 		},
 	}
