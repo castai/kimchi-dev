@@ -169,6 +169,11 @@ pnpm install
 
 ### Running locally
 
+Run the folling script to propagate all necessary resources:
+```
+node ./scripts/copy-resources.js --dev
+```
+
 Run the CLI directly via Bun:
 
 ```bash
