@@ -1,20 +1,7 @@
 #!/usr/bin/env node
 
 import { homedir } from "node:os"
-import { dirname, resolve } from "node:path"
-import { fileURLToPath } from "node:url"
-
-import { isBunBinary } from "./env.js"
-
-// Set PI_PACKAGE_DIR before any pi-mono imports so piConfig is discovered
-// from this project's package.json (which sets name: "kimchi").
-// In a bun-compiled binary, import.meta.url points to a virtual filesystem
-// ($bunfs), so we skip the override and let pi-mono's built-in detection use
-// dirname(process.execPath) instead — package.json is shipped next to the binary.
-if (!isBunBinary) {
-	const __dirname = dirname(fileURLToPath(import.meta.url))
-	process.env.PI_PACKAGE_DIR = resolve(__dirname, "..")
-}
+import { resolve } from "node:path"
 
 // Set agent config directory before any pi-mono imports.
 // pi-mono computes the env var name as APP_NAME.toUpperCase() + "_CODING_AGENT_DIR",
