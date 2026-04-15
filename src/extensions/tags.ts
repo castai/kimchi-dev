@@ -474,6 +474,9 @@ export default function tagsExtension(pi: ExtensionAPI) {
 
 	// Inject tags into every LLM request
 	pi.on("before_provider_request", async (event, ctx) => {
+		// Tags are a Cast AI-specific API field; skip for other providers
+		if (ctx.model?.provider !== "kimchi-dev") return
+
 		const payload = event.payload as Record<string, unknown> | null
 		if (!payload || typeof payload !== "object") return
 
