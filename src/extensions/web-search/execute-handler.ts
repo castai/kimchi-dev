@@ -12,7 +12,7 @@ import { truncateHead, truncateLine } from "@mariozechner/pi-coding-agent"
 export const SEARCH_ENDPOINT = process.env.KIMCHI_SEARCH_ENDPOINT ?? "https://kimchi.dev/v1/search"
 export const SEARCH_TIMEOUT_MS = 25_000
 export const DEFAULT_LIMIT = 8
-const MAX_LINE_LENGTH = 240
+export const DEFAULT_MAX_CONTENT_CHARS = 2000
 const MAX_LINES = 500
 
 export type Recency = "day" | "week" | "month" | "year"
@@ -41,13 +41,13 @@ export interface WebSearchResult {
 	details: Record<string, never>
 }
 
-export function formatForLLM(response: SearchResponse): string {
+export function formatForLLM(response: SearchResponse, maxContentChars = DEFAULT_MAX_CONTENT_CHARS): string {
 	const parts: string[] = []
 
 	for (const [i, src] of response.sources.entries()) {
 		parts.push(`[${i + 1}] ${src.title}\n    ${src.url}`)
 		if (src.snippet) {
-			parts.push(`    ${truncateLine(src.snippet, MAX_LINE_LENGTH).text}`)
+			parts.push(`    ${truncateLine(src.snippet, maxContentChars).text}`)
 		}
 	}
 
@@ -116,7 +116,7 @@ export async function executeWebSearch(params: WebSearchParams, signal?: AbortSi
 
 	try {
 		const data = await fetchSearchResponse(body, apiKey, combinedSignal)
-		const raw = formatForLLM(data)
+		const raw = formatForLLM(data, params.max_content_chars)
 		const truncation = truncateHead(raw, { maxLines: MAX_LINES })
 
 		let text = truncation.content || "No results found."
