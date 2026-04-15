@@ -211,8 +211,6 @@ export class TagManager {
 	}
 }
 
-const tagManager = new TagManager()
-
 // ─── Footer formatting ────────────────────────────────────────────────────────
 
 function getColorForKey(key: string): ThemeColor {
@@ -268,7 +266,7 @@ function formatTagsForFooter(tags: string[], theme: Theme, phase: Phase | undefi
 	return statusParts.join("  ")
 }
 
-function updateFooterStatus(ctx: ExtensionContext): void {
+function updateFooterStatus(tagManager: TagManager, ctx: ExtensionContext): void {
 	if (!ctx.hasUI) return
 
 	const allTags = tagManager.getAllTags()
@@ -279,7 +277,7 @@ function updateFooterStatus(ctx: ExtensionContext): void {
 
 // ─── Command handlers ─────────────────────────────────────────────────────────
 
-function handleTagsCommand(args: string, ctx: ExtensionCommandContext): void {
+function handleTagsCommand(args: string, ctx: ExtensionCommandContext, tagManager: TagManager): void {
 	const trimmed = args.trim().toLowerCase()
 
 	if (!trimmed || trimmed === "list" || trimmed === "ls") {
@@ -335,7 +333,7 @@ function handleTagsCommand(args: string, ctx: ExtensionCommandContext): void {
 		const failed = results.filter((r) => !r.success)
 
 		if (succeeded.length > 0) {
-			updateFooterStatus(ctx)
+			updateFooterStatus(tagManager, ctx)
 		}
 
 		const lines: string[] = []
@@ -357,7 +355,8 @@ function handleTagsCommand(args: string, ctx: ExtensionCommandContext): void {
 	}
 
 	if (trimmed.startsWith("remove ") || trimmed.startsWith("rm ")) {
-		const tagsInput = args.slice(trimmed.startsWith("remove ") ? 7 : 3).trim()
+		const normalised = args.trim()
+		const tagsInput = normalised.slice(normalised.toLowerCase().startsWith("remove ") ? 7 : 3).trim()
 		const tagsToRemove = tagsInput.split(/\s+/).filter((t) => t.length > 0)
 
 		if (tagsToRemove.length === 0) {
@@ -374,7 +373,7 @@ function handleTagsCommand(args: string, ctx: ExtensionCommandContext): void {
 		const failed = results.filter((r) => !r.success)
 
 		if (succeeded.length > 0) {
-			updateFooterStatus(ctx)
+			updateFooterStatus(tagManager, ctx)
 		}
 
 		const lines: string[] = []
@@ -397,7 +396,7 @@ function handleTagsCommand(args: string, ctx: ExtensionCommandContext): void {
 
 	if (trimmed === "clear") {
 		const result = tagManager.clear()
-		updateFooterStatus(ctx)
+		updateFooterStatus(tagManager, ctx)
 		ctx.ui.notify(`Cleared ${result.removed} user-defined tag(s).`, "info")
 		return
 	}
@@ -429,11 +428,13 @@ const SetPhaseParams = Type.Object({
 // ─── Extension entry point ─────────────────────────────────────────────────────
 
 export default function tagsExtension(pi: ExtensionAPI) {
+	const tagManager = new TagManager()
+
 	// Register the /tags command
 	pi.registerCommand("tags", {
 		description: "Manage LLM request tags for usage tracking",
 		handler: async (args, ctx) => {
-			handleTagsCommand(args, ctx)
+			handleTagsCommand(args, ctx, tagManager)
 		},
 	})
 
@@ -461,7 +462,7 @@ export default function tagsExtension(pi: ExtensionAPI) {
 			tagManager.setPhase(phase)
 
 			if (ctx.hasUI) {
-				updateFooterStatus(ctx)
+				updateFooterStatus(tagManager, ctx)
 				ctx.ui.notify(`Phase changed to: ${phase}`, "info")
 			}
 
@@ -474,7 +475,7 @@ export default function tagsExtension(pi: ExtensionAPI) {
 
 	// Initialize footer status on session start
 	pi.on("session_start", async (_event, ctx) => {
-		updateFooterStatus(ctx)
+		updateFooterStatus(tagManager, ctx)
 	})
 
 	// Inject tags into every LLM request
@@ -500,9 +501,11 @@ export default function tagsExtension(pi: ExtensionAPI) {
 
 		if (finalTags.length === 0) return
 
-		// Merge with any existing tags in the payload
+		// Merge with any existing tags in the payload — extension tags take priority
 		const existing = Array.isArray(payload.tags) ? (payload.tags as string[]) : []
-		const merged = [...new Set([...existing, ...finalTags])].slice(0, 10)
+		const extensionSet = new Set(finalTags)
+		const uniqueExisting = existing.filter((t) => !extensionSet.has(t))
+		const merged = [...finalTags, ...uniqueExisting].slice(0, 10)
 
 		if (merged.length > 0) {
 			payload.tags = merged

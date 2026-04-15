@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { TagManager, isValidTag, parseTag } from "./tags.js"
 
 describe("isValidTag", () => {
@@ -62,18 +62,16 @@ describe("parseTag", () => {
 describe("TagManager persistence", () => {
 	let tempDir: string
 	let configPath: string
-	let originalEnv: string | undefined
 
 	beforeEach(() => {
 		tempDir = mkdtempSync(join(tmpdir(), "kimchi-tags-test-"))
 		configPath = join(tempDir, "tags.json")
-		originalEnv = process.env.KIMCHI_TAGS
-		process.env.KIMCHI_TAGS = undefined
+		vi.stubEnv("KIMCHI_TAGS", "")
 	})
 
 	afterEach(() => {
 		rmSync(tempDir, { recursive: true, force: true })
-		process.env.KIMCHI_TAGS = originalEnv
+		vi.unstubAllEnvs()
 	})
 
 	it("persists added tags to config file", () => {
@@ -129,12 +127,12 @@ describe("TagManager.add", () => {
 	beforeEach(() => {
 		tempDir = mkdtempSync(join(tmpdir(), "kimchi-tags-test-"))
 		configPath = join(tempDir, "tags.json")
-		process.env.KIMCHI_TAGS = undefined
+		vi.stubEnv("KIMCHI_TAGS", "")
 	})
 
 	afterEach(() => {
 		rmSync(tempDir, { recursive: true, force: true })
-		process.env.KIMCHI_TAGS = undefined
+		vi.unstubAllEnvs()
 	})
 
 	it("returns duplicate error before limit error when tag already exists at capacity", () => {
