@@ -262,7 +262,7 @@ export function executeStatus(state: McpExtensionState): ProxyToolResult {
 export function executeDescribe(
 	state: McpExtensionState,
 	toolName: string,
-	onInject?: (specs: DirectToolSpec[]) => void,
+	onInject?: (specs: DirectToolSpec[]) => string[],
 ): ProxyToolResult {
 	let serverName: string | undefined
 	let toolMeta: ToolMetadata | undefined
@@ -283,8 +283,9 @@ export function executeDescribe(
 		}
 	}
 
+	let injectedNames: string[] = []
 	if (onInject && !toolMeta.resourceUri) {
-		onInject([
+		injectedNames = onInject([
 			{
 				serverName,
 				originalName: toolMeta.name,
@@ -312,9 +313,13 @@ export function executeDescribe(
 		text += `\nNo parameters defined.`
 	}
 
+	if (injectedNames.length > 0) {
+		text += `\n\nInjected into context — call directly as: ${injectedNames[0]}`
+	}
+
 	return {
 		content: [{ type: "text" as const, text: text.trim() }],
-		details: { mode: "describe", tool: toolMeta, server: serverName },
+		details: { mode: "describe", tool: toolMeta, server: serverName, injected: injectedNames },
 	}
 }
 
@@ -327,7 +332,7 @@ export function executeSearch(
 	getPiTools?: () => ToolInfo[],
 	limit = 5,
 	strategy?: SearchStrategy,
-	onInject?: (specs: DirectToolSpec[]) => void,
+	onInject?: (specs: DirectToolSpec[]) => string[],
 ): ProxyToolResult {
 	const showSchemas = includeSchemas !== false
 
@@ -427,6 +432,7 @@ export function executeSearch(
 	const truncated = totalCount > shownCount
 
 	// Inject matched MCP tools as native pi tools for the next turn
+	let injectedNames: string[] = []
 	if (onInject && limitedMatches.length > 0) {
 		const specs: DirectToolSpec[] = limitedMatches
 			.filter((m) => !m.tool.resourceUri)
@@ -439,7 +445,7 @@ export function executeSearch(
 				uiResourceUri: m.tool.uiResourceUri,
 				uiStreamMode: m.tool.uiStreamMode,
 			}))
-		if (specs.length > 0) onInject(specs)
+		if (specs.length > 0) injectedNames = onInject(specs)
 	}
 
 	let text = truncated
@@ -480,6 +486,10 @@ export function executeSearch(
 		}
 	}
 
+	if (injectedNames.length > 0) {
+		text += `\nInjected into context (call directly by name): ${injectedNames.join(", ")}`
+	}
+
 	return {
 		content: [{ type: "text" as const, text: text.trim() }],
 		details: {
@@ -491,6 +501,7 @@ export function executeSearch(
 			count: totalCount,
 			shown: shownCount,
 			query,
+			injected: injectedNames,
 		},
 	}
 }

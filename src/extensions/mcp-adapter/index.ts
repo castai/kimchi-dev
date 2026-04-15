@@ -107,11 +107,15 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 		registeredToolNames.add(spec.prefixedName)
 	}
 
-	function registerAndActivate(specs: DirectToolSpec[]): void {
-		if (!state) return
+	function registerAndActivate(specs: DirectToolSpec[]): string[] {
+		if (!state) return []
 		const newNames: string[] = []
+		const alreadyActive: string[] = []
 		for (const spec of specs) {
-			if (registeredToolNames.has(spec.prefixedName)) continue
+			if (registeredToolNames.has(spec.prefixedName)) {
+				alreadyActive.push(spec.prefixedName)
+				continue
+			}
 			pi.registerTool({
 				name: spec.prefixedName,
 				label: `MCP: ${spec.originalName}`,
@@ -126,13 +130,16 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 			registeredToolNames.add(spec.prefixedName)
 			newNames.push(spec.prefixedName)
 		}
-		if (newNames.length === 0) return
-		for (const name of newNames) {
-			state.dynamicToolNames.add(name)
+		const allInjected = [...alreadyActive, ...newNames]
+		if (newNames.length > 0) {
+			for (const name of newNames) {
+				state.dynamicToolNames.add(name)
+			}
+			const current = new Set(pi.getActiveTools())
+			for (const name of newNames) current.add(name)
+			pi.setActiveTools([...current])
 		}
-		const current = new Set(pi.getActiveTools())
-		for (const name of newNames) current.add(name)
-		pi.setActiveTools([...current])
+		return allInjected
 	}
 
 	pi.on("input", () => {
