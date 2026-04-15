@@ -7,13 +7,16 @@
 
 import { truncateHead, truncateLine } from "@mariozechner/pi-coding-agent"
 
-export const SEARCH_ENDPOINT = "https://kimchi.dev/v1/search"
+// LOCAL DEV: Point to local proxy for testing. Switch back to "https://kimchi.dev/v1/search" after dev.
+// TODO: remove this override once the proxy is deployed with the new search params.
+export const SEARCH_ENDPOINT = process.env.KIMCHI_SEARCH_ENDPOINT ?? "https://kimchi.dev/v1/search"
 export const SEARCH_TIMEOUT_MS = 25_000
 export const DEFAULT_LIMIT = 8
 const MAX_LINE_LENGTH = 240
 const MAX_LINES = 500
 
 export type Recency = "day" | "week" | "month" | "year"
+export type SearchDepth = "basic" | "deep"
 
 export interface SearchSource {
 	title: string
@@ -22,7 +25,6 @@ export interface SearchSource {
 }
 
 export interface SearchResponse {
-	answer?: string
 	sources: SearchSource[]
 }
 
@@ -30,6 +32,8 @@ export interface WebSearchParams {
 	query: string
 	limit?: number
 	recency?: Recency
+	search_depth?: SearchDepth
+	max_content_chars?: number
 }
 
 export interface WebSearchResult {
@@ -40,17 +44,10 @@ export interface WebSearchResult {
 export function formatForLLM(response: SearchResponse): string {
 	const parts: string[] = []
 
-	if (response.answer) {
-		parts.push(response.answer)
-	}
-
-	if (response.sources.length > 0) {
-		if (response.answer) parts.push("\n## Sources")
-		for (const [i, src] of response.sources.entries()) {
-			parts.push(`[${i + 1}] ${src.title}\n    ${src.url}`)
-			if (src.snippet) {
-				parts.push(`    ${truncateLine(src.snippet, MAX_LINE_LENGTH).text}`)
-			}
+	for (const [i, src] of response.sources.entries()) {
+		parts.push(`[${i + 1}] ${src.title}\n    ${src.url}`)
+		if (src.snippet) {
+			parts.push(`    ${truncateLine(src.snippet, MAX_LINE_LENGTH).text}`)
 		}
 	}
 
@@ -109,6 +106,8 @@ export async function executeWebSearch(params: WebSearchParams, signal?: AbortSi
 		query: params.query,
 		limit: Math.max(1, Math.min(params.limit ?? DEFAULT_LIMIT, 20)),
 		...(params.recency !== undefined ? { recency: params.recency } : {}),
+		...(params.search_depth !== undefined ? { search_depth: params.search_depth } : {}),
+		...(params.max_content_chars !== undefined ? { max_content_chars: params.max_content_chars } : {}),
 	}
 
 	const controller = new AbortController()

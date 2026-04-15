@@ -19,7 +19,9 @@ export default function webSearchExtension(pi: ExtensionAPI): void {
 			"Searches the web for up-to-date information beyond the model's knowledge cutoff. " +
 			"Prefer primary sources (official docs, papers) and corroborate key claims with multiple sources. " +
 			"Include links for cited sources in the final response. " +
-			"Use the recency parameter when the query is time-sensitive.",
+			"Use the recency parameter when the query is time-sensitive. " +
+			"Use search_depth='deep' only for complex queries requiring high precision — it costs more and is slower. " +
+			"Use max_content_chars to control how much content is returned per result (default: 2000).",
 		promptSnippet: "Search the web for current information",
 		parameters: Type.Object({
 			query: Type.String({ description: "Search query" }),
@@ -33,6 +35,22 @@ export default function webSearchExtension(pi: ExtensionAPI): void {
 					minimum: 1,
 					maximum: 20,
 					description: "Maximum number of results to return (default: 8)",
+				}),
+			),
+			search_depth: Type.Optional(
+				StringEnum(["basic", "deep"] as const, {
+					description:
+						"Search quality vs cost tradeoff. 'basic' (default) is fast and cheap. " +
+						"'deep' uses multi-step reasoning for higher precision — use only for complex queries where quality matters more than speed.",
+				}),
+			),
+			max_content_chars: Type.Optional(
+				Type.Integer({
+					minimum: 200,
+					maximum: 10000,
+					description:
+						"Maximum characters of content to return per result (default: 2000). " +
+						"Increase for deep research; decrease to save context window space.",
 				}),
 			),
 		}),
@@ -50,6 +68,7 @@ export default function webSearchExtension(pi: ExtensionAPI): void {
 				theme.fg("muted", ")"),
 				...(args.recency ? [theme.fg("muted", ` recency:${args.recency}`)] : []),
 				...(args.limit !== undefined ? [theme.fg("muted", ` limit:${args.limit}`)] : []),
+				...(args.search_depth ? [theme.fg("muted", ` depth:${args.search_depth}`)] : []),
 			]
 			text.setText(parts.join(""))
 			return text
