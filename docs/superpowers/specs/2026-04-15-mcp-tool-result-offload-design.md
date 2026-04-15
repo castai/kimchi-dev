@@ -37,15 +37,17 @@ function applyOffload(
 1. Filter `type === "text"` blocks, concatenate into single string
 2. If total chars ≤ `maxChars` → return content as-is (no change)
 3. If over limit:
-   - Detect format: try `JSON.parse` on trimmed content → `.json`, else `.txt`
+   - Detect format: lightweight heuristic `/^\s*[\{\[]/.test(content)` → `.json`, else `.txt` (avoids blocking the event loop on large strings; concatenated multi-block content is never valid JSON anyway)
    - Derive output dir:
      - `sessionFile = ctx.sessionManager.getSessionFile()`
      - If set: `dirname(sessionFile)/tool-results/`
      - Else: `os.tmpdir()/kimchi-tool-results/`
    - `mkdirSync(dir, { recursive: true })`
    - Write full content to `<dir>/<uuid>.<ext>`
-   - On I/O failure: log warning, fall back to `truncateTail`
-   - Return message to model (see below)
+   - On I/O failure: log warning, hard-slice: `text.slice(0, maxChars) + "\n\n... [Truncated due to I/O error]"` (do NOT fall back to `truncateTail` — it fails on single-line blobs, the same class of input that triggered offload)
+   - Return: all original non-text blocks (images etc.) preserved + new offload message text block
+
+**Note:** The message references `bash` for file inspection. Kimchi always registers bash as a core tool, so this is guaranteed to be available.
 
 **Model message format:**
 ```
@@ -75,10 +77,10 @@ Format: <JSON | Plain text>
 
 | Scenario | Handling |
 |---|---|
-| `getSessionFile()` returns null | Fall back to `os.tmpdir()/kimchi-tool-results/` |
+| `getSessionFile()` returns null | Fall back to `os.tmpdir()/kimchi-tool-results/` (files unmanaged; rely on OS temp cleanup; proper cleanup deferred to future PR) |
 | `mkdirSync` or file write fails | Log warning, fall back to `truncateTail` |
 | Content is not valid JSON | Use `.txt` extension |
-| Content has mixed blocks (images etc.) | Only text blocks concatenated; non-text blocks dropped from file |
+| Content has mixed blocks (images etc.) | Only text blocks written to file; non-text blocks (images) preserved in the returned `ContentBlock[]` alongside the offload message |
 
 ---
 
