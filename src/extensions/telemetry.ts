@@ -1,5 +1,5 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import type { AssistantMessage } from "@mariozechner/pi-ai"
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import type { TelemetryConfig } from "../config.js"
 
 // ---------------------------------------------------------------------------
@@ -17,20 +17,50 @@ function strAttr(key: string, value: string): { key: string; value: { stringValu
 function inferLanguage(filePath: string): string {
 	const ext = filePath.split(".").pop()?.toLowerCase() ?? ""
 	const map: Record<string, string> = {
-		ts: "TypeScript", tsx: "TypeScript",
-		js: "JavaScript", jsx: "JavaScript", mjs: "JavaScript", cjs: "JavaScript",
-		py: "Python", go: "Go", rs: "Rust", rb: "Ruby",
-		java: "Java", kt: "Kotlin", swift: "Swift",
-		c: "C", h: "C", cpp: "C++", cc: "C++", cxx: "C++", hpp: "C++",
-		cs: "C#", php: "PHP", dart: "Dart",
-		md: "Markdown", mdx: "Markdown",
-		json: "JSON", yaml: "YAML", yml: "YAML",
-		toml: "TOML", ini: "TOML",
-		xml: "HTML/XML", html: "HTML/XML", htm: "HTML/XML", svg: "HTML/XML",
-		css: "CSS", scss: "CSS", less: "CSS",
-		sql: "SQL", sh: "Bash", bash: "Bash", zsh: "Bash",
-		txt: "Plain text", proto: "Protocol Buffers",
-		tf: "HCL", dockerfile: "Dockerfile",
+		ts: "TypeScript",
+		tsx: "TypeScript",
+		js: "JavaScript",
+		jsx: "JavaScript",
+		mjs: "JavaScript",
+		cjs: "JavaScript",
+		py: "Python",
+		go: "Go",
+		rs: "Rust",
+		rb: "Ruby",
+		java: "Java",
+		kt: "Kotlin",
+		swift: "Swift",
+		c: "C",
+		h: "C",
+		cpp: "C++",
+		cc: "C++",
+		cxx: "C++",
+		hpp: "C++",
+		cs: "C#",
+		php: "PHP",
+		dart: "Dart",
+		md: "Markdown",
+		mdx: "Markdown",
+		json: "JSON",
+		yaml: "YAML",
+		yml: "YAML",
+		toml: "TOML",
+		ini: "TOML",
+		xml: "HTML/XML",
+		html: "HTML/XML",
+		htm: "HTML/XML",
+		svg: "HTML/XML",
+		css: "CSS",
+		scss: "CSS",
+		less: "CSS",
+		sql: "SQL",
+		sh: "Bash",
+		bash: "Bash",
+		zsh: "Bash",
+		txt: "Plain text",
+		proto: "Protocol Buffers",
+		tf: "HCL",
+		dockerfile: "Dockerfile",
 	}
 	return map[ext] ?? "unknown"
 }
@@ -56,29 +86,35 @@ async function sendLog(
 	const now = nowNano()
 	const headers: Record<string, string> = { "Content-Type": "application/json", ...config.headers }
 	const payload = {
-		resourceLogs: [{
-			resource: { attributes: [strAttr("service.name", "kimchi")], droppedAttributesCount: 0 },
-			scopeLogs: [{
-				scope: { name: "kimchi", version: "1.0.0" },
-				logRecords: [{
-					timeUnixNano: now,
-					observedTimeUnixNano: now,
-					severityNumber: 9,
-					severityText: "INFO",
-					eventName,
-					body: { stringValue: eventName },
-					attributes: [
-						strAttr("session.id", sessionId),
-						strAttr("client", "pi"),
-						...Object.entries(attrs).map(([k, v]) => strAttr(k, String(v))),
-					],
-					droppedAttributesCount: 0,
-					flags: 0,
-					traceId: "",
-					spanId: "",
-				}],
-			}],
-		}],
+		resourceLogs: [
+			{
+				resource: { attributes: [strAttr("service.name", "kimchi")], droppedAttributesCount: 0 },
+				scopeLogs: [
+					{
+						scope: { name: "kimchi", version: "1.0.0" },
+						logRecords: [
+							{
+								timeUnixNano: now,
+								observedTimeUnixNano: now,
+								severityNumber: 9,
+								severityText: "INFO",
+								eventName,
+								body: { stringValue: eventName },
+								attributes: [
+									strAttr("session.id", sessionId),
+									strAttr("client", "pi"),
+									...Object.entries(attrs).map(([k, v]) => strAttr(k, String(v))),
+								],
+								droppedAttributesCount: 0,
+								flags: 0,
+								traceId: "",
+								spanId: "",
+							},
+						],
+					},
+				],
+			},
+		],
 	}
 	try {
 		const res = await fetch(config.endpoint, {
@@ -101,7 +137,7 @@ async function sendLog(
 // ---------------------------------------------------------------------------
 
 export default function telemetryExtension(config: TelemetryConfig) {
-	return function (pi: ExtensionAPI) {
+	return (pi: ExtensionAPI) => {
 		if (!config.enabled) return
 
 		let sessionId = crypto.randomUUID()
@@ -195,7 +231,9 @@ export default function telemetryExtension(config: TelemetryConfig) {
 			if (toolName === "multiedit") {
 				const filePath = String(args?.filePath ?? "")
 				const language = inferLanguage(filePath)
-				const edits = Array.isArray(args?.edits) ? (args.edits as Array<{ oldString?: string; newString?: string }>) : []
+				const edits = Array.isArray(args?.edits)
+					? (args.edits as Array<{ oldString?: string; newString?: string }>)
+					: []
 				for (const edit of edits) {
 					const changes = countLineChanges(String(edit.oldString ?? ""), String(edit.newString ?? ""))
 					void sendLog(config, sessionId, "tool_usage", {

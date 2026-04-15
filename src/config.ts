@@ -74,10 +74,7 @@ export function readTelemetryConfig(configPath?: string): TelemetryConfig {
 		// missing or invalid config — use defaults
 	}
 
-	const enabled =
-		envEnabled !== undefined
-			? envEnabled !== "0" && envEnabled !== "false"
-			: (fileEnabled ?? true)
+	const enabled = envEnabled !== undefined ? envEnabled !== "0" && envEnabled !== "false" : (fileEnabled ?? true)
 
 	return {
 		enabled,
