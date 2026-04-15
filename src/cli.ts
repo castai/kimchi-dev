@@ -27,10 +27,12 @@ process.env.PI_SKIP_VERSION_CHECK = "1"
 
 import { loadConfig } from "./config.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
+import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
 import subagentExtension from "./extensions/subagent.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import { updateModelsConfig } from "./models.js"
+import { setAvailableModelIds } from "./startup-context.js"
 
 try {
 	const config = loadConfig()
@@ -46,6 +48,10 @@ try {
 		console.error(`Warning: using default models (${modelsResult.error})`)
 	}
 
+	// Share the discovered model IDs with extensions before main() runs.
+	// prompt-enrichment reads this to build ModelRegistry with live model IDs.
+	setAvailableModelIds(modelsResult.models)
+
 	// Suppress Node.js warnings (same as pi-mono's own cli.js)
 	process.emitWarning = () => {}
 
@@ -56,7 +62,13 @@ try {
 	// Delegate to pi-mono's CLI main function, injecting the kimchi extension
 	const { main } = await import("@mariozechner/pi-coding-agent")
 	await main(process.argv.slice(2), {
-		extensionFactories: [subagentExtension, webFetchExtension, promptEnrichmentExtension, bashCollapseExtension],
+		extensionFactories: [
+			subagentExtension,
+			mcpAdapterExtension,
+			webFetchExtension,
+			promptEnrichmentExtension,
+			bashCollapseExtension,
+		],
 	})
 } catch (err) {
 	console.error(err instanceof Error ? err.message : String(err))

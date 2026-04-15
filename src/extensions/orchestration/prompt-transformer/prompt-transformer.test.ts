@@ -1,7 +1,9 @@
 import type { Skill } from "@mariozechner/pi-coding-agent"
 import { describe, expect, it } from "vitest"
-import { ModelRegistry } from "../model-registry/index.js"
+import { MODEL_CAPABILITIES, ModelRegistry } from "../model-registry/index.js"
 import { buildOrchestratorSystemPrompt, buildSubagentSystemPrompt, transformPrompt } from "./prompt-transformer.js"
+
+const ALL_KNOWN_IDS = [...MODEL_CAPABILITIES.keys()]
 
 function createSkill(overrides: Partial<Skill> & { name: string; description: string }): Skill {
 	return {
@@ -14,7 +16,7 @@ function createSkill(overrides: Partial<Skill> & { name: string; description: st
 }
 
 describe("transformPrompt", () => {
-	const registry = new ModelRegistry()
+	const registry = new ModelRegistry(ALL_KNOWN_IDS)
 	const currentModel = { id: "kimi-k2.5", name: "Kimi K2.5" }
 
 	it("includes the original user prompt", () => {
@@ -65,8 +67,8 @@ describe("transformPrompt", () => {
 
 	it("excludes the current model from the subagent models list", () => {
 		const result = transformPrompt("some task", registry, currentModel)
-		// All models except the current one should appear in the subagent section
-		const otherModels = registry.getAll().filter((m) => m.id !== currentModel.id)
+		// All models with capabilities except the current one should appear in the subagent section
+		const otherModels = registry.getModelsWithCapabilities().filter((m) => m.id !== currentModel.id)
 		for (const model of otherModels) {
 			expect(result).toContain(model.name)
 		}
