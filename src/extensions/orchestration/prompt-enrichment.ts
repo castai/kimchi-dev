@@ -20,6 +20,7 @@
 
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
+import { getAvailableModelIds } from "../../startup-context.js"
 import { ModelRegistry } from "./model-registry/index.js"
 import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/context-files.js"
 import {
@@ -41,7 +42,13 @@ export default function (pi: ExtensionAPI) {
 
 	// For sub agents we don't want to transform the prompt sent from parent with model capabilities
 	if (!subagentMode) {
-		const registry = new ModelRegistry()
+		const registry = new ModelRegistry(getAvailableModelIds())
+
+		// Notify the developer when a newly available API model has no capability entry yet.
+		// These surface in the terminal as actionable discovery notices.
+		for (const warning of registry.warnings) {
+			console.error(`[model-registry] ${warning.message}`)
+		}
 
 		pi.on("input", async (event, ctx) => {
 			if (event.source === "extension") {
