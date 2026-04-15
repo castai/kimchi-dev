@@ -61,15 +61,18 @@ Format: <JSON | Plain text>
 ### Parameter threading
 
 - `src/config.ts`: add `maxToolResultChars` to `Config`, default `10_000`
-- `src/extensions/mcp-adapter/index.ts`: pass `ctx` and `config.maxToolResultChars` to `executeCall`
+- `src/extensions/mcp-adapter/index.ts`: import `loadConfig` from `../../config.js` to access `maxToolResultChars`; pass `ctx` and the value to `executeCall`
 - `src/extensions/mcp-adapter/proxy-modes.ts`: `executeCall` receives `ctx: ExtensionContext` and `maxToolResultChars: number`; calls `applyOffload` instead of `applyTruncation`
 
 ### What is NOT changed
 
 - `executeSearch`, `executeList`, `executeDescribe` — not affected
-- Direct tool executors — not affected
 - `renderResult` 10-line UI collapse — separate concern, unchanged
 - bash/read tools — not affected (can revisit later)
+
+### Known gap: direct tool executors
+
+`direct-tools.ts` (`createDirectToolExecutor`) also executes MCP tool calls and has the same context bloat risk. It is out of scope for this PR but should be addressed in a follow-up. The `applyOffload` function should be extracted to a shared utility so both `proxy-modes.ts` and `direct-tools.ts` can use it.
 
 ---
 
@@ -77,8 +80,8 @@ Format: <JSON | Plain text>
 
 | Scenario | Handling |
 |---|---|
-| `getSessionFile()` returns null | Fall back to `os.tmpdir()/kimchi-tool-results/` (files unmanaged; rely on OS temp cleanup; proper cleanup deferred to future PR) |
-| `mkdirSync` or file write fails | Log warning, fall back to `truncateTail` |
+| `getSessionFile()` returns null | Fall back to `os.tmpdir()/kimchi-tool-results-${os.userInfo().uid}/` (per-user isolation avoids permission conflicts on multi-user systems; files unmanaged, rely on OS temp cleanup; proper cleanup deferred to future PR) |
+| `mkdirSync` or file write fails | Log warning, hard-slice: `text.slice(0, maxChars) + "\n\n... [Truncated due to I/O error]"` |
 | Content is not valid JSON | Use `.txt` extension |
 | Content has mixed blocks (images etc.) | Only text blocks written to file; non-text blocks (images) preserved in the returned `ContentBlock[]` alongside the offload message |
 
