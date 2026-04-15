@@ -5,12 +5,20 @@ import { resolve } from "node:path"
 const KIMCHI_CONFIG_PATH = resolve(homedir(), ".config", "kimchi", "config.json")
 const AGENT_CONFIG_DIR = resolve(homedir(), ".config", "kimchi", "harness")
 const CAST_AI_LLM_ENDPOINT = "https://llm.cast.ai/openai/v1"
+const DEFAULT_TELEMETRY_ENDPOINT = "https://api.cast.ai/ai-optimizer/v1beta/logs:ingest"
+
+export interface TelemetryConfig {
+	enabled: boolean
+	endpoint: string
+	headers: Record<string, string>
+}
 
 export interface KimchiConfig {
 	apiKey: string
 	agentConfigDir: string
 	llmEndpoint: string
 	maxToolResultChars: number
+	mcpSearchLimit: number
 }
 
 /**
@@ -30,14 +38,79 @@ function readApiKeyFromConfigFile(configPath: string): string | undefined {
 	}
 }
 
-function readConfigExtras(configPath: string): { maxToolResultChars?: number } {
+function readConfigExtras(configPath: string): { maxToolResultChars?: number; mcpSearchLimit?: number } {
 	try {
 		const raw = readFileSync(configPath, "utf-8")
 		const parsed = JSON.parse(raw)
-		const val = parsed.maxToolResultChars
-		return { maxToolResultChars: typeof val === "number" && val > 0 ? val : undefined }
+		const maxToolResultChars =
+			typeof parsed.maxToolResultChars === "number" && parsed.maxToolResultChars > 0
+				? parsed.maxToolResultChars
+				: undefined
+		const mcpSearchLimit =
+			typeof parsed.mcpSearchLimit === "number" && parsed.mcpSearchLimit > 0 ? parsed.mcpSearchLimit : undefined
+		return { maxToolResultChars, mcpSearchLimit }
 	} catch {
 		return {}
+	}
+}
+
+/**
+ * Read telemetry configuration from config.json without requiring an API key.
+ * Safe to call before authentication is set up.
+ *
+ * Telemetry is disabled by default. It is enabled when:
+ *   - KIMCHI_TELEMETRY_ENABLED env var is set to a truthy value, or
+ *   - config.json has telemetry.enabled = true
+ *
+ * Auth header resolution order:
+ *   1. telemetry.headers in config.json (explicit override)
+ *   2. KIMCHI_API_KEY env var → Authorization: Bearer <key>
+ *   3. api_key in config.json → Authorization: Bearer <key>
+ */
+export function readTelemetryConfig(configPath?: string): TelemetryConfig {
+	const path = configPath ?? KIMCHI_CONFIG_PATH
+	const envEnabled = process.env.KIMCHI_TELEMETRY_ENABLED
+	let fileEnabled: boolean | undefined
+	let fileEndpoint: string | undefined
+	let fileHeaders: Record<string, string> | undefined
+
+	try {
+		const raw = readFileSync(path, "utf-8")
+		const parsed = JSON.parse(raw)
+		const t = parsed.telemetry
+		if (t && typeof t === "object") {
+			if (typeof t.enabled === "boolean") fileEnabled = t.enabled
+			if (typeof t.endpoint === "string" && t.endpoint.length > 0) fileEndpoint = t.endpoint
+			if (t.headers && typeof t.headers === "object" && !Array.isArray(t.headers)) {
+				fileHeaders = t.headers as Record<string, string>
+			}
+		}
+	} catch {
+		// missing or invalid config — use defaults
+	}
+
+	// Resolve auth headers: explicit config override takes priority, then API key
+	let headers: Record<string, string>
+	let apiKey: string | undefined
+	if (fileHeaders) {
+		headers = fileHeaders
+	} else {
+		apiKey =
+			(typeof process.env.KIMCHI_API_KEY === "string" && process.env.KIMCHI_API_KEY.length > 0
+				? process.env.KIMCHI_API_KEY
+				: undefined) ?? readApiKeyFromConfigFile(path)
+		headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
+	}
+
+	// Enabled by default when an API key is available; explicit config/env overrides either way
+	const defaultEnabled = fileHeaders ? Object.keys(fileHeaders).length > 0 : !!apiKey
+	const enabled =
+		envEnabled !== undefined ? envEnabled !== "0" && envEnabled !== "false" : (fileEnabled ?? defaultEnabled)
+
+	return {
+		enabled,
+		endpoint: fileEndpoint ?? DEFAULT_TELEMETRY_ENDPOINT,
+		headers,
 	}
 }
 
@@ -55,6 +128,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 	const configPath = options?.configPath ?? KIMCHI_CONFIG_PATH
 	const extras = readConfigExtras(configPath)
 	const maxToolResultChars = extras.maxToolResultChars ?? 10_000
+	const mcpSearchLimit = extras.mcpSearchLimit ?? 5
 
 	const envKey = env.KIMCHI_API_KEY
 	if (typeof envKey === "string" && envKey.length > 0) {
@@ -63,6 +137,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 			agentConfigDir: AGENT_CONFIG_DIR,
 			llmEndpoint: CAST_AI_LLM_ENDPOINT,
 			maxToolResultChars,
+			mcpSearchLimit,
 		}
 	}
 
@@ -73,6 +148,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 			agentConfigDir: AGENT_CONFIG_DIR,
 			llmEndpoint: CAST_AI_LLM_ENDPOINT,
 			maxToolResultChars,
+			mcpSearchLimit,
 		}
 	}
 

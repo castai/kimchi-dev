@@ -12,16 +12,19 @@ process.env.KIMCHI_CODING_AGENT_DIR = agentDir
 process.title = "kimchi"
 process.env.PI_SKIP_VERSION_CHECK = "1"
 
-import { loadConfig } from "./config.js"
+import { loadConfig, readTelemetryConfig } from "./config.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
 import subagentExtension from "./extensions/subagent.js"
 import tagsExtension from "./extensions/tags.js"
+import telemetryExtension from "./extensions/telemetry.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import webSearchExtension from "./extensions/web-search/index.js"
 import { updateModelsConfig } from "./models.js"
 import { setAvailableModelIds } from "./startup-context.js"
+
+const telemetryConfig = readTelemetryConfig()
 
 try {
 	const config = loadConfig()
@@ -52,6 +55,7 @@ try {
 	const { main } = await import("@mariozechner/pi-coding-agent")
 	await main(process.argv.slice(2), {
 		extensionFactories: [
+			telemetryExtension(telemetryConfig),
 			subagentExtension,
 			mcpAdapterExtension,
 			webFetchExtension,
