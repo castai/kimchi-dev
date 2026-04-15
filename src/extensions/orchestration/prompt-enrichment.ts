@@ -14,8 +14,8 @@
  * - "before_agent_start": replaces Pi's system prompt with the subagent
  *   system prompt. Filters out the subagent tool to prevent infinite loops.
  *
- * Steering messages are naturally excluded — they go through Agent.steer()
- * and never trigger the "input" event.
+ * Steering messages are excluded — when the agent is streaming, the handler
+ * returns "continue" so the message passes through unchanged.
  */
 
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
@@ -53,6 +53,13 @@ export default function (pi: ExtensionAPI) {
 
 		pi.on("input", async (event, _ctx) => {
 			if (event.source === "extension") {
+				return { action: "continue" as const }
+			}
+
+			// Steering and follow-up messages arrive while the agent is streaming
+			// (ctx.isIdle() === false, i.e. session.isStreaming === true).
+			// Skip enrichment and let them pass through unchanged
+			if (!_ctx.isIdle()) {
 				return { action: "continue" as const }
 			}
 
