@@ -5,6 +5,13 @@ import { resolve } from "node:path"
 const KIMCHI_CONFIG_PATH = resolve(homedir(), ".config", "kimchi", "config.json")
 const AGENT_CONFIG_DIR = resolve(homedir(), ".config", "kimchi", "harness")
 const CAST_AI_LLM_ENDPOINT = "https://llm.cast.ai/openai/v1"
+const DEFAULT_TELEMETRY_ENDPOINT = "https://api.cast.ai/ai-optimizer/v1beta/logs:ingest"
+
+export interface TelemetryConfig {
+	enabled: boolean
+	endpoint: string
+	headers: Record<string, string>
+}
 
 export interface KimchiConfig {
 	apiKey: string
@@ -38,6 +45,44 @@ function readConfigExtras(configPath: string): { maxToolResultChars?: number } {
 		return { maxToolResultChars: typeof val === "number" && val > 0 ? val : undefined }
 	} catch {
 		return {}
+	}
+}
+
+/**
+ * Read telemetry configuration from config.json without requiring an API key.
+ * Safe to call before authentication is set up.
+ */
+export function readTelemetryConfig(configPath?: string): TelemetryConfig {
+	const path = configPath ?? KIMCHI_CONFIG_PATH
+	const envEnabled = process.env.KIMCHI_TELEMETRY_ENABLED
+	let fileEnabled: boolean | undefined
+	let fileEndpoint: string | undefined
+	let fileHeaders: Record<string, string> | undefined
+
+	try {
+		const raw = readFileSync(path, "utf-8")
+		const parsed = JSON.parse(raw)
+		const t = parsed.telemetry
+		if (t && typeof t === "object") {
+			if (typeof t.enabled === "boolean") fileEnabled = t.enabled
+			if (typeof t.endpoint === "string" && t.endpoint.length > 0) fileEndpoint = t.endpoint
+			if (t.headers && typeof t.headers === "object" && !Array.isArray(t.headers)) {
+				fileHeaders = t.headers as Record<string, string>
+			}
+		}
+	} catch {
+		// missing or invalid config — use defaults
+	}
+
+	const enabled =
+		envEnabled !== undefined
+			? envEnabled !== "0" && envEnabled !== "false"
+			: (fileEnabled ?? true)
+
+	return {
+		enabled,
+		endpoint: fileEndpoint ?? DEFAULT_TELEMETRY_ENDPOINT,
+		headers: fileHeaders ?? {},
 	}
 }
 
