@@ -1,4 +1,8 @@
-import type { AgentToolResult, ToolInfo } from "@mariozechner/pi-coding-agent"
+import { randomUUID } from "node:crypto"
+import { mkdirSync, writeFileSync } from "node:fs"
+import { tmpdir, userInfo } from "node:os"
+import { dirname, join } from "node:path"
+import type { AgentToolResult, ExtensionContext, ToolInfo } from "@mariozechner/pi-coding-agent"
 import { truncateTail } from "@mariozechner/pi-coding-agent"
 import {
 	getFailureAgeSeconds,
@@ -33,6 +37,54 @@ function applyTruncation(content: ContentBlock[]): ContentBlock[] {
 	const notice = `\n[Truncated: showing last ${result.outputLines} of ${result.totalLines} lines (${result.totalBytes.toLocaleString()} bytes total). Use mcp({ describe: "tool_name" }) to check parameters if needed.]`
 	const nonText = content.filter((c): c is ImageContent => c.type !== "text")
 	return [{ type: "text" as const, text: result.content + notice }, ...nonText]
+}
+
+function applyOffload(
+	content: ContentBlock[],
+	toolName: string,
+	maxChars: number,
+	ctx: ExtensionContext,
+): ContentBlock[] {
+	const textItems = content.filter((c): c is TextContent => c.type === "text")
+	if (textItems.length === 0) return content
+
+	const combined = textItems.map((c) => c.text).join("\n")
+	if (combined.length <= maxChars) return content
+
+	const nonText = content.filter((c) => c.type !== "text")
+
+	// Lightweight format detection — avoids JSON.parse on large strings
+	const ext = /^\s*[\{\[]/.test(combined) ? "json" : "txt"
+
+	// Derive output directory from session file
+	let dir: string
+	const sessionFile = ctx.sessionManager.getSessionFile()
+	if (sessionFile) {
+		dir = join(dirname(sessionFile), "tool-results")
+	} else {
+		dir = join(tmpdir(), `kimchi-tool-results-${userInfo().uid}`)
+	}
+
+	let path: string
+	try {
+		mkdirSync(dir, { recursive: true })
+		path = join(dir, `${randomUUID()}.${ext}`)
+		writeFileSync(path, combined, "utf-8")
+	} catch (err) {
+		console.warn(`[mcp-adapter] applyOffload: failed to write tool result to disk:`, err)
+		// Hard-slice fallback — do NOT use truncateTail; it fails on single-line blobs
+		const sliced = combined.slice(0, maxChars) + "\n\n... [Truncated due to I/O error]"
+		return [...nonText, { type: "text" as const, text: sliced }]
+	}
+
+	const format = ext === "json" ? "JSON" : "Plain text"
+	const message = `result (${combined.length.toLocaleString()} characters) exceeds limit. Full output saved to ${path}.
+Format: ${format}
+- To search: use bash with grep on the file directly
+- To read in chunks: bash -c "python3 -c \\"print(open('${path}').read()[A:B])\\""
+- For analysis requiring full content: use a subagent with the file path`
+
+	return [...nonText, { type: "text" as const, text: message }]
 }
 
 type AutoAuthResult = { status: "skipped" } | { status: "success" } | { status: "failed"; message: string }
@@ -490,6 +542,8 @@ export async function executeCall(
 	toolName: string,
 	args?: Record<string, unknown>,
 	serverOverride?: string,
+	ctx?: ExtensionContext,
+	maxToolResultChars?: number,
 ): Promise<ProxyToolResult> {
 	let serverName: string | undefined = serverOverride
 	let toolMeta: ToolMetadata | undefined
@@ -827,7 +881,10 @@ export async function executeCall(
 			}
 		}
 
-		const truncated = applyTruncation((content.length > 0 ? content : [{ type: "text" as const, text: "(empty result)" }]) as ContentBlock[])
+		const finalContent = (content.length > 0 ? content : [{ type: "text" as const, text: "(empty result)" }]) as ContentBlock[]
+		const truncated = ctx
+			? applyOffload(finalContent, toolName, maxToolResultChars ?? 10_000, ctx)
+			: applyTruncation(finalContent)
 		return {
 			content: truncated,
 			details: { mode: "call", mcpResult: result, server: serverName, tool: toolMeta.originalName },
