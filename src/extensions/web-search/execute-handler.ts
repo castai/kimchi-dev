@@ -100,12 +100,14 @@ export async function executeWebSearch(params: WebSearchParams, signal?: AbortSi
 		throw new Error("KIMCHI_API_KEY is not set")
 	}
 
+	const maxContentChars = params.max_content_chars ?? DEFAULT_MAX_CONTENT_CHARS
+
 	const body = {
 		query: params.query,
 		limit: Math.max(1, Math.min(params.limit ?? DEFAULT_LIMIT, 20)),
+		max_content_chars: maxContentChars,
 		...(params.recency !== undefined ? { recency: params.recency } : {}),
 		...(params.search_depth !== undefined ? { search_depth: params.search_depth } : {}),
-		...(params.max_content_chars !== undefined ? { max_content_chars: params.max_content_chars } : {}),
 	}
 
 	const controller = new AbortController()
@@ -114,7 +116,7 @@ export async function executeWebSearch(params: WebSearchParams, signal?: AbortSi
 
 	try {
 		const data = await fetchSearchResponse(body, apiKey, combinedSignal)
-		const raw = formatForLLM(data, params.max_content_chars)
+		const raw = formatForLLM(data, maxContentChars)
 		const truncation = truncateHead(raw, { maxLines: MAX_LINES })
 
 		let text = truncation.content || "No results found."
