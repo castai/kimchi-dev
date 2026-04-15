@@ -52,7 +52,8 @@ try {
 	await main(process.argv.slice(2), {
 		extensionFactories: [
 			subagentExtension,
-			mcpAdapterExtension,webFetchExtension,
+			mcpAdapterExtension,
+			webFetchExtension,
 			webSearchExtension,
 			promptEnrichmentExtension,
 			bashCollapseExtension,
