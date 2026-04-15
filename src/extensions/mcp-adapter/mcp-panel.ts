@@ -1,4 +1,5 @@
 import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
+import { fg } from "../../ansi.js"
 import type { CachedTool, MetadataCache, ServerCacheEntry } from "./metadata-cache.js"
 import { resourceNameToToolName } from "./resource-tools.js"
 import { isToolExcluded } from "./types.js"
@@ -30,10 +31,6 @@ const DEFAULT_THEME: PanelTheme = {
 	cancel: "31",
 }
 
-function fg(code: string, text: string): string {
-	if (!code) return text
-	return `\x1b[${code}m${text}\x1b[0m`
-}
 
 const RAINBOW_COLORS = [
 	"38;2;178;129;214",
