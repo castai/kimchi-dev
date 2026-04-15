@@ -17,6 +17,7 @@ import bashCollapseExtension from "./extensions/bash-collapse.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
 import subagentExtension from "./extensions/subagent.js"
+import tagsExtension from "./extensions/tags.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import webSearchExtension from "./extensions/web-search/index.js"
 import { updateModelsConfig } from "./models.js"
@@ -57,6 +58,7 @@ try {
 			webSearchExtension,
 			promptEnrichmentExtension,
 			bashCollapseExtension,
+			tagsExtension,
 		],
 	})
 } catch (err) {
