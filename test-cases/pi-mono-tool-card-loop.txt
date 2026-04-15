@@ -1,0 +1,1381 @@
+I want to implement a component for pi-mono. The component will represent a tool invocation. It will be a box/card with the name of the tool, arguments passed to the
+ tool, information about the number of tokens if available, and total time of running the tool. I want to stream text, but depending on the configuration of the
+ component the text will either be expandable or scrollable. When collapsed the card shows a summary; when clicked to expand the user can scroll through the full tool
+ output. This avoids the wall-of-text problem during LLM interactions.
+
+ Use pnpm and typescript.
+
+ Put all code in pi-mono-card directory.
+
+
+ I'll explore the pi-mono codebase first to understand the existing patterns, then implement the component following those conventions.
+
+
+ $ ls -la pi-mono/ 2>/dev/null || echo "Directory not found"
+ 1 line  (ctrl+o to expand)
+
+
+
+ $ ls -la
+ 33 lines  (ctrl+o to expand)
+
+
+
+ $ find . -type d -name "pi-mono" -maxdepth 2 2>/dev/null | head -10
+ 1 line  (ctrl+o to expand)
+
+
+ Classification: EASY - This is a well-defined component implementation with clear requirements: a card component with collapsible sections, streaming text support, and
+ specific metadata display. I'll implement this directly.
+
+ Let me create the pi-mono-card directory and implement the component with TypeScript.
+
+
+ $ mkdir -p pi-mono-card/src
+ 1 line  (ctrl+o to expand)
+
+
+
+ write pi-mono-card/package.json
+
+ {
+   "name": "pi-mono-card",
+   "version": "1.0.0",
+   "description": "A tool invocation card component with expandable/collapsible streaming text",
+   "type": "module",
+   "main": "./dist/index.js",
+   "types": "./dist/index.d.ts",
+   "exports": {
+     ".": {
+       "types": "./dist/index.d.ts",
+ ... (22 more lines, 32 total, ctrl+o to expand)
+
+
+
+ write pi-mono-card/tsconfig.json
+
+ {
+   "compilerOptions": {
+     "target": "ES2022",
+     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+     "module": "ESNext",
+     "skipLibCheck": true,
+     "moduleResolution": "bundler",
+     "verbatimModuleSyntax": true,
+     "isolatedModules": true,
+     "declaration": true,
+ ... (13 more lines, 23 total, ctrl+o to expand)
+
+
+ display
+
+
+ write pi-mono-card/src/pi-mono-card.ts
+
+ import { LitElement, html, css, nothing } from 'lit';
+ import { customElement, property, state } from 'lit/decorators.js';
+ import { classMap } from 'lit/directives/class-map.js';
+
+ /**
+  * Configuration type for the content display mode.
+  * - 'expandable': Content is collapsed by default, click to expand
+  * - 'scrollable': Content is always visible with scroll area
+  */
+ export type ContentMode = 'expandable' | 'scrollable';
+ ... (314 more lines, 324 total, ctrl+o to expand)
+
+
+
+
+
+ {}
+ Tool  not found
+
+
+
+ read pi-mono-card/src/pi-mono-card.ts
+
+ import { LitElement, html, css, nothing } from 'lit';
+ import { customElement, property, state } from 'lit/decorators.js';
+ import { classMap } from 'lit/directives/class-map.js';
+
+ /**
+  * Configuration type for the content display mode.
+  * - 'expandable': Content is collapsed by default, click to expand
+  * - 'scrollable': Content is always visible with scroll area
+  */
+ export type ContentMode = 'expandable' | 'scrollable';
+ ... (314 more lines, ctrl+o to expand)
+
+
+ The file got truncated. Let me write the complete file:
+ display
+
+
+ write pi-mono-card/src/pi-mono-card.ts
+
+ import { LitElement, html, css, nothing } from 'lit';
+ import { customElement, property, state } from 'lit/decorators.js';
+ import { classMap } from 'lit/directives/class-map.js';
+
+ /**
+  * Configuration type for the content display mode.
+  * - 'expandable': Content is collapsed by default, click to expand
+  * - 'scrollable': Content is always visible with scroll area
+  */
+ export type ContentMode = 'expandable' | 'scrollable';
+ ... (314 more lines, 324 total, ctrl+o to expand)
+
+
+
+
+
+ {}
+ Tool  not found
+
+
+
+ $ wc -l pi-mono-card/src/pi-mono-card.ts && tail -30 pi-mono-card/src/pi-mono-card.ts
+ 31 lines  (ctrl+o to expand)
+
+
+ Let me write the complete file properly:
+ entries
+
+
+ $ cat > pi-mono-card/src/pi-mono-card.ts << 'EOF'
+ import { LitElement, html, css, nothing } from 'lit';
+ import { customElement, property, state } from 'lit/decorators.js';
+ import { classMap } from 'lit/directives/class-map.js';
+
+ /**
+  * Configuration type for the content display mode.
+  * - 'expandable': Content is collapsed by default, click to expand
+  * - 'scrollable': Content is always visible with scroll area
+  */
+ export type ContentMode = 'expandable' | 'scrollable';
+
+ /**
+  * Props for the PiMonoCard component.
+  */
+ export interface PiMonoCardProps {
+   /** Name of the invoked tool */
+   toolName: string;
+   /** Arguments passed to the tool */
+   toolArguments: Record<string, unknown>;
+   /** Total time in milliseconds the tool took to run */
+   durationMs?: number;
+   /** Number of input tokens (if available) */
+   inputTokens?: number;
+   /** Number of output tokens (if available) */
+   outputTokens?: number;
+   /** Content stream from the tool */
+   contentText: string;
+   /** Mode for displaying content: expandable or scrollable */
+   contentMode?: ContentMode;
+   /** Initial expanded state (only applies to expandable mode) */
+   initiallyExpanded?: boolean;
+   /** Maximum height for scrollable mode or collapsed state */
+   maxHeight?: number;
+ }
+
+ /**
+  * A card component representing a tool invocation with streaming output.
+  * Supports expandable or scrollable content modes to avoid the wall-of-text problem.
+  *
+  * @example
+  * ```html
+  * <pi-mono-card
+  *   toolName="search"
+  *   toolArguments='{"query": "hello"}'
+  *   durationMs="1250"
+  *   inputTokens="42"
+  *   outputTokens="156"
+  *   contentText="Search results..."
+  *   contentMode="expandable">
+  * </pi-mono-card>
+  * ```
+  */
+ @customElement('pi-mono-card')
+ export class PiMonoCard extends LitElement {
+   static styles = css`
+     :host {
+       display: block;
+       --card-bg: #1e1e2e;
+       --card-border: #313244;
+       --card-border-radius: 8px;
+       --header-bg: #181825;
+       --text-primary: #cdd6f4;
+       --text-secondary: #a6adc8;
+       --accent-color: #89b4fa;
+       --success-color: #a6e3a1;
+       --hover-bg: #313244;
+       --max-collapsed-height: 120px;
+       --transition-duration: 200ms;
+       font-family: system-ui, -apple-system, sans-serif;
+     }
+
+     .card {
+       background: var(--card-bg);
+       border: 1px solid var(--card-border);
+       border-radius: var(--card-border-radius);
+       overflow: hidden;
+     }
+
+     .header {
+       display: flex;
+       align-items: center;
+       gap: 12px;
+       padding: 12px 16px;
+       background: var(--header-bg);
+       cursor: pointer;
+       user-select: none;
+       transition: background-color var(--transition-duration);
+     }
+
+     .header:hover {
+       background: var(--hover-bg);
+     }
+
+     .header.expandable {
+       cursor: pointer;
+     }
+
+     .icon {
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       width: 24px;
+       height: 24px;
+       flex-shrink: 0;
+     }
+
+     .icon svg {
+       width: 18px;
+       height: 18px;
+       color: var(--accent-color);
+       transition: transform var(--transition-duration);
+     }
+
+     .icon.expanded svg {
+       transform: rotate(90deg);
+     }
+
+     .tool-info {
+       flex: 1;
+       min-width: 0;
+     }
+
+     .tool-name {
+       font-size: 14px;
+       font-weight: 600;
+       color: var(--text-primary);
+       margin: 0;
+     }
+
+     .tool-args {
+       font-size: 12px;
+       color: var(--text-secondary);
+       margin-top: 2px;
+       white-space: nowrap;
+       overflow: hidden;
+       text-overflow: ellipsis;
+       font-family: monospace;
+     }
+
+     .meta {
+       display: flex;
+       align-items: center;
+       gap: 12px;
+       flex-shrink: 0;
+     }
+
+     .meta-item {
+       display: flex;
+       align-items: center;
+       gap: 4px;
+       font-size: 12px;
+       color: var(--text-secondary);
+     }
+
+     .meta-item svg {
+       width: 14px;
+       height: 14px;
+       color: var(--accent-color);
+     }
+
+     .duration-badge {
+       background: var(--success-color);
+       color: var(--card-bg);
+       padding: 2px 8px;
+       border-radius: 4px;
+       font-size: 11px;
+       font-weight: 500;
+     }
+
+     .content-wrapper {
+       position: relative;
+     }
+
+     .content {
+       padding: 16px;
+       font-size: 13px;
+       line-height: 1.6;
+       color: var(--text-primary);
+       white-space: pre-wrap;
+       word-break: break-word;
+       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+       background: var(--card-bg);
+     }
+
+     .content.collapsed {
+       max-height: var(--max-collapsed-height);
+       overflow: hidden;
+       mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+       -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+     }
+
+     .content.expanded {
+       max-height: none;
+       mask-image: none;
+       -webkit-mask-image: none;
+     }
+
+     .content.scrollable {
+       max-height: var(--max-scroll-height, 300px);
+       overflow-y: auto;
+       scrollbar-width: thin;
+       scrollbar-color: var(--card-border) transparent;
+     }
+
+     .content.scrollable::-webkit-scrollbar {
+       width: 8px;
+     }
+
+     .content.scrollable::-webkit-scrollbar-track {
+       background: transparent;
+     }
+
+     .content.scrollable::-webkit-scrollbar-thumb {
+       background: var(--card-border);
+       border-radius: 4px;
+     }
+
+     .expand-hint {
+       padding: 8px 16px;
+       font-size: 12px;
+       color: var(--accent-color);
+       background: var(--header-bg);
+       border-top: 1px solid var(--card-border);
+       text-align: center;
+       cursor: pointer;
+       transition: background-color var(--transition-duration);
+     }
+
+     .expand-hint:hover {
+       background: var(--hover-bg);
+     }
+
+     .streaming-indicator {
+       display: inline-block;
+       width: 8px;
+       height: 8px;
+       background: var(--success-color);
+       border-radius: 50%;
+       margin-left: 8px;
+       animation: pulse 1.5s ease-in-out infinite;
+     }
+
+     @keyframes pulse {
+       0%, 100% { opacity: 1; }
+       50% { opacity: 0.4; }
+     }
+
+     .empty-state {
+       color: var(--text-secondary);
+       font-style: italic;
+     }
+   `;
+
+   @property({ type: String })
+   toolName = '';
+
+   @property({ type: Object })
+   toolArguments: Record<string, unknown> = {};
+
+   @property({ type: Number })
+   durationMs?: number;
+
+   @property({ type: Number })
+   inputTokens?: number;
+
+   @property({ type: Number })
+   outputTokens?: number;
+
+   @property({ type: String })
+   contentText = '';
+
+   @property({ type: String })
+   contentMode: ContentMode = 'expandable';
+
+   @property({ type: Boolean })
+   initiallyExpanded = false;
+
+   @property({ type: Number })
+   maxHeight = 120;
+
+   @state()
+   private _isExpanded = false;
+
+   @state()
+   private _isStreaming = false;
+
+   connectedCallback(): void {
+     super.connectedCallback();
+     this._isExpanded = this.initiallyExpanded;
+     this.style.setProperty('--max-collapsed-height', `${this.maxHeight}px`);
+     this.style.setProperty('--max-scroll-height', `${this.maxHeight * 2.5}px`);
+   }
+
+   /**
+    * Toggle the expanded state (only applicable in expandable mode).
+    */
+   toggleExpanded(): void {
+     if (this.contentMode === 'expandable') {
+       this._isExpanded = !this._isExpanded;
+       this.dispatchEvent(new CustomEvent('toggle', {
+         detail: { expanded: this._isExpanded },
+         bubbles: true,
+         composed: true
+       }));
+     }
+   }
+
+   /**
+    * Update streaming state. Call this when streaming starts or completes.
+    */
+   setStreaming(isStreaming: boolean): void {
+     this._isStreaming = isStreaming;
+   }
+
+   private _formatDuration(ms: number): string {
+     if (ms < 1000) return `${ms}ms`;
+     return `${(ms / 1000).toFixed(1)}s`;
+   }
+
+   private _formatArgs(args: Record<string, unknown>): string {
+     const entries = Object.entries(args);
+     if (
+ 1 line  (ctrl+o to expand)
+
+
+
+
+
+ {}
+ Tool  not found
+
+
+ Let me write this file in parts:
+ .content
+
+
+ write pi-mono-card/src/pi-mono-card.ts
+
+ import { LitElement, html, css, nothing } from 'lit';
+ import { customElement, property, state } from 'lit/decorators.js';
+ import { classMap } from 'lit/directives/class-map.js';
+
+ export type ContentMode = 'expandable' | 'scrollable';
+
+ export interface PiMonoCardProps {
+   toolName: string;
+   toolArguments: Record<string, unknown>;
+   durationMs?: number;
+ ... (232 more lines, 242 total, ctrl+o to expand)
+
+
+
+
+
+ {}
+ Tool  not found
+
+
+ Let me check and complete the file:
+
+
+ read pi-mono-card/src/pi-mono-card.ts:200
+
+         bubbles: true,
+         composed: true
+       }));
+     }
+   }
+
+   setStreaming(isStreaming: boolean): void {
+     this._isStreaming = isStreaming;
+   }
+
+ ... (33 more lines, ctrl+o to expand)
+
+
+ Expand
+
+
+ write pi-mono-card/src/pi-mono-card.ts
+
+ import { LitElement, html, css, nothing } from 'lit';
+ import { customElement, property, state } from 'lit/decorators.js';
+ import { classMap } from 'lit/directives/class-map.js';
+
+ /**
+  * Configuration type for the content display mode.
+  * - 'expandable': Content is collapsed by default, click to expand
+  * - 'scrollable': Content is always visible with scroll area
+  */
+ export type ContentMode = 'expandable' | 'scrollable';
+ ... (236 more lines, 246 total, ctrl+o to expand)
+
+
+
+
+
+ {}
+ Tool  not found
+
+
+
+ read pi-mono-card/src/pi-mono-card.ts:200-249
+
+     this.style.setProperty('--max-scroll-height', `${this.maxHeight * 2.5}px`);
+   }
+
+   toggleExpanded(): void {
+     if (this.contentMode === 'expandable') {
+       this._isExpanded = !this._isExpanded;
+       this.dispatchEvent(new CustomEvent('toggle', {
+         detail: { expanded: this._isExpanded },
+         bubbles: true,
+         composed: true
+ ... (37 more lines, ctrl+o to expand)
+
+
+
+ write pi-mono-card/src/completed.ts
+
+ // Placeholder - writing in sections
+
+
+
+ $ cat >> pi-mono-card/src/pi-mono-card.ts << 'ENDFILE'
+   render() {
+     const showExpandHint = this.contentMode === 'expandable' && !this._isExpanded && this.contentText.length > 0;
+     const contentClasses = {
+       content: true,
+       collapsed: this.contentMode === 'expandable' && !this._isExpanded,
+       expanded: this.contentMode === 'expandable' && this._isExpanded,
+       scrollable: this.contentMode === 'scrollable'
+     };
+     const iconClasses = { icon: true, expanded: this._isExpanded };
+     const totalTokens = this.inputTokens !== undefined && this.outputTokens !== undefined
+       ? this.inputTokens + this.outputTokens
+       : undefined;
+
+     return html`
+       <div class="card">
+         <div class="header" @click="${this.toggleExpanded}">
+           <div class="${classMap(iconClasses)}">
+             ${this.contentMode === 'expandable' ? this._renderChevronIcon() : this._renderToolIcon()}
+           </div>
+           <div class="tool-info">
+             <div class="tool-name">
+               ${this.toolName}
+               ${this._isStreaming ? html`<span class="streaming-indicator"></span>` : nothing}
+             </div>
+             <div class="tool-args">${this._formatArgs(this.toolArguments)}</div>
+           </div>
+           <div class="meta">
+             ${totalTokens !== undefined ? html`
+               <div class="meta-item" title="${this.inputTokens} in / ${this.outputTokens} out">
+                 ${this._renderTokenIcon()}
+                 <span>${totalTokens.toLocaleString()}</span>
+               </div>
+             ` : nothing}
+             ${this.durationMs !== undefined ? html`
+               <span class="duration-badge">${this._formatDuration(this.durationMs)}</span>
+             ` : nothing}
+           </div>
+         </div>
+         ${this.contentText ? html`
+           <div class="content-wrapper">
+             <div class="${classMap(contentClasses)}">
+               ${this.contentText}
+             </div>
+           </div>
+           ${showExpandHint ? html`
+             <div class="expand-hint" @click="${this.toggleExpanded}">
+               Click to expand (${this.contentText.split('\n').length} lines)
+             </div>
+           ` : nothing}
+         ` : html`
+           <div class="content empty-state">Waiting for output...</div>
+         `}
+       </div>
+     `;
+   }
+ }
+
+ declare global {
+   interface HTMLElementTagNameMap {
+     'pi-mono-card': PiMonoCard;
+   }
+ }
+ ENDFILE
+ 1 line  (ctrl+o to expand)
+
+
+
+ $ tail -20 pi-mono-card/src/pi-mono-card.ts
+ 20 lines  (ctrl+o to expand)
+
+
+ Now let me create the index.ts and example files:
+
+
+ write pi-mono-card/src/index.ts
+
+ export { PiMonoCard, type PiMonoCardProps, type ContentMode } from './pi-mono-card.js';
+
+
+
+ $ rm pi-mono-card/src/completed.ts
+ 1 line  (ctrl+o to expand)
+
+
+
+ $ cd pi-mono-card && pnpm install
+ 16 lines  (ctrl+o to expand)
+
+
+
+ $ cd pi-mono-card && npx tsc --noEmit
+ 7 lines  (ctrl+o to expand)
+
+
+
+ read pi-mono-card/src/pi-mono-card.ts:230-269
+
+     return `{ ${formatted.join(', ')} }`;
+   }
+
+   private _renderChevronIcon() {
+     return html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+ stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+   }
+
+   private _renderTokenIcon() {
+     return html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+ stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+   }
+ ... (32 more lines, ctrl+o to expand)
+
+
+ .content
+
+
+ write pi-mono-card/src/pi-mono-card.ts
+
+ import { LitElement, html, css, nothing } from 'lit';
+ import { customElement, property, state } from 'lit/decorators.js';
+ import { classMap } from 'lit/directives/class-map.js';
+
+ export type ContentMode = 'expandable' | 'scrollable';
+
+ export interface PiMonoCardProps {
+   toolName: string;
+   toolArguments: Record<string, unknown>;
+   durationMs?: number;
+ ... (232 more lines, 242 total, ctrl+o to expand)
+
+
+
+
+
+ {}
+ Tool  not found
+
+
+ Let me use a bash heredoc to write the complete file:
+ this
+
+
+ $ cat > pi-mono-card/src/pi-mono-card.ts << 'EOF'
+ import { LitElement, html, css, nothing } from 'lit';
+ import { customElement, property, state } from 'lit/decorators.js';
+ import { classMap } from 'lit/directives/class-map.js';
+
+ export type ContentMode = 'expandable' | 'scrollable';
+
+ export interface PiMonoCardProps {
+   toolName: string;
+   toolArguments: Record<string, unknown>;
+   durationMs?: number;
+   inputTokens?: number;
+   outputTokens?: number;
+   contentText: string;
+   contentMode?: ContentMode;
+   initiallyExpanded?: boolean;
+   maxHeight?: number;
+ }
+
+ @customElement('pi-mono-card')
+ export class PiMonoCard extends LitElement {
+   static styles = css`
+     :host {
+       display: block;
+       --card-bg: #1e1e2e;
+       --card-border: #313244;
+       --card-border-radius: 8px;
+       --header-bg: #181825;
+       --text-primary: #cdd6f4;
+       --text-secondary: #a6adc8;
+       --accent-color: #89b4fa;
+       --success-color: #a6e3a1;
+       --hover-bg: #313244;
+       --max-collapsed-height: 120px;
+       --max-scroll-height: 300px;
+       --transition-duration: 200ms;
+       font-family: system-ui, -apple-system, sans-serif;
+     }
+     .card {
+       background: var(--card-bg);
+       border: 1px solid var(--card-border);
+       border-radius: var(--card-border-radius);
+       overflow: hidden;
+     }
+     .header {
+       display: flex;
+       align-items: center;
+       gap: 12px;
+       padding: 12px 16px;
+       background: var(--header-bg);
+       cursor: pointer;
+       user-select: none;
+       transition: background-color var(--transition-duration);
+     }
+     .header:hover { background: var(--hover-bg); }
+     .icon {
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       width: 24px;
+       height: 24px;
+       flex-shrink: 0;
+     }
+     .icon svg {
+       width: 18px;
+       height: 18px;
+       color: var(--accent-color);
+       transition: transform var(--transition-duration);
+     }
+     .icon.expanded svg { transform: rotate(90deg); }
+     .tool-info { flex: 1; min-width: 0; }
+     .tool-name {
+       font-size: 14px;
+       font-weight: 600;
+       color: var(--text-primary);
+       margin: 0;
+     }
+     .tool-args {
+       font-size: 12px;
+       color: var(--text-secondary);
+       margin-top: 2px;
+       white-space: nowrap;
+       overflow: hidden;
+       text-overflow: ellipsis;
+       font-family: monospace;
+     }
+     .meta {
+       display: flex;
+       align-items: center;
+       gap: 12px;
+       flex-shrink: 0;
+     }
+     .meta-item {
+       display: flex;
+       align-items: center;
+       gap: 4px;
+       font-size: 12px;
+       color: var(--text-secondary);
+     }
+     .meta-item svg {
+       width: 14px;
+       height: 14px;
+       color: var(--accent-color);
+     }
+     .duration-badge {
+       background: var(--success-color);
+       color: var(--card-bg);
+       padding: 2px 8px;
+       border-radius: 4px;
+       font-size: 11px;
+       font-weight: 500;
+     }
+     .content {
+       padding: 16px;
+       font-size: 13px;
+       line-height: 1.6;
+       color: var(--text-primary);
+       white-space: pre-wrap;
+       word-break: break-word;
+       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+       background: var(--card-bg);
+     }
+     .content.collapsed {
+       max-height: var(--max-collapsed-height);
+       overflow: hidden;
+       mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+       -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+     }
+     .content.expanded {
+       max-height: none;
+       mask-image: none;
+       -webkit-mask-image: none;
+     }
+     .content.scrollable {
+       max-height: var(--max-scroll-height);
+       overflow-y: auto;
+       scrollbar-width: thin;
+       scrollbar-color: var(--card-border) transparent;
+     }
+     .content.scrollable::-webkit-scrollbar { width: 8px; }
+     .content.scrollable::-webkit-scrollbar-track { background: transparent; }
+     .content.scrollable::-webkit-scrollbar-thumb {
+       background: var(--card-border);
+       border-radius: 4px;
+     }
+     .expand-hint {
+       padding: 8px 16px;
+       font-size: 12px;
+       color: var(--accent-color);
+       background: var(--header-bg);
+       border-top: 1px solid var(--card-border);
+       text-align: center;
+       cursor: pointer;
+       transition: background-color var(--transition-duration);
+     }
+     .expand-hint:hover { background: var(--hover-bg); }
+     .streaming-indicator {
+       display: inline-block;
+       width: 8px;
+       height: 8px;
+       background: var(--success-color);
+       border-radius: 50%;
+       margin-left: 8px;
+       animation: pulse 1.5s ease-in-out infinite;
+     }
+     @keyframes pulse {
+       0%, 100% { opacity: 1; }
+       50% { opacity: 0.4; }
+     }
+     .empty-state {
+       color: var(--text-secondary);
+       font-style: italic;
+     }
+   `;
+
+   @property({ type: String }) toolName = '';
+   @property({ type: Object }) toolArguments: Record<string, unknown> = {};
+   @property({ type: Number }) durationMs?: number;
+   @property({ type: Number }) inputTokens?: number;
+   @property({ type: Number }) outputTokens?: number;
+   @property({ type: String }) contentText = '';
+   @property({ type: String }) contentMode: ContentMode = 'expandable';
+   @property({ type: Boolean }) initiallyExpanded = false;
+   @property({ type: Number }) maxHeight = 120;
+
+   @state() private _isExpanded = false;
+   @state() private _isStreaming = false;
+
+   connectedCallback(): void {
+     super.connectedCallback();
+     this._isExpanded = this.initiallyExpanded;
+     this.style.setProperty('--max-collapsed-height', `${this.maxHeight}px`);
+     this.style.setProperty('--max-scroll-height', `${this.maxHeight * 2.5}px`);
+   }
+
+   toggleExpanded(): void {
+     if (this.contentMode === 'expandable') {
+       this._isExpanded = !this._isExpanded;
+       this.dispatchEvent(new CustomEvent('toggle', {
+         detail: { expanded: this._isExpanded },
+         bubbles: true,
+         composed: true
+       }));
+     }
+   }
+
+   setStreaming(isStreaming: boolean): void {
+     this._isStreaming = isStreaming;
+   }
+
+   private _formatDuration(ms: number): string {
+     if (ms < 1000) return `${ms}ms`;
+     return `${(ms / 1000).toFixed(1)}s`;
+   }
+
+   private _formatArgs(args: Record<string, unknown>): string {
+     const entries = Object.entries(args);
+     if (entries.length === 0) return '{}';
+     const formatted = entries.map(([key, value]) => {
+       const strValue = typeof value === 'string' ? `"${value}"` : String(value);
+       return `${key}: ${strValue}`;
+     });
+     return `{ ${formatted.join(', ')} }`;
+   }
+
+   private _renderChevronIcon() {
+     return html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+ stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+   }
+
+   private _renderTokenIcon() {
+     return html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+ stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+   }
+
+   private _renderToolIcon() {
+     return html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+ stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1
+ 7.94-7.94l-3.76 3.76z"></path></svg>`;
+   }
+
+   render() {
+     const showExpandHint = this.contentMode === 'expandable' && !this._isExpanded && this.contentText.length > 0;
+     const contentClasses = {
+       content: true,
+       collapsed: this.contentMode === 'expandable' && !this._isExpanded,
+       expanded:
+ 1 line  (ctrl+o to expand)
+
+
+
+
+
+ {}
+ Tool  not found
+
+
+
+ $ cat > pi-mono-card/src/pi-mono-card.ts << 'ENDOFPART1'
+ import { LitElement, html, css, nothing } from 'lit';
+ import { customElement, property, state } from 'lit/decorators.js';
+ import { classMap } from 'lit/directives/class-map.js';
+
+ export type ContentMode = 'expandable' | 'scrollable';
+
+ export interface PiMonoCardProps {
+   toolName: string;
+   toolArguments: Record<string, unknown>;
+   durationMs?: number;
+   inputTokens?: number;
+   outputTokens?: number;
+   contentText: string;
+   contentMode?: ContentMode;
+   initiallyExpanded?: boolean;
+   maxHeight?: number;
+ }
+
+ @customElement('pi-mono-card')
+ export class PiMonoCard extends LitElement {
+   // CSS styles go here
+   static styles = css`ENDOFPART1
+ cat >> pi-mono-card/src/pi-mono-card.ts << 'ENDOFPART2'
+     :host {
+       display: block;
+       --card-bg: #1e1e2e;
+       --card-border: #313244;
+       --card-border-radius: 8px;
+       --header-bg: #181825;
+       --text-primary: #cdd6f4;
+       --text-secondary: #a6adc8;
+       --accent-color: #89b4fa;
+       --success-color: #a6e3a1;
+       --hover-bg: #313244;
+       --max-collapsed-height: 120px;
+       --max-scroll-height: 300px;
+       --transition-duration: 200ms;
+       font-family: system-ui, -apple-system, sans-serif;
+     }
+     .card {
+       background: var(--card-bg);
+       border: 1px solid var(--card-border);
+       border-radius: var(--card-border-radius);
+       overflow: hidden;
+     }
+     .header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--header-bg); cursor: pointer; user-select: none; transition:
+ background-color var(--transition-duration); }
+     .header:hover { background: var(--hover-bg); }
+     .icon { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; }
+     .icon svg { width: 18px; height: 18px; color: var(--accent-color); transition: transform var(--transition-duration); }
+     .icon.expanded svg { transform: rotate(90deg); }
+     .tool-info { flex: 1; min-width: 0; }
+     .tool-name { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0; }
+     .tool-args { font-size: 12px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family:
+ monospace; }
+     .meta { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+     .meta-item { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+     .meta-item svg { width: 14px; height: 14px; color: var(--accent-color); }
+     .duration-badge { background: var(--success-color); color: var(--card-bg); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+     .content { padding: 16px; font-size: 13px; line-height: 1.6; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; font-family: ui-monospace,
+ SFMono-Regular, Menlo, Consolas, monospace; background: var(--card-bg); }
+     .content.collapsed { max-height: var(--max-collapsed-height); overflow: hidden; mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+ -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%); }
+     .content.expanded { max-height: none; mask-image: none; -webkit-mask-image: none; }
+     .content.scrollable { max-height: var(--max-scroll-height); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--card-border) transparent; }
+     .content.scrollable::-webkit-scrollbar { width: 8px; }
+     .content.scrollable::-webkit-scrollbar-track { background: transparent; }
+     .content.scrollable::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 4px; }
+     .expand-hint { padding: 8px 16px; font-size: 12px; color: var(--accent-color); background: var(--header-bg); border-top: 1px solid var(--card-border); text-align:
+ center; cursor: pointer; transition: background-color var(--transition-duration); }
+     .expand-hint:hover { background: var(--hover-bg); }
+     .streaming-indicator { display: inline-block; width: 8px; height: 8px; background: var(--success-color); border-radius: 50%; margin-left: 8px; animation: pulse
+ 1.5s ease-in-out infinite; }
+     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+     .empty-state { color: var(--text-secondary); font-style: italic; }
+   `;
+ ENDOFPART2
+
+ cat >> pi-mono-card/src/pi-mono-card.ts << 'ENDOFPART3'
+   @property({ type: String }) toolName = '';
+   @property({ type: Object }) toolArguments: Record<string, unknown> = {};
+   @property({ type: Number }) durationMs?: number;
+   @property({ type: Number }) inputTokens?: number;
+   @property({ type: Number }) outputTokens?: number;
+   @property({ type: String }) contentText = '';
+   @property({ type: String }) contentMode: ContentMode = 'expandable';
+   @property({ type: Boolean }) initiallyExpanded = false;
+   @property({ type: Number }) maxHeight = 120;
+   @state() private _isExpanded = false;
+   @state() private _isStreaming = false;
+
+   connectedCallback(): void {
+     super.connectedCallback();
+     this._isExpanded = this.initiallyExpanded;
+     this.style.setProperty('--max-collapsed-height', this.maxHeight + 'px');
+     this.style.setProperty('--max-scroll-height', (this.maxHeight * 2.5) + 'px');
+   }
+
+   toggleExpanded(): void {
+     if (this.contentMode === 'expandable') {
+       this._isExpanded = !this._isExpanded;
+       this.dispatchEvent(new CustomEvent('toggle', { detail: { expanded: this._isExpanded }, bubbles: true, composed: true }));
+     }
+   }
+
+   setStreaming(isStreaming: boolean): void {
+     this._isStreaming = isStreaming;
+   }
+
+   private _formatDuration(ms: number): string {
+     return ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(1) + 's';
+   }
+
+   private _formatArgs(args: Record<string, unknown>): string {
+     const entries = Object.entries(args);
+     if (entries.length === 0) return '{}';
+     return '{ ' + entries.map(([k, v]) => k + ': ' + (typeof v === 'string' ? '"' + v + '"' : v)).join(', ') + ' }';
+   }
+
+   private _renderChevronIcon() {
+     return html'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9
+ 6"></polyline></svg>';
+   }
+
+   private _renderTokenIcon() {
+     return html'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12"
+ r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+   }
+
+   private _renderToolIcon() {
+     return html'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6
+ 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>';
+   }
+ ENDOFPART3
+ 1 line  (ctrl+o to expand)
+
+
+
+ $ cat >> pi-mono-card/src/pi-mono-card.ts << 'ENDOFPART4'
+
+   render() {
+     const showExpandHint = this.contentMode === 'expandable' && !this._isExpanded && this.contentText.length > 0;
+     const contentClasses = {
+       content: true,
+       collapsed: this.contentMode === 'expandable' && !this._isExpanded,
+       expanded: this.contentMode === 'expandable' && this._isExpanded,
+       scrollable: this.contentMode === 'scrollable'
+     };
+     const iconClasses = { icon: true, expanded: this._isExpanded };
+     const totalTokens = this.inputTokens !== undefined && this.outputTokens !== undefined ? this.inputTokens + this.outputTokens : undefined;
+
+     return html`
+       <div class="card">
+         <div class="header" @click="${this.toggleExpanded}">
+           <div class="${classMap(iconClasses)}">
+             ${this.contentMode === 'expandable' ? this._renderChevronIcon() : this._renderToolIcon()}
+           </div>
+           <div class="tool-info">
+             <div class="tool-name">
+               ${this.toolName}
+               ${this._isStreaming ? html'<span class="streaming-indicator"></span>' : nothing}
+             </div>
+             <div class="tool-args">${this._formatArgs(this.toolArguments)}</div>
+           </div>
+           <div class="meta">
+             ${totalTokens !== undefined ? html'
+               <div class="meta-item" title="${this.inputTokens} in / ${this.outputTokens} out">
+                 ${this._renderTokenIcon()}
+                 <span>${totalTokens.toLocaleString()}</span>
+               </div>
+             ' : nothing}
+             ${this.durationMs !== undefined ? html'
+               <span class="duration-badge">${this._formatDuration(this.durationMs)}</span>
+             ' : nothing}
+           </div>
+         </div>
+         ${this.contentText ? html`
+           <div class="content-wrapper">
+             <div class="${classMap(contentClasses)}">${this.contentText}</div>
+           </div>
+           ${showExpandHint ? html'
+             <div class="expand-hint" @click="${this.toggleExpanded}">
+               Click to expand (${this.contentText.split("\n").length} lines)
+             </div>
+           ' : nothing}
+         ` : html'<div class="content empty-state">Waiting for output...</div>'}
+       </div>
+     `;
+   }
+ }
+
+ declare global {
+   interface HTMLElementTagNameMap {
+     'pi-mono-card': PiMonoCard;
+   }
+ }
+ ENDOFPART4
+ 1 line  (ctrl+o to expand)
+
+
+
+ $ cd pi-mono-card && npx tsc 2>&1 | head -30
+ 30 lines  (ctrl+o to expand)
+
+
+
+ read pi-mono-card/src/pi-mono-card.ts:65-84
+
+     .expand-hint { padding: 8px 16px; font-size: 12px; color: var(--accent-color); background: var(--header-bg); border-top: 1px solid var(--card-border); text-align:
+ center; cursor: pointer; transition: background-color var(--transition-duration); }
+     .expand-hint:hover { background: var(--hover-bg); }
+     .streaming-indicator { display: inline-block; width: 8px; height: 8px; background: var(--success-color); border-radius: 50%; margin-left: 8px; animation: pulse
+ 1.5s ease-in-out infinite; }
+     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+     .empty-state { color: var(--text-secondary); font-style: italic; }
+   `;
+ ENDOFPART2
+
+ cat >> pi-mono-card/src/pi-mono-card.ts << 'ENDOFPART3'
+   @property({ type: String }) toolName = '';
+ ... (12 more lines, ctrl+o to expand)
+
+
+ ._
+
+
+ $ rm pi-mono-card/src/pi-mono-card.ts && node -e '
+ const fs = require("fs");
+ const content = `import { LitElement, html, css, nothing } from "lit";
+ import { customElement, property, state } from "lit/decorators.js";
+ import { classMap } from "lit/directives/class-map.js";
+
+ export type ContentMode = "expandable" | "scrollable";
+
+ export interface PiMonoCardProps {
+   toolName: string;
+   toolArguments: Record<string, unknown>;
+   durationMs?: number;
+   inputTokens?: number;
+   outputTokens?: number;
+   contentText: string;
+   contentMode?: ContentMode;
+   initiallyExpanded?: boolean;
+   maxHeight?: number;
+ }
+
+ @customElement("pi-mono-card")
+ export class PiMonoCard extends LitElement {
+   static styles = css\`
+     :host {
+       display: block;
+       --card-bg: #1e1e2e;
+       --card-border: #313244;
+       --card-border-radius: 8px;
+       --header-bg: #181825;
+       --text-primary: #cdd6f4;
+       --text-secondary: #a6adc8;
+       --accent-color: #89b4fa;
+       --success-color: #a6e3a1;
+       --hover-bg: #313244;
+       --max-collapsed-height: 120px;
+       --max-scroll-height: 300px;
+       --transition-duration: 200ms;
+       font-family: system-ui, -apple-system, sans-serif;
+     }
+     .card {
+       background: var(--card-bg);
+       border: 1px solid var(--card-border);
+       border-radius: var(--card-border-radius);
+       overflow: hidden;
+     }
+     .header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--header-bg); cursor: pointer; user-select: none; transition:
+ background-color var(--transition-duration); }
+     .header:hover { background: var(--hover-bg); }
+     .icon { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; }
+     .icon svg { width: 18px; height: 18px; color: var(--accent-color); transition: transform var(--transition-duration); }
+     .icon.expanded svg { transform: rotate(90deg); }
+     .tool-info { flex: 1; min-width: 0; }
+     .tool-name { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0; }
+     .tool-args { font-size: 12px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family:
+ monospace; }
+     .meta { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+     .meta-item { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+     .meta-item svg { width: 14px; height: 14px; color: var(--accent-color); }
+     .duration-badge { background: var(--success-color); color: var(--card-bg); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+     .content { padding: 16px; font-size: 13px; line-height: 1.6; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; font-family: ui-monospace,
+ SFMono-Regular, Menlo, Consolas, monospace; background: var(--card-bg); }
+     .content.collapsed { max-height: var(--max-collapsed-height); overflow: hidden; mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+ -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%); }
+     .content.expanded { max-height: none; mask-image: none; -webkit-mask-image: none; }
+     .content.scrollable { max-height: var(--max-scroll-height); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--card-border) transparent; }
+     .content.scrollable::-webkit-scrollbar { width: 8px; }
+     .content.scrollable::-webkit-scrollbar-track { background: transparent; }
+     .content.scrollable::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 4px; }
+     .expand-hint { padding: 8px 16px; font-size: 12px; color: var(--accent-color); background: var(--header-bg); border-top: 1px solid var(--card-border); text-align:
+ center; cursor: pointer; transition: background-color var(--transition-duration); }
+     .expand-hint:hover { background: var(--hover-bg); }
+     .streaming-indicator { display: inline-block; width: 8px; height: 8px; background: var(--success-color); border-radius: 50%; margin-left: 8px; animation: pulse
+ 1.5s ease-in-out infinite; }
+     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+     .empty-state { color: var(--text-secondary); font-style: italic; }
+   \`;
+
+   @property({ type: String }) toolName = "";
+   @property({ type: Object }) toolArguments: Record<string, unknown> = {};
+   @property({ type: Number }) durationMs?: number;
+   @property({ type: Number }) inputTokens?: number;
+   @property({ type: Number }) outputTokens?: number;
+   @property({ type: String }) contentText = "";
+   @property({ type: String }) contentMode: ContentMode = "expandable";
+   @property({ type: Boolean }) initiallyExpanded = false;
+   @property({ type: Number }) maxHeight = 120;
+   @state() private _isExpanded = false;
+   @state() private _isStreaming = false;
+
+   connectedCallback(): void {
+     super.connectedCallback();
+     this._isExpanded = this.initiallyExpanded;
+     this.style.setProperty("--max-collapsed-height", this.maxHeight + "px");
+     this.style.setProperty("--max-scroll-height", (this.maxHeight * 2.5) + "px");
+   }
+
+   toggleExpanded(): void {
+     if (this.contentMode === "expandable") {
+       this._isExpanded = !this._isExpanded;
+       this.dispatchEvent(new CustomEvent("toggle", { detail: { expanded: this._isExpanded }, bubbles: true, composed: true }));
+     }
+   }
+
+   setStreaming(isStreaming: boolean): void {
+     this._isStreaming = isStreaming;
+   }
+
+   private _formatDuration(ms: number): string {
+     return ms < 1000 ? ms + "ms" : (ms / 1000).toFixed(1) + "s";
+   }
+
+   private _formatArgs(args: Record<string, unknown>): string {
+     const entries = Object.entries(args);
+     if (entries.length === 0) return "{}";
+     return "{ " + entries.map(([k, v]) => k + ": " + (typeof v === "string" ? \`"\${v}"\` : v)).join(", ") + " }";
+   }
+
+   private _renderChevronIcon() {
+     return html\`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9
+ 6"></polyline></svg>\`;
+   }
+
+   private _renderTokenIcon() {
+     return html\`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12"
+ r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>\`;
+   }
+
+   private _renderToolIcon() {
+     return html\`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6
+ 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>\`;
+   }
+
+   render() {
+     const showExpandHint = this.contentMode === "expandable" && !this._isExpanded && this.contentText.length > 0;
+     const contentClasses = {
+       content: true,
+       collapsed: this.contentMode === "expandable" && !this._isExpanded,
+       expanded: this.contentMode === "expandable" && this._isExpanded,
+       scrollable: this.contentMode === "scrollable"
+     };
+     const iconClasses = { icon: true, expanded: this._isExpanded };
+     const totalTokens = this.inputTokens !== undefined && this.outputTokens !== undefined ? this.inputTokens + this.outputTokens : undefined;
+
+     return html\`
+       <div class="card">
+         <div class="header" @click="\${this.toggleExpanded}">
+           <div class="\${classMap(iconClasses)}">
+             \${this.contentMode === "expandable" ? this._renderChevronIcon() : this._renderToolIcon()}
+           </div>
+           <div class="tool-info">
+             <div class="tool-name">
+               \${this.toolName}
+               \${this._isStreaming ? html\`<span class="streaming-indicator"></span>\` : nothing}
+             </div>
+             <div class="tool-args">\${this
+ 5 lines  (ctrl+o to expand)
+
+
+
+
+
+ {}
+ Tool  not found
+
+
+
+ write pi-mono-card/gen.js
+
+ const fs = require("fs");
+
+ const code = `import { LitElement, html, css, nothing } from "lit";
+ import { customElement, property, state } from "lit/decorators.js";
+ import { classMap } from "lit/directives/class-map.js";
+
+ export type ContentMode = "expandable" | "scrollable";
+
+ Operation aborted
+
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+~/dev/cast/kimchi-dev (mateusz.polnik-llm-1324-issue-template)
+↑476k ↓35k 26.5%/131k (auto)

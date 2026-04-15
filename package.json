@@ -11,6 +11,8 @@
 		"clean": "rm -rf dist",
 		"build": "tsc --noEmit && node scripts/copy-resources.js --dev",
 		"build:binary": "node scripts/build-binary.js",
+		"build:binary-linux-arm64": "node scripts/build-binary.js --target linux-arm64",
+		"build:binary-linux-x64": "node scripts/build-binary.js --target linux-x64",
 		"dev": "bun run src/cli.ts",
 		"lint": "biome check src/ scripts/",
 		"lint:fix": "biome check --write src/ scripts/",
