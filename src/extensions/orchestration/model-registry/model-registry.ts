@@ -42,7 +42,6 @@ function modelIdToName(id: string): string {
 export interface ModelRegistryWarning {
 	kind: "unknown_model"
 	modelId: string
-	message: string
 }
 
 export class ModelRegistry {
@@ -59,25 +58,25 @@ export class ModelRegistry {
 		const warnings: ModelRegistryWarning[] = []
 
 		// Build full descriptor list from the API model IDs
-		this.allModels = availableModelIds.map((id) => {
-			const capabilities = MODEL_CAPABILITIES.get(id)
-			if (capabilities === undefined) {
-				warnings.push({
-					kind: "unknown_model",
-					modelId: id,
-					message: `New model available: "${id}". Update the harness to unlock its full capabilities (add an entry to MODEL_CAPABILITIES in builtin-models.ts), or add it to your orchestrator config. Until then it will not be offered as a subagent.`,
-				})
-				return {
-					id,
-					provider: PROVIDER,
-					name: modelIdToName(id),
-					capabilities: GENERIC_CAPABILITIES,
-				}
+		const allModels: OrchestrationModelDescriptor[] = []
+		for (const id of availableModelIds) {
+			const entry = MODEL_CAPABILITIES.get(id)
+			if (entry === "ignored") {
+				continue
 			}
-			return { id, provider: PROVIDER, name: modelIdToName(id), capabilities }
-		})
+			if (entry === undefined) {
+				warnings.push({ kind: "unknown_model", modelId: id })
+				allModels.push({ id, provider: PROVIDER, name: modelIdToName(id), capabilities: GENERIC_CAPABILITIES })
+			} else {
+				allModels.push({ id, provider: PROVIDER, name: modelIdToName(id), capabilities: entry })
+			}
+		}
+		this.allModels = allModels
 
-		this.modelsWithCapabilities = this.allModels.filter((m) => MODEL_CAPABILITIES.has(m.id))
+		this.modelsWithCapabilities = this.allModels.filter((m) => {
+			const entry = MODEL_CAPABILITIES.get(m.id)
+			return entry !== undefined && entry !== "ignored"
+		})
 		this.warnings = warnings
 	}
 
