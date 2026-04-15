@@ -46,6 +46,98 @@ A default `models.json` is created automatically on first run at `~/.config/kimc
 
 kimchi-code respects `HTTP_PROXY` / `HTTPS_PROXY` environment variables for network requests.
 
+## Tags
+
+kimchi-code supports tagging LLM requests for usage tracking and cost attribution. Tags are automatically included with every LLM request and displayed in the footer of the interactive UI.
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `/tags` | List all active tags |
+| `/tags add key:value ...` | Add one or more tags (e.g., `/tags add project:myapp team:backend`) |
+| `/tags remove tag ...` | Remove one or more user-defined tags |
+| `/tags clear` | Remove all user-defined tags |
+
+Use `/tags` without arguments to see help and current static tag configuration.
+
+### Tag format
+
+Tags use `key:value` format with these rules:
+- Must start and end with alphanumeric characters
+- Middle characters can include hyphens (`-`), underscores (`_`), and dots (`.`) 
+- Key and value must each be 64 characters or less
+- Maximum 10 tags total (including static tags and the auto-added model tag)
+
+**Valid examples:** `project:myapp`, `team:backend`
+
+### Static tags
+
+Static tags are set via the `KIMCHI_TAGS` environment variable (comma-separated):
+
+```bash
+export KIMCHI_TAGS="team:backend,project:api"
+```
+
+Static tags are read-only within the session and cannot be added, removed, or cleared via `/tags` commands. They are displayed with a `[static]` marker when listing tags.
+
+### Persistence
+
+User-defined tags (those added via `/tags add`) are automatically persisted to:
+
+```
+~/.config/kimchi/tags.json
+```
+
+These tags persist across sessions. Static tags from `KIMCHI_TAGS` are not persisted and must be set via environment variable each session.
+
+### Visual display
+
+Active tags are displayed in the footer, grouped by key with color coding for visual distinction. Tags with the same key are shown together (e.g., `project:api,web`).
+
+## Auto-tagging
+
+A `model:{model_id}` tag is automatically added to every LLM request (e.g., `model:kimi-k2.5`). This tag does not count toward the 10 tag limit and cannot be removed.
+
+A `phase:{phase}` tag is automatically added since kimchi-code supports phase tracking for usage analytics and cost attribution. Phases represent the high-level type of work being done (exploration, planning, building, reviewing, or researching).
+
+### Available phases
+
+| Phase | Description |
+|-------|-------------|
+| `explore` | Exploring/navigating the codebase, reading files to understand structure |
+| `plan` | Planning, designing, breaking down tasks, writing specs |
+| `build` | Writing, modifying, or refactoring code |
+| `review` | Code review, analyzing output, verifying correctness |
+| `research` | Researching documentation, investigating issues |
+
+### Setting phases
+
+Use the `set_phase` tool to set the current phase:
+
+```
+set_phase({"phase": "explore"})
+```
+
+**Important:** Only the orchestrator (main agent) can set phases. Subagents receive the current phase from the orchestrator but cannot change it.
+
+### Phase lifecycle
+
+1. The orchestrator sets the phase at the start of work and when transitioning between activities
+2. The phase is displayed in the footer (e.g., `↳ explore`)
+3. The phase is included as a `phase:{name}` tag in all LLM requests for analytics
+4. When delegating to subagents, the current phase is passed automatically
+
+### Example workflow
+
+```
+User: "Add user authentication"
+→ set_phase({"phase": "explore"})     # Understand existing auth code
+→ set_phase({"phase": "plan"})        # Design auth flow
+→ set_phase({"phase": "build"})       # Implement the auth code
+→ set_phase({"phase": "review"})      # Verify the implementation
+```
+
 ## Development
 
 ### Prerequisites
