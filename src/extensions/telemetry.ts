@@ -124,8 +124,6 @@ async function sendLog(
 		})
 		if (!res.ok) {
 			console.error(`[telemetry] send failed: ${res.status} ${await res.text()}`)
-		} else {
-			console.error(`[telemetry] sent ${eventName} (${res.status})`)
 		}
 	} catch (err) {
 		console.error(`[telemetry] send error: ${err}`)
