@@ -44,11 +44,10 @@ export default function (pi: ExtensionAPI) {
 	if (!subagentMode) {
 		const registry = new ModelRegistry(getAvailableModelIds())
 
-		// Emit startup warnings for drift between the API model list and the
-		// capability knowledge-base. These surface in the terminal so the user
-		// knows when to add a capability entry or clean up a stale one.
+		// Notify the developer when a newly available API model has no capability entry yet.
+		// These surface in the terminal as actionable discovery notices.
 		for (const warning of registry.warnings) {
-			console.error(`Warning [model-registry]: ${warning.message}`)
+			console.error(`[model-registry] ${warning.message}`)
 		}
 
 		pi.on("input", async (event, ctx) => {

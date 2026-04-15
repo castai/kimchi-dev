@@ -11,9 +11,9 @@
  *
  * Merging rules:
  *   - A model in the API with a capability entry → full OrchestrationModelDescriptor.
- *   - A model in the API without a capability entry → generic descriptor + startup warning.
- *   - A model in the capability map but absent from the API → orphaned, excluded from
- *     routing (it cannot be called) + startup warning.
+ *   - A model in the API without a capability entry → generic descriptor + startup notice.
+ *   - A model in the capability map but absent from the API → silently excluded from
+ *     routing (it cannot be called).
  *
  * Models with capabilities = intersection of availableModelIds ∩ MODEL_CAPABILITIES keys.
  * Subagent pool           = models with capabilities, excluding the current orchestrator.
@@ -40,7 +40,7 @@ function modelIdToName(id: string): string {
 }
 
 export interface ModelRegistryWarning {
-	kind: "unknown_model" | "orphaned_capability"
+	kind: "unknown_model"
 	modelId: string
 	message: string
 }
@@ -57,7 +57,6 @@ export class ModelRegistry {
 
 	constructor(availableModelIds: readonly string[]) {
 		const warnings: ModelRegistryWarning[] = []
-		const apiIdSet = new Set(availableModelIds)
 
 		// Build full descriptor list from the API model IDs
 		this.allModels = availableModelIds.map((id) => {
@@ -66,7 +65,7 @@ export class ModelRegistry {
 				warnings.push({
 					kind: "unknown_model",
 					modelId: id,
-					message: `Model "${id}" is available via the API but has no capability entry. It can be used as the orchestrator model but will not be offered as a subagent. Add an entry to MODEL_CAPABILITIES in builtin-models.ts to enable subagent routing.`,
+					message: `New model available: "${id}". Update the harness to unlock its full capabilities (add an entry to MODEL_CAPABILITIES in builtin-models.ts), or add it to your orchestrator config. Until then it will not be offered as a subagent.`,
 				})
 				return {
 					id,
@@ -77,17 +76,6 @@ export class ModelRegistry {
 			}
 			return { id, provider: PROVIDER, name: modelIdToName(id), capabilities }
 		})
-
-		// Warn about orphaned capability entries (in map but not in API)
-		for (const capabilityId of MODEL_CAPABILITIES.keys()) {
-			if (!apiIdSet.has(capabilityId)) {
-				warnings.push({
-					kind: "orphaned_capability",
-					modelId: capabilityId,
-					message: `Model "${capabilityId}" has a capability entry but was not returned by the API. It may have been renamed or removed. Update MODEL_CAPABILITIES in builtin-models.ts.`,
-				})
-			}
-		}
 
 		this.modelsWithCapabilities = this.allModels.filter((m) => MODEL_CAPABILITIES.has(m.id))
 		this.warnings = warnings

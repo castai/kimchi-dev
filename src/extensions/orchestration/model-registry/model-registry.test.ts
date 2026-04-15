@@ -35,6 +35,13 @@ describe("ModelRegistry — unknown model in API", () => {
 		expect(unknown?.capabilities.description).toContain("No capability information")
 	})
 
+	it("emits a user-friendly discovery notice for the unknown model", () => {
+		const registry = new ModelRegistry([...KNOWN_IDS, "brand-new-model"])
+		const warning = registry.warnings.find((w) => w.modelId === "brand-new-model")
+		expect(warning?.message).toContain("New model available")
+		expect(warning?.message).toContain("brand-new-model")
+	})
+
 	it("excludes the unknown model from getModelsWithCapabilities()", () => {
 		const registry = new ModelRegistry([...KNOWN_IDS, "brand-new-model"])
 		expect(registry.getModelsWithCapabilities().map((m) => m.id)).not.toContain("brand-new-model")
@@ -56,12 +63,10 @@ describe("ModelRegistry — orphaned capability entry", () => {
 		expect(registry.getModelsWithCapabilities().map((m) => m.id)).toEqual([presentId])
 	})
 
-	it("emits an orphaned_capability warning for each missing model", () => {
+	it("does not emit any warning for capability entries absent from the API", () => {
 		const presentId = KNOWN_IDS[0]
-		const orphanedIds = KNOWN_IDS.slice(1)
 		const registry = new ModelRegistry([presentId])
-		const orphanWarnings = registry.warnings.filter((w) => w.kind === "orphaned_capability")
-		expect(orphanWarnings.map((w) => w.modelId)).toEqual(expect.arrayContaining(orphanedIds))
+		expect(registry.warnings).toHaveLength(0)
 	})
 })
 
