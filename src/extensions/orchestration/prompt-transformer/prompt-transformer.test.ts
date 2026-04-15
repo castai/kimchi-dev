@@ -55,26 +55,20 @@ describe("transformPrompt", () => {
 	it("wraps content in structured sections", () => {
 		const result = transformPrompt("do something", registry)
 		expect(result).toContain("## Model Attributes")
-		expect(result).toContain("## Available Models for Subagents")
+		expect(result).toContain("## Available Models")
 		expect(result).toContain("## Task")
-		expect(result).toContain("## You")
-	})
-
-	it("shows current model name when provided", () => {
-		const result = transformPrompt("some task", registry, currentModel)
-		expect(result).toContain("## You — Kimi K2.5")
 	})
 
 	it("excludes the current model from the subagent models list", () => {
 		const result = transformPrompt("some task", registry, currentModel)
-		// All models with capabilities except the current one should appear in the subagent section
+		// All models with capabilities except the current one should appear in the models section
 		const otherModels = registry.getModelsWithCapabilities().filter((m) => m.id !== currentModel.id)
 		for (const model of otherModels) {
 			expect(result).toContain(model.name)
 		}
-		// Kimi's formatted model entry should not appear in the subagent section
-		const subagentSection = result.split("## Available Models for Subagents")[1].split("## Task")[0]
-		expect(subagentSection).not.toContain("Kimi K2.5")
+		// Kimi's formatted model entry should not appear in the models section
+		const modelsSection = result.split("## Available Models")[1].split("## Task")[0]
+		expect(modelsSection).not.toContain("Kimi K2.5")
 	})
 
 	it("includes all models when no current model is provided", () => {
@@ -84,19 +78,6 @@ describe("transformPrompt", () => {
 		}
 	})
 
-	it("shows unknown when current model is not provided", () => {
-		const result = transformPrompt("some task", registry)
-		expect(result).toContain("## You — unknown")
-		expect(result).toContain("No capability information available")
-	})
-
-	it("includes current model capabilities when model is in registry", () => {
-		const result = transformPrompt("some task", registry, currentModel)
-		const kimi = registry.getAll().find((m) => m.id === "kimi-k2.5")
-		expect(kimi).toBeDefined()
-		expect(result).toContain(kimi?.capabilities.description)
-		expect(result).toContain("Tier: heavy")
-	})
 })
 
 describe("buildOrchestratorSystemPrompt", () => {
@@ -122,8 +103,6 @@ describe("buildOrchestratorSystemPrompt", () => {
 
 	it("contains orchestration instructions", () => {
 		const result = buildOrchestratorSystemPrompt(tools)
-		expect(result).toContain("EASY")
-		expect(result).toContain("HARD")
 		expect(result).toContain("orchestrator")
 	})
 
