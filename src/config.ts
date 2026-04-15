@@ -89,19 +89,23 @@ export function readTelemetryConfig(configPath?: string): TelemetryConfig {
 		// missing or invalid config — use defaults
 	}
 
-	const enabled = envEnabled !== undefined ? envEnabled !== "0" && envEnabled !== "false" : (fileEnabled ?? false)
-
 	// Resolve auth headers: explicit config override takes priority, then API key
 	let headers: Record<string, string>
+	let apiKey: string | undefined
 	if (fileHeaders) {
 		headers = fileHeaders
 	} else {
-		const apiKey =
+		apiKey =
 			(typeof process.env.KIMCHI_API_KEY === "string" && process.env.KIMCHI_API_KEY.length > 0
 				? process.env.KIMCHI_API_KEY
 				: undefined) ?? readApiKeyFromConfigFile(path)
 		headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
 	}
+
+	// Enabled by default when an API key is available; explicit config/env overrides either way
+	const defaultEnabled = fileHeaders ? Object.keys(fileHeaders).length > 0 : !!apiKey
+	const enabled =
+		envEnabled !== undefined ? envEnabled !== "0" && envEnabled !== "false" : (fileEnabled ?? defaultEnabled)
 
 	return {
 		enabled,
