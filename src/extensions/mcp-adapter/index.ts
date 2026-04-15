@@ -1,6 +1,8 @@
 import type { ExtensionAPI, ToolInfo, ToolRenderResultOptions } from "@mariozechner/pi-coding-agent"
 import { Theme, keyHint } from "@mariozechner/pi-coding-agent"
 import { Type } from "@sinclair/typebox"
+import type { DirectToolSpec } from "./types.js"
+import { formatToolName } from "./types.js"
 import { Text } from "@mariozechner/pi-tui"
 import { authenticateServer, openMcpPanel, reconnectServers, showStatus, showTools } from "./commands.js"
 import { loadConfig } from "../../config.js"
@@ -86,6 +88,9 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 		directSpecs.length === 0 ||
 		missingConfiguredDirectToolServers.length > 0
 
+	// Track all registered tool names to avoid double-registration
+	const registeredToolNames = new Set<string>()
+
 	for (const spec of directSpecs) {
 		pi.registerTool({
 			name: spec.prefixedName,
@@ -99,7 +104,44 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 				spec,
 			),
 		})
+		registeredToolNames.add(spec.prefixedName)
 	}
+
+	function registerAndActivate(specs: DirectToolSpec[]): void {
+		if (!state) return
+		const newNames: string[] = []
+		for (const spec of specs) {
+			if (registeredToolNames.has(spec.prefixedName)) continue
+			pi.registerTool({
+				name: spec.prefixedName,
+				label: `MCP: ${spec.originalName}`,
+				description: spec.description || "(no description)",
+				parameters: Type.Unsafe<Record<string, unknown>>(spec.inputSchema || { type: "object", properties: {} }),
+				execute: createDirectToolExecutor(
+					() => state,
+					() => initPromise,
+					spec,
+				),
+			})
+			registeredToolNames.add(spec.prefixedName)
+			newNames.push(spec.prefixedName)
+		}
+		if (newNames.length === 0) return
+		for (const name of newNames) {
+			state.dynamicToolNames.add(name)
+		}
+		const current = new Set(pi.getActiveTools())
+		for (const name of newNames) current.add(name)
+		pi.setActiveTools([...current])
+	}
+
+	pi.on("input", () => {
+		if (!state || state.dynamicToolNames.size === 0) return
+		const dynamic = state.dynamicToolNames
+		const cleaned = pi.getActiveTools().filter((n) => !dynamic.has(n))
+		pi.setActiveTools(cleaned)
+		state.dynamicToolNames.clear()
+	})
 
 	const getPiTools = (): ToolInfo[] => pi.getAllTools()
 
@@ -347,7 +389,9 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 					return executeConnect(state, params.connect)
 				}
 				if (params.describe) {
-					return executeDescribe(state, params.describe)
+					return executeDescribe(state, params.describe, (specs) =>
+						registerAndActivate(specs.map((s) => ({ ...s, prefixedName: formatToolName(s.originalName, s.serverName, prefix) })))
+					)
 				}
 				if (params.search) {
 					let mcpSearchLimit = 5
@@ -357,7 +401,9 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 				} catch {
 					// no API key configured; default is fine
 				}
-				return executeSearch(state, params.search, params.regex, params.server, params.includeSchemas, getPiTools, params.limit ?? mcpSearchLimit, state.searchStrategy)
+				return executeSearch(state, params.search, params.regex, params.server, params.includeSchemas, getPiTools, params.limit ?? mcpSearchLimit, state.searchStrategy, (specs) =>
+					registerAndActivate(specs.map((s) => ({ ...s, prefixedName: formatToolName(s.originalName, s.serverName, prefix) })))
+				)
 				}
 				if (params.server) {
 					return executeList(state, params.server)
