@@ -41,8 +41,14 @@ Best for codebase exploration, research, and simple well-defined tasks.`
  * model list from the API with orchestration metadata (tier, strengths,
  * vision, description). Models not present here get a generic descriptor
  * and a startup warning.
+ *
+ * Set the value to "ignored" to suppress the startup warning for a model
+ * without adding routing support for it.
  */
-export const MODEL_CAPABILITIES: ReadonlyMap<string, ModelCapabilities> = new Map([
+export const MODEL_CAPABILITIES: ReadonlyMap<string, ModelCapabilities | "ignored"> = new Map<
+	string,
+	ModelCapabilities | "ignored"
+>([
 	[
 		"kimi-k2.5",
 		{
@@ -70,4 +76,6 @@ export const MODEL_CAPABILITIES: ReadonlyMap<string, ModelCapabilities> = new Ma
 			description: NEMOTRON_3_SUPER_DESCRIPTION,
 		},
 	],
+	["glm-5-fp8", "ignored"],
+	["minimax-m2.5", "ignored"],
 ])

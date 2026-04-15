@@ -20,6 +20,7 @@
 
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
+import { ANSI, fg } from "../../ansi.js"
 import { getAvailableModelIds } from "../../startup-context.js"
 import { ModelRegistry } from "./model-registry/index.js"
 import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/context-files.js"
@@ -43,10 +44,11 @@ export default function (pi: ExtensionAPI) {
 	if (!subagentMode) {
 		const registry = new ModelRegistry(getAvailableModelIds())
 
-		// Notify the developer when a newly available API model has no capability entry yet.
-		// These surface in the terminal as actionable discovery notices.
+		// Announce newly available API models that have no capability entry yet.
 		for (const warning of registry.warnings) {
-			console.error(`[model-registry] ${warning.message}`)
+			console.log(
+				`${fg(ANSI.accent, ` New model available: "kimchi-dev/${warning.modelId}"`)}\n${fg(ANSI.dim, " Update the app or add the new model to model capabilities config to unlock orchestration support.")}`,
+			)
 		}
 
 		pi.on("input", async (event, _ctx) => {

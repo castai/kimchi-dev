@@ -77,7 +77,6 @@ describe("transformPrompt", () => {
 			expect(result).toContain(model.name)
 		}
 	})
-
 })
 
 describe("buildOrchestratorSystemPrompt", () => {
