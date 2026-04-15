@@ -10,6 +10,7 @@ export interface KimchiConfig {
 	apiKey: string
 	agentConfigDir: string
 	llmEndpoint: string
+	maxToolResultChars: number
 }
 
 /**
@@ -29,6 +30,17 @@ function readApiKeyFromConfigFile(configPath: string): string | undefined {
 	}
 }
 
+function readConfigExtras(configPath: string): { maxToolResultChars?: number } {
+	try {
+		const raw = readFileSync(configPath, "utf-8")
+		const parsed = JSON.parse(raw)
+		const val = parsed.maxToolResultChars
+		return { maxToolResultChars: typeof val === "number" && val > 0 ? val : undefined }
+	} catch {
+		return {}
+	}
+}
+
 /**
  * Load the kimchi-code configuration.
  *
@@ -41,6 +53,8 @@ function readApiKeyFromConfigFile(configPath: string): string | undefined {
 export function loadConfig(options?: { configPath?: string; env?: Record<string, string | undefined> }): KimchiConfig {
 	const env = options?.env ?? process.env
 	const configPath = options?.configPath ?? KIMCHI_CONFIG_PATH
+	const extras = readConfigExtras(configPath)
+	const maxToolResultChars = extras.maxToolResultChars ?? 10_000
 
 	const envKey = env.KIMCHI_API_KEY
 	if (typeof envKey === "string" && envKey.length > 0) {
@@ -48,6 +62,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 			apiKey: envKey,
 			agentConfigDir: AGENT_CONFIG_DIR,
 			llmEndpoint: CAST_AI_LLM_ENDPOINT,
+			maxToolResultChars,
 		}
 	}
 
@@ -57,6 +72,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 			apiKey: fileKey,
 			agentConfigDir: AGENT_CONFIG_DIR,
 			llmEndpoint: CAST_AI_LLM_ENDPOINT,
+			maxToolResultChars,
 		}
 	}
 
