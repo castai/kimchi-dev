@@ -7,9 +7,9 @@
 
 import { StringEnum } from "@mariozechner/pi-ai"
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
-import { Text } from "@mariozechner/pi-tui"
+import { Container, Text } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
-import { executeWebSearch } from "./execute-handler.js"
+import { type SearchResponse, executeWebSearch } from "./execute-handler.js"
 
 export default function webSearchExtension(pi: ExtensionAPI): void {
 	pi.registerTool({
@@ -57,6 +57,27 @@ export default function webSearchExtension(pi: ExtensionAPI): void {
 
 		async execute(_toolCallId, params, signal) {
 			return executeWebSearch(params, signal)
+		},
+
+		renderResult(result, options, theme, context) {
+			const sources = result.details?.sources ?? []
+			const count = sources.length
+
+			if (options.expanded) {
+				const lines = sources.map((s) => `${theme.fg("accent", s.url)}  ${theme.fg("muted", s.title)}`).join("\n")
+				const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
+				component.clear()
+				component.addChild(new Text(lines, 0, 0))
+				component.invalidate()
+				return component
+			}
+
+			const summary = `${theme.fg("dim", `${count} result${count === 1 ? "" : "s"}`)}  ${theme.fg("muted", "(ctrl+o to expand)")}`
+			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
+			component.clear()
+			component.addChild(new Text(summary, 0, 0))
+			component.invalidate()
+			return component
 		},
 
 		renderCall(args, theme, context) {

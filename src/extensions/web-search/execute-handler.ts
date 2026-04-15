@@ -38,7 +38,7 @@ export interface WebSearchParams {
 
 export interface WebSearchResult {
 	content: { type: "text"; text: string }[]
-	details: Record<string, never>
+	details: { sources?: SearchSource[] }
 }
 
 export function formatForLLM(response: SearchResponse, maxContentChars = DEFAULT_MAX_CONTENT_CHARS): string {
@@ -126,7 +126,7 @@ export async function executeWebSearch(params: WebSearchParams, signal?: AbortSi
 
 		return {
 			content: [{ type: "text" as const, text }],
-			details: {},
+			details: { sources: data.sources },
 		}
 	} finally {
 		clearTimeout(timeout)
