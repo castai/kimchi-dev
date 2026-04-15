@@ -277,6 +277,11 @@ function updateFooterStatus(tagManager: TagManager, ctx: ExtensionContext): void
 
 // ─── Command handlers ─────────────────────────────────────────────────────────
 
+function subcommandArgs(args: string, subcommand: string): string {
+	const normalised = args.trim()
+	return normalised.slice(subcommand.length).trim()
+}
+
 function handleTagsCommand(args: string, ctx: ExtensionCommandContext, tagManager: TagManager): void {
 	const trimmed = args.trim().toLowerCase()
 
@@ -316,7 +321,7 @@ function handleTagsCommand(args: string, ctx: ExtensionCommandContext, tagManage
 	}
 
 	if (trimmed.startsWith("add ")) {
-		const tagsInput = args.slice(4).trim()
+		const tagsInput = subcommandArgs(args, "add")
 		const tagsToAdd = tagsInput.split(/\s+/).filter((t) => t.length > 0)
 
 		if (tagsToAdd.length === 0) {
@@ -355,8 +360,7 @@ function handleTagsCommand(args: string, ctx: ExtensionCommandContext, tagManage
 	}
 
 	if (trimmed.startsWith("remove ") || trimmed.startsWith("rm ")) {
-		const normalised = args.trim()
-		const tagsInput = normalised.slice(normalised.toLowerCase().startsWith("remove ") ? 7 : 3).trim()
+		const tagsInput = subcommandArgs(args, trimmed.startsWith("remove ") ? "remove" : "rm")
 		const tagsToRemove = tagsInput.split(/\s+/).filter((t) => t.length > 0)
 
 		if (tagsToRemove.length === 0) {
@@ -449,16 +453,6 @@ export default function tagsExtension(pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const phase = params.phase as Phase
 
-			if (!isValidPhase(phase)) {
-				return {
-					content: [
-						{ type: "text", text: `Invalid phase: "${params.phase}". Valid phases: ${VALID_PHASES.join(", ")}` },
-					],
-					isError: true,
-					details: undefined,
-				}
-			}
-
 			tagManager.setPhase(phase)
 
 			if (ctx.hasUI) {
@@ -495,9 +489,8 @@ export default function tagsExtension(pi: ExtensionAPI) {
 			reservedTags.push(phaseTag)
 		}
 
-		// Fill remaining slots (up to 10 total) with user tags
-		const remainingSlots = Math.max(0, 10 - reservedTags.length)
-		const finalTags = [...reservedTags, ...allTags.slice(0, remainingSlots)]
+		// User tags are capped at 10; reserved tags (model, phase) ride on top of that cap
+		const finalTags = [...reservedTags, ...allTags.slice(0, 10)]
 
 		if (finalTags.length === 0) return
 
@@ -505,7 +498,7 @@ export default function tagsExtension(pi: ExtensionAPI) {
 		const existing = Array.isArray(payload.tags) ? (payload.tags as string[]) : []
 		const extensionSet = new Set(finalTags)
 		const uniqueExisting = existing.filter((t) => !extensionSet.has(t))
-		const merged = [...finalTags, ...uniqueExisting].slice(0, 10)
+		const merged = [...finalTags, ...uniqueExisting].slice(0, 10 + reservedTags.length)
 
 		if (merged.length > 0) {
 			payload.tags = merged
