@@ -19,6 +19,7 @@ import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichm
 import subagentExtension from "./extensions/subagent.js"
 import tagsExtension from "./extensions/tags.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
+import webSearchExtension from "./extensions/web-search/index.js"
 import { updateModelsConfig } from "./models.js"
 import { setAvailableModelIds } from "./startup-context.js"
 
@@ -54,6 +55,7 @@ try {
 			subagentExtension,
 			mcpAdapterExtension,
 			webFetchExtension,
+			webSearchExtension,
 			promptEnrichmentExtension,
 			bashCollapseExtension,
 			tagsExtension,
