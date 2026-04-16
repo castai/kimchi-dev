@@ -16,9 +16,9 @@ import { loadConfig, readTelemetryConfig } from "./config.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
+import promptSummaryExtension from "./extensions/prompt-summary.js"
 import subagentExtension from "./extensions/subagent.js"
 import tagsExtension from "./extensions/tags.js"
-import promptSummaryExtension from "./extensions/prompt-summary.js"
 import telemetryExtension from "./extensions/telemetry.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import webSearchExtension from "./extensions/web-search/index.js"
@@ -56,15 +56,15 @@ try {
 	const { main } = await import("@mariozechner/pi-coding-agent")
 	await main(process.argv.slice(2), {
 		extensionFactories: [
-			telemetryExtension(telemetryConfig),
-			subagentExtension,
+			bashCollapseExtension,
 			mcpAdapterExtension,
+			promptEnrichmentExtension,
+			promptSummaryExtension,
+			subagentExtension,
+			tagsExtension,
+			telemetryExtension(telemetryConfig),
 			webFetchExtension,
 			webSearchExtension,
-			promptEnrichmentExtension,
-			bashCollapseExtension,
-			tagsExtension,
-			promptSummaryExtension,
 		],
 	})
 } catch (err) {

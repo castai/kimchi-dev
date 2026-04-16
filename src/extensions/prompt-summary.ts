@@ -44,13 +44,32 @@ function formatDuration(ms: number): string {
 	return `${m}m ${rem}s`
 }
 
+function formatTokenCount(n: number): string {
+	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`
+	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+	return String(n)
+}
+
+// Fixed column widths (prefix + max value "1000.0k" = 7 chars):
+//   ↑/↓ cols:          2 + 7 = 9  → pad to 10
+//   cache-read col:   11 + 7 = 18  → pad to 20
+//   cache-write col:  12 + 7 = 19  → pad to 21
+//   total col:         6 + 7 = 13  (last, no padding needed)
+const COL_IN_OUT_WIDTH = 10
+const COL_CACHE_READ_WIDTH = 20
+const COL_CACHE_WRITE_WIDTH = 21
+const COL_GAP = "  "
+
 function formatUsageValues(totals: UsageTotals): string {
 	const total = totals.input + totals.output + totals.cacheRead + totals.cacheWrite
-	const parts = [`↑${totals.input.toLocaleString()}`, `↓${totals.output.toLocaleString()}`]
-	if (totals.cacheRead > 0) parts.push(`cache-read ${totals.cacheRead.toLocaleString()}`)
-	if (totals.cacheWrite > 0) parts.push(`cache-write ${totals.cacheWrite.toLocaleString()}`)
-	parts.push(`total ${total.toLocaleString()}`)
-	return parts.join("   ")
+	const cols = [
+		`↑${formatTokenCount(totals.input)}`.padEnd(COL_IN_OUT_WIDTH),
+		`↓${formatTokenCount(totals.output)}`.padEnd(COL_IN_OUT_WIDTH),
+		(totals.cacheRead > 0 ? `cache-read ${formatTokenCount(totals.cacheRead)}` : "").padEnd(COL_CACHE_READ_WIDTH),
+		(totals.cacheWrite > 0 ? `cache-write ${formatTokenCount(totals.cacheWrite)}` : "").padEnd(COL_CACHE_WRITE_WIDTH),
+		`total ${formatTokenCount(total)}`,
+	]
+	return cols.join(COL_GAP).trimEnd()
 }
 
 const LABEL_WIDTH = 16
@@ -68,15 +87,16 @@ const promptSummaryRenderer: MessageRenderer<PromptSummaryData> = (message, _opt
 
 	container.addChild(new Text(INDENT + theme.fg("dim", "execution:".padEnd(LABEL_WIDTH)) + data.elapsed, 0, 0))
 
-	const rows: Array<{ label: string; totals: UsageTotals }> = []
+	const rows: Array<{ label: string; totals: UsageTotals; dimTotal?: boolean }> = []
 	if (data.orchestrator) rows.push({ label: "orchestrator:", totals: data.orchestrator })
 	if (data.subagents) rows.push({ label: "subagents:", totals: data.subagents })
-	rows.push({ label: "total:", totals: data.total })
+	rows.push({ label: "total:", totals: data.total, dimTotal: true })
 
 	for (const row of rows) {
 		const rowLabel = theme.fg("dim", row.label.padEnd(LABEL_WIDTH))
 		const values = formatUsageValues(row.totals)
-		container.addChild(new Text(INDENT + rowLabel + values, 0, 0))
+		const text = row.dimTotal ? theme.fg("dim", values) : values
+		container.addChild(new Text(INDENT + rowLabel + text, 0, 0))
 	}
 
 	return container
