@@ -13,7 +13,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, resolve } from "node:path"
-import { Container, Text } from "@mariozechner/pi-tui"
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
