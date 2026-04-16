@@ -76,9 +76,7 @@ export default function webFetchExtension(pi: ExtensionAPI): void {
 				}, 80)
 			}
 
-			const spinner = running
-				? theme.fg("accent", SPINNER_FRAMES[state.spinnerIdx ?? 0])
-				: theme.fg("muted", "-")
+			const spinner = running ? theme.fg("accent", SPINNER_FRAMES[state.spinnerIdx ?? 0]) : theme.fg("muted", "-")
 
 			const domain = formatDomain(args.url ?? "")
 			const header = `${spinner} ${theme.fg("toolTitle", theme.bold("Web fetch"))}`

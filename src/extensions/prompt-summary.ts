@@ -70,9 +70,7 @@ function usageRawCols(totals: UsageTotals): string[] {
 function formatUsageRows(rows: Array<{ label: string; totals: UsageTotals }>, theme: Theme): string[] {
 	const colSets = rows.map((r) => usageRawCols(r.totals))
 	const colCount = Math.max(...colSets.map((c) => c.length))
-	const colWidths = Array.from({ length: colCount - 1 }, (_, i) =>
-		Math.max(...colSets.map((c) => (c[i] ?? "").length)),
-	)
+	const colWidths = Array.from({ length: colCount - 1 }, (_, i) => Math.max(...colSets.map((c) => (c[i] ?? "").length)))
 
 	return rows.map((row, ri) => {
 		const cols = colSets[ri]

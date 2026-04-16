@@ -83,9 +83,7 @@ export default function webSearchExtension(pi: ExtensionAPI): void {
 				}, 80)
 			}
 
-			const spinner = running
-				? theme.fg("accent", SPINNER_FRAMES[state.spinnerIdx ?? 0])
-				: theme.fg("muted", "-")
+			const spinner = running ? theme.fg("accent", SPINNER_FRAMES[state.spinnerIdx ?? 0]) : theme.fg("muted", "-")
 
 			const header = `${spinner} ${theme.fg("toolTitle", theme.bold("Web search"))}`
 			const phraseLine = `  ${theme.fg("muted", "phrase:")} ${theme.fg("accent", "`")}${theme.fg("accent", args.query ?? "")}${theme.fg("accent", "`")}`

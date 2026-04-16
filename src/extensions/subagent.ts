@@ -300,7 +300,6 @@ function formatStats(stats: SubagentStats, theme: Theme): string {
 	return `- ${duration}  ${input}  ${output}`
 }
 
-
 const SubagentParams = Type.Object({
 	provider: Type.String({
 		description:
@@ -405,9 +404,7 @@ export default function (pi: ExtensionAPI) {
 				}, 80)
 			}
 
-			const spinner = running
-				? theme.fg("accent", SPINNER_FRAMES[state.spinnerIdx ?? 0])
-				: theme.fg("muted", "-")
+			const spinner = running ? theme.fg("accent", SPINNER_FRAMES[state.spinnerIdx ?? 0]) : theme.fg("muted", "-")
 
 			const header = `${spinner} ${theme.fg("toolTitle", theme.bold("Subagent session"))}`
 			const modelLine = `  ${theme.fg("muted", "model:")}  ${theme.fg("accent", "`")}${theme.fg("accent", `${args.provider ?? ""}/${args.model ?? ""}`)}${theme.fg("accent", "`")}`
