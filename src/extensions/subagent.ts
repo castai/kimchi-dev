@@ -2,7 +2,7 @@ import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent"
-import { Container, Spacer, Text } from "@mariozechner/pi-tui"
+import { Container, Spacer, Text, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
 import { isBunBinary } from "../env.js"
 
@@ -352,7 +352,10 @@ export default function (pi: ExtensionAPI) {
 				ctx.cwd,
 				signal,
 				params.tokenBudget,
-				(text) => onUpdate?.({ content: [{ type: "text", text }], details: lastToolCall }),
+				(text) => {
+					lastToolCall = undefined
+					onUpdate?.({ content: [{ type: "text", text }], details: undefined })
+				},
 				(name, toolArgs, text) => {
 					const firstArg = Object.values(toolArgs)[0]
 					const argHint =
@@ -434,13 +437,17 @@ export default function (pi: ExtensionAPI) {
 
 			let displayText: string
 			let displayStyle: "dim" | "toolOutput"
+			const terminalWidth = process.stdout.columns ?? 80
 			if (toolCall) {
-				displayText = [`> ${toolCall}`, "", "", ""].join("\n")
+				const toolCallVisualLines = wrapTextWithAnsi(`> ${toolCall}`, terminalWidth)
+				const paddedLines = [...toolCallVisualLines, ...Array(5 - toolCallVisualLines.length).fill("")]
+				displayText = paddedLines.slice(0, 5).join("\n")
 				displayStyle = "dim"
 			} else {
 				const nonEmptyLines = textContent.text.split("\n").filter((l) => l.trim())
-				const last4 = nonEmptyLines.slice(-4)
-				const paddedLines = [...Array(4 - last4.length).fill(""), ...last4]
+				const visualLines = nonEmptyLines.flatMap((l) => wrapTextWithAnsi(l, terminalWidth))
+				const last5 = visualLines.slice(-5)
+				const paddedLines = [...Array(5 - last5.length).fill(""), ...last5]
 				displayText = paddedLines.join("\n")
 				displayStyle = "toolOutput"
 			}
