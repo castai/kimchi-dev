@@ -1,5 +1,5 @@
 import type { AssistantMessage, Usage } from "@mariozechner/pi-ai"
-import type { ExtensionAPI, MessageRenderer } from "@mariozechner/pi-coding-agent"
+import type {ExtensionAPI, MessageRenderer, Theme} from "@mariozechner/pi-coding-agent"
 import { Container, Text } from "@mariozechner/pi-tui"
 import { isSubagent } from "./orchestration/prompt-transformer/prompt-transformer.js"
 
@@ -60,16 +60,18 @@ const COL_CACHE_READ_WIDTH = 20
 const COL_CACHE_WRITE_WIDTH = 21
 const COL_GAP = "  "
 
-function formatUsageValues(totals: UsageTotals): string {
+function formatUsageValues(totals: UsageTotals, theme: Theme): string {
 	const total = totals.input + totals.output + totals.cacheRead + totals.cacheWrite
 	const cols = [
 		`↑${formatTokenCount(totals.input)}`.padEnd(COL_IN_OUT_WIDTH),
 		`↓${formatTokenCount(totals.output)}`.padEnd(COL_IN_OUT_WIDTH),
-		(totals.cacheRead > 0 ? `cache-read ${formatTokenCount(totals.cacheRead)}` : "").padEnd(COL_CACHE_READ_WIDTH),
-		(totals.cacheWrite > 0 ? `cache-write ${formatTokenCount(totals.cacheWrite)}` : "").padEnd(COL_CACHE_WRITE_WIDTH),
-		`total ${formatTokenCount(total)}`,
 	]
-	return cols.join(COL_GAP).trimEnd()
+	if (totals.cacheRead > 0 || totals.cacheWrite > 0) {
+		cols.push(`cache-read ${formatTokenCount(totals.cacheRead)}`.padEnd(COL_CACHE_READ_WIDTH))
+		cols.push(`cache-write ${formatTokenCount(totals.cacheWrite)}`.padEnd(COL_CACHE_WRITE_WIDTH))
+	}
+	cols.push(theme.fg("dim", `total `) + `${formatTokenCount(total)}`)
+	return cols.join(COL_GAP)
 }
 
 const LABEL_WIDTH = 16
@@ -87,16 +89,15 @@ const promptSummaryRenderer: MessageRenderer<PromptSummaryData> = (message, _opt
 
 	container.addChild(new Text(INDENT + theme.fg("dim", "execution:".padEnd(LABEL_WIDTH)) + data.elapsed, 0, 0))
 
-	const rows: Array<{ label: string; totals: UsageTotals; dimTotal?: boolean }> = []
+	const rows: Array<{ label: string; totals: UsageTotals }> = []
 	if (data.orchestrator) rows.push({ label: "orchestrator:", totals: data.orchestrator })
 	if (data.subagents) rows.push({ label: "subagents:", totals: data.subagents })
-	rows.push({ label: "total:", totals: data.total, dimTotal: true })
+	rows.push({ label: "total:", totals: data.total })
 
 	for (const row of rows) {
 		const rowLabel = theme.fg("dim", row.label.padEnd(LABEL_WIDTH))
-		const values = formatUsageValues(row.totals)
-		const text = row.dimTotal ? theme.fg("dim", values) : values
-		container.addChild(new Text(INDENT + rowLabel + text, 0, 0))
+		const values = formatUsageValues(row.totals, theme)
+		container.addChild(new Text(INDENT + rowLabel + values, 0, 0))
 	}
 
 	return container

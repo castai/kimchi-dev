@@ -1,18 +1,20 @@
 /**
  * Orchestration prompt enrichment extension.
  *
- * Behavior depends on whether this process is the orchestrator or a subagent
+ * Behavior depends on whether this process is the main model or a subagent
  * (detected via the KIMCHI_SUBAGENT env var set during subagent spawning).
  *
- * Orchestrator mode:
- * - "input": wraps the user prompt with model capabilities for routing decisions.
- * - "before_agent_start": replaces Pi's system prompt with the orchestrator
- *   system prompt, injecting available tool definitions via {{TOOLS}}.
+ * Main model mode:
+ * - "input": wraps the user prompt with the current model's own capabilities
+ *   and the available subagent models so the model can self-classify the task
+ *   and decide which steps to execute itself vs. delegate.
+ * - "before_agent_start": injects the self-classification system prompt with
+ *   full tool access (read, write, edit, bash, subagent).
  *
  * Subagent mode:
- * - "input": passes through unchanged (no model capability injection).
- * - "before_agent_start": replaces Pi's system prompt with the subagent
- *   system prompt. Filters out the subagent tool to prevent infinite loops.
+ * - "input": passes through unchanged.
+ * - "before_agent_start": injects the pure worker system prompt. Filters out
+ *   the subagent tool to prevent infinite delegation chains.
  *
  * Steering messages are excluded — when the agent is streaming, the handler
  * returns "continue" so the message passes through unchanged.
@@ -51,7 +53,7 @@ export default function (pi: ExtensionAPI) {
 			)
 		}
 
-		pi.on("input", async (event, _ctx) => {
+		pi.on("input", async (event, ctx) => {
 			if (event.source === "extension") {
 				return { action: "continue" as const }
 			}
@@ -59,11 +61,12 @@ export default function (pi: ExtensionAPI) {
 			// Steering and follow-up messages arrive while the agent is streaming
 			// (ctx.isIdle() === false, i.e. session.isStreaming === true).
 			// Skip enrichment and let them pass through unchanged
-			if (!_ctx.isIdle()) {
+			if (!ctx.isIdle()) {
 				return { action: "continue" as const }
 			}
 
-			const enrichedPrompt = transformPrompt(event.text, registry)
+			const currentModel = ctx.model ? { id: ctx.model.id, name: ctx.model.id } : undefined
+			const enrichedPrompt = transformPrompt(event.text, registry, currentModel)
 
 			const debugPrompts = pi.getFlag("debug-prompts") === true
 			if (debugPrompts) {
@@ -99,11 +102,6 @@ export default function (pi: ExtensionAPI) {
 			const systemPrompt = buildSubagentSystemPrompt(tools, cachedContextFiles, cachedSkills)
 			return { systemPrompt }
 		}
-
-		const orchestratorTools = pi
-			.getActiveTools()
-			.filter((name) => name !== "write" && name !== "edit" && name !== "bash" && name !== "read")
-		pi.setActiveTools(orchestratorTools)
 
 		const systemPrompt = buildOrchestratorSystemPrompt(tools, cachedContextFiles, cachedSkills)
 		return { systemPrompt }
