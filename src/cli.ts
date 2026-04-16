@@ -18,6 +18,7 @@ import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
 import subagentExtension from "./extensions/subagent.js"
 import tagsExtension from "./extensions/tags.js"
+import promptSummaryExtension from "./extensions/prompt-summary.js"
 import telemetryExtension from "./extensions/telemetry.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import webSearchExtension from "./extensions/web-search/index.js"
@@ -63,6 +64,7 @@ try {
 			promptEnrichmentExtension,
 			bashCollapseExtension,
 			tagsExtension,
+			promptSummaryExtension,
 		],
 	})
 } catch (err) {
