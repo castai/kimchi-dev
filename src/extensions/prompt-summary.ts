@@ -1,5 +1,5 @@
 import type { AssistantMessage, Usage } from "@mariozechner/pi-ai"
-import type {ExtensionAPI, MessageRenderer, Theme} from "@mariozechner/pi-coding-agent"
+import type { ExtensionAPI, MessageRenderer, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Text } from "@mariozechner/pi-tui"
 import { isSubagent } from "./orchestration/prompt-transformer/prompt-transformer.js"
 
@@ -70,7 +70,7 @@ function formatUsageValues(totals: UsageTotals, theme: Theme): string {
 		cols.push(`cache-read ${formatTokenCount(totals.cacheRead)}`.padEnd(COL_CACHE_READ_WIDTH))
 		cols.push(`cache-write ${formatTokenCount(totals.cacheWrite)}`.padEnd(COL_CACHE_WRITE_WIDTH))
 	}
-	cols.push(theme.fg("dim", `total `) + `${formatTokenCount(total)}`)
+	cols.push(`${theme.fg("dim", "total ")}${formatTokenCount(total)}`)
 	return cols.join(COL_GAP)
 }
 
