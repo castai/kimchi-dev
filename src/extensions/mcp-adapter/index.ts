@@ -4,6 +4,7 @@ import { Type } from "@sinclair/typebox"
 import { Text } from "@mariozechner/pi-tui"
 import { authenticateServer, openMcpPanel, reconnectServers, showStatus, showTools } from "./commands.js"
 import { loadConfig } from "../../config.js"
+import { BM25_DEFAULTS, buildStrategy, buildToolEntries } from "./bm25.js"
 import { loadMcpConfig } from "./config.js"
 import {
 	buildProxyDescription,
@@ -144,6 +145,19 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 				state = nextState
 				updateStatusBar(nextState)
 				initPromise = null
+
+				// Build search strategy from live tool metadata
+				try {
+					const kimchiConfig = loadConfig()
+					const { strategy, bm25K1, bm25B, fieldWeights } = kimchiConfig.mcpSearch
+					const entries = buildToolEntries(nextState.toolMetadata)
+					state.searchStrategy = buildStrategy(entries, { strategy, k1: bm25K1, b: bm25B, fieldWeights })
+					console.error(`[mcp-adapter] search strategy=${strategy}, indexed ${entries.length} tools`)
+				} catch {
+					// loadConfig throws if no API key; fall back to default strategy
+					const entries = buildToolEntries(nextState.toolMetadata)
+					state.searchStrategy = buildStrategy(entries, BM25_DEFAULTS)
+				}
 			})
 			.catch((err) => {
 				if (generation !== lifecycleGeneration) {
@@ -256,6 +270,7 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 				includeSchemas: Type.Optional(
 					Type.Boolean({ description: "Include parameter schemas in search results (default: true)" }),
 				),
+				limit: Type.Optional(Type.Number({ description: "Max number of search results to return (default: 5)" })),
 				server: Type.Optional(
 					Type.String({ description: "Filter to specific server (also disambiguates tool calls)" }),
 				),
@@ -273,6 +288,7 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 					search?: string
 					regex?: boolean
 					includeSchemas?: boolean
+					limit?: number
 					server?: string
 					action?: string
 				},
@@ -334,14 +350,21 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 					return executeDescribe(state, params.describe)
 				}
 				if (params.search) {
-					return executeSearch(state, params.search, params.regex, params.server, params.includeSchemas, getPiTools)
+					let mcpSearchLimit = 5
+				try {
+					const kimchiConfig = loadConfig()
+					mcpSearchLimit = kimchiConfig.mcpSearchLimit
+				} catch {
+					// no API key configured; default is fine
+				}
+				return executeSearch(state, params.search, params.regex, params.server, params.includeSchemas, getPiTools, params.limit ?? mcpSearchLimit, state.searchStrategy)
 				}
 				if (params.server) {
 					return executeList(state, params.server)
 				}
 				return executeStatus(state)
 			},
-			renderCall(args: { tool?: string; args?: string; connect?: string; describe?: string; search?: string; server?: string; action?: string }, theme: Theme, context: { lastComponent: unknown }) {
+			renderCall(args: { tool?: string; args?: string; connect?: string; describe?: string; search?: string; limit?: number; server?: string; action?: string }, theme: Theme, context: { lastComponent: unknown }) {
 				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0)
 				text.setText(formatMcpCall(args, theme))
 				return text
@@ -378,7 +401,7 @@ function formatMcpResult(result: unknown, options: ToolRenderResultOptions, them
 }
 
 function formatMcpCall(
-	params: { tool?: string; args?: string; connect?: string; describe?: string; search?: string; server?: string; action?: string },
+	params: { tool?: string; args?: string; connect?: string; describe?: string; search?: string; limit?: number; server?: string; action?: string },
 	theme: Theme,
 ): string {
 	if (params.tool) {
@@ -401,7 +424,10 @@ function formatMcpCall(
 		return `${theme.bold("mcp")} ${toolDisplay}${argsDisplay}`
 	}
 	if (params.describe) return `${theme.bold("mcp")} ${theme.fg("muted", "describe:")} ${theme.fg("accent", params.describe)}`
-	if (params.search) return `${theme.bold("mcp")} ${theme.fg("muted", "search:")} ${theme.fg("toolOutput", params.search)}`
+	if (params.search) {
+		const limitSuffix = params.limit !== undefined ? theme.fg("muted", ` (limit:${params.limit})`) : ""
+		return `${theme.bold("mcp")} ${theme.fg("muted", "search:")} ${theme.fg("toolOutput", params.search)}${limitSuffix}`
+	}
 	if (params.connect) return `${theme.bold("mcp")} ${theme.fg("muted", "connect:")} ${theme.fg("accent", params.connect)}`
 	if (params.server) return `${theme.bold("mcp")} ${theme.fg("muted", "list:")} ${theme.fg("accent", params.server)}`
 	if (params.action === "ui-messages") return `${theme.bold("mcp")} ${theme.fg("muted", "ui-messages")}`

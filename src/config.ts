@@ -13,12 +13,27 @@ export interface TelemetryConfig {
 	headers: Record<string, string>
 }
 
+export interface SearchStrategyConfig {
+	strategy: "bm25" | "regex"
+	bm25K1: number
+	bm25B: number
+	fieldWeights: { name: number; description: number; schemaKey: number }
+}
+
+export const SEARCH_STRATEGY_DEFAULTS: SearchStrategyConfig = {
+	strategy: "bm25",
+	bm25K1: 1.2,
+	bm25B: 0.75,
+	fieldWeights: { name: 6, description: 2, schemaKey: 1 },
+}
+
 export interface KimchiConfig {
 	apiKey: string
 	agentConfigDir: string
 	llmEndpoint: string
 	maxToolResultChars: number
 	mcpSearchLimit: number
+	mcpSearch: SearchStrategyConfig
 }
 
 /**
@@ -38,7 +53,11 @@ function readApiKeyFromConfigFile(configPath: string): string | undefined {
 	}
 }
 
-function readConfigExtras(configPath: string): { maxToolResultChars?: number; mcpSearchLimit?: number } {
+function readConfigExtras(configPath: string): {
+	maxToolResultChars?: number
+	mcpSearchLimit?: number
+	mcpSearch?: Partial<SearchStrategyConfig>
+} {
 	try {
 		const raw = readFileSync(configPath, "utf-8")
 		const parsed = JSON.parse(raw)
@@ -48,7 +67,34 @@ function readConfigExtras(configPath: string): { maxToolResultChars?: number; mc
 				: undefined
 		const mcpSearchLimit =
 			typeof parsed.mcpSearchLimit === "number" && parsed.mcpSearchLimit > 0 ? parsed.mcpSearchLimit : undefined
-		return { maxToolResultChars, mcpSearchLimit }
+		let mcpSearch: Partial<SearchStrategyConfig> | undefined
+		const s = parsed.mcpSearch
+		if (s && typeof s === "object") {
+			mcpSearch = {
+				...(s.strategy === "bm25" || s.strategy === "regex" ? { strategy: s.strategy } : {}),
+				...(typeof s.bm25K1 === "number" ? { bm25K1: s.bm25K1 } : {}),
+				...(typeof s.bm25B === "number" ? { bm25B: s.bm25B } : {}),
+				...(s.fieldWeights && typeof s.fieldWeights === "object"
+					? {
+							fieldWeights: {
+								name:
+									typeof s.fieldWeights.name === "number"
+										? s.fieldWeights.name
+										: SEARCH_STRATEGY_DEFAULTS.fieldWeights.name,
+								description:
+									typeof s.fieldWeights.description === "number"
+										? s.fieldWeights.description
+										: SEARCH_STRATEGY_DEFAULTS.fieldWeights.description,
+								schemaKey:
+									typeof s.fieldWeights.schemaKey === "number"
+										? s.fieldWeights.schemaKey
+										: SEARCH_STRATEGY_DEFAULTS.fieldWeights.schemaKey,
+							},
+						}
+					: {}),
+			}
+		}
+		return { maxToolResultChars, mcpSearchLimit, mcpSearch }
 	} catch {
 		return {}
 	}
@@ -129,6 +175,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 	const extras = readConfigExtras(configPath)
 	const maxToolResultChars = extras.maxToolResultChars ?? 10_000
 	const mcpSearchLimit = extras.mcpSearchLimit ?? 5
+	const mcpSearch: SearchStrategyConfig = { ...SEARCH_STRATEGY_DEFAULTS, ...extras.mcpSearch }
 
 	const envKey = env.KIMCHI_API_KEY
 	if (typeof envKey === "string" && envKey.length > 0) {
@@ -138,6 +185,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 			llmEndpoint: CAST_AI_LLM_ENDPOINT,
 			maxToolResultChars,
 			mcpSearchLimit,
+			mcpSearch,
 		}
 	}
 
@@ -149,6 +197,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 			llmEndpoint: CAST_AI_LLM_ENDPOINT,
 			maxToolResultChars,
 			mcpSearchLimit,
+			mcpSearch,
 		}
 	}
 
