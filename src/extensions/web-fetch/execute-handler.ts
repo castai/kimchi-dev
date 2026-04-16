@@ -22,12 +22,16 @@ export interface WebFetchParams {
 	timeout?: number
 }
 
-export interface WebFetchResult {
-	content: { type: "text"; text: string }[]
-	details: Record<string, never>
+export interface WebFetchDetails {
+	durationMs: number
+	chars: number
+	warning: string | undefined
 }
 
-const EMPTY_DETAILS = {} as Record<string, never>
+export interface WebFetchResult {
+	content: { type: "text"; text: string }[]
+	details: WebFetchDetails
+}
 
 function buildOutput(metadataLines: string[], content: string, truncationNotice: string): string {
 	return `${metadataLines.join("\n")}\n\n${content}${truncationNotice}`
@@ -36,14 +40,17 @@ function buildOutput(metadataLines: string[], content: string, truncationNotice:
 export async function executeWebFetch(params: WebFetchParams): Promise<WebFetchResult> {
 	const format: OutputFormat = params.format ?? "markdown"
 	const timeoutSeconds = params.timeout != null ? Math.max(0, Math.min(params.timeout, MAX_TIMEOUT_SECONDS)) : undefined
+	const startedAt = Date.now()
+
+	const errorResult = (text: string): WebFetchResult => ({
+		content: [{ type: "text" as const, text }],
+		details: { durationMs: Date.now() - startedAt, chars: text.length, warning: undefined },
+	})
 
 	// Validate URL
 	const validation = validateURL(params.url)
 	if (!validation.valid) {
-		return {
-			content: [{ type: "text" as const, text: `Error: ${validation.error}` }],
-			details: EMPTY_DETAILS,
-		}
+		return errorResult(`Error: ${validation.error}`)
 	}
 
 	// Check cache
@@ -51,7 +58,7 @@ export async function executeWebFetch(params: WebFetchParams): Promise<WebFetchR
 	if (cached != null) {
 		return {
 			content: [{ type: "text" as const, text: cached }],
-			details: EMPTY_DETAILS,
+			details: { durationMs: Date.now() - startedAt, chars: cached.length, warning: undefined },
 		}
 	}
 
@@ -61,10 +68,7 @@ export async function executeWebFetch(params: WebFetchParams): Promise<WebFetchR
 		result = await fetchPage(params.url, { timeoutSeconds, format })
 	} catch (err: unknown) {
 		const message = err instanceof FetchError ? err.message : err instanceof Error ? err.message : String(err)
-		return {
-			content: [{ type: "text" as const, text: `Error: ${message}` }],
-			details: EMPTY_DETAILS,
-		}
+		return errorResult(`Error: ${message}`)
 	}
 
 	// Convert content based on format.
@@ -114,6 +118,10 @@ export async function executeWebFetch(params: WebFetchParams): Promise<WebFetchR
 
 	return {
 		content: [{ type: "text" as const, text: output }],
-		details: EMPTY_DETAILS,
+		details: {
+			durationMs: Date.now() - startedAt,
+			chars: content.length,
+			warning: result.fallbackWarning,
+		},
 	}
 }

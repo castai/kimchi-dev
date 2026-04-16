@@ -36,7 +36,7 @@ export interface WebSearchParams {
 
 export interface WebSearchResult {
 	content: { type: "text"; text: string }[]
-	details: { sources?: SearchSource[] }
+	details: { sources?: SearchSource[]; durationMs: number; chars: number }
 }
 
 export function formatForLLM(response: SearchResponse, maxContentChars = DEFAULT_MAX_CONTENT_CHARS): string {
@@ -113,6 +113,7 @@ export async function executeWebSearch(params: WebSearchParams, signal?: AbortSi
 	const controller = new AbortController()
 	const timeout = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS)
 	const combinedSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
+	const startedAt = Date.now()
 
 	try {
 		const data = await fetchSearchResponse(body, apiKey, combinedSignal)
@@ -126,7 +127,7 @@ export async function executeWebSearch(params: WebSearchParams, signal?: AbortSi
 
 		return {
 			content: [{ type: "text" as const, text }],
-			details: { sources: data.sources },
+			details: { sources: data.sources, durationMs: Date.now() - startedAt, chars: text.length },
 		}
 	} finally {
 		clearTimeout(timeout)
