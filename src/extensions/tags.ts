@@ -467,7 +467,7 @@ export default function tagsExtension(pi: ExtensionAPI) {
 		},
 
 		renderCall(_args, _theme) {
-			return new Container()
+			return new Text("", 0, 0)
 		},
 
 		renderResult(result, _options, theme) {

@@ -94,7 +94,7 @@ const promptSummaryRenderer: MessageRenderer<PromptSummaryData> = (message, _opt
 	container.addChild(new Text(INDENT + theme.fg("dim", "execution:".padEnd(LABEL_WIDTH)) + data.elapsed, 0, 0))
 
 	const rows: Array<{ label: string; totals: UsageTotals }> = []
-	if (data.orchestrator) rows.push({ label: "orchestrator:", totals: data.orchestrator })
+	if (data.orchestrator) rows.push({ label: "model:", totals: data.orchestrator })
 	if (data.subagents) rows.push({ label: "subagents:", totals: data.subagents })
 	rows.push({ label: "total:", totals: data.total })
 
@@ -126,8 +126,8 @@ export default function promptSummaryExtension(pi: ExtensionAPI) {
 		if (!stats?.tokenUsage) return
 		subagents.input += stats.tokenUsage.input
 		subagents.output += stats.tokenUsage.output
-		subagents.cacheRead += stats.tokenUsage.cacheRead
-		subagents.cacheWrite += stats.tokenUsage.cacheWrite
+		// Cache tokens are not reported by the subagent process — subagent cache
+		// usage is not reflected in the summary totals.
 	})
 
 	pi.on("agent_end", async () => {
