@@ -18,6 +18,13 @@ interface WebSearchState {
 	spinnerInterval: ReturnType<typeof setInterval> | undefined
 }
 
+function clearSpinner(state: WebSearchState) {
+	if (state.spinnerInterval) {
+		clearInterval(state.spinnerInterval)
+		state.spinnerInterval = undefined
+	}
+}
+
 function formatDuration(ms: number): string {
 	if (ms < 1000) return `${ms}ms`
 	return `${(ms / 1000).toFixed(1)}s`
@@ -98,15 +105,12 @@ export default function webSearchExtension(pi: ExtensionAPI): void {
 			const state = context.state as WebSearchState
 
 			if (!options.isPartial) {
-				if (state.spinnerInterval) {
-					clearInterval(state.spinnerInterval)
-					state.spinnerInterval = undefined
-				}
+				clearSpinner(state)
 			}
 
 			if (options.isPartial) return new Container()
 
-			const details = result.details as { durationMs?: number; chars?: number } | undefined
+			const details = result.details as { durationMs: number; chars: number } | undefined
 			const duration = theme.fg("dim", formatDuration(details?.durationMs ?? 0))
 			const chars = theme.fg("dim", `↓${(details?.chars ?? 0).toLocaleString()}`)
 

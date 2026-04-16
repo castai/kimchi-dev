@@ -20,6 +20,13 @@ interface WebFetchState {
 	spinnerInterval: ReturnType<typeof setInterval> | undefined
 }
 
+function clearSpinner(state: WebFetchState) {
+	if (state.spinnerInterval) {
+		clearInterval(state.spinnerInterval)
+		state.spinnerInterval = undefined
+	}
+}
+
 function formatDomain(url: string): string {
 	try {
 		return new URL(url).hostname
@@ -92,10 +99,7 @@ export default function webFetchExtension(pi: ExtensionAPI): void {
 			const state = context.state as WebFetchState
 
 			if (!options.isPartial) {
-				if (state.spinnerInterval) {
-					clearInterval(state.spinnerInterval)
-					state.spinnerInterval = undefined
-				}
+				clearSpinner(state)
 			}
 
 			const details = result.details as WebFetchDetails | undefined

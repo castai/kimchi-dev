@@ -2,7 +2,7 @@ import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent"
-import { Container, Spacer, Text, wrapTextWithAnsi } from "@mariozechner/pi-tui"
+import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
 import { isBunBinary } from "../env.js"
 
@@ -396,7 +396,9 @@ export default function (pi: ExtensionAPI) {
 			const state = context.state as SubagentState
 
 			const running = context.executionStarted && context.isPartial
-			if (running && !state.spinnerInterval) {
+			if (!running) {
+				clearSpinner(state)
+			} else if (!state.spinnerInterval) {
 				state.spinnerIdx = 0
 				state.spinnerInterval = setInterval(() => {
 					state.spinnerIdx = (state.spinnerIdx + 1) % SPINNER_FRAMES.length
@@ -436,9 +438,13 @@ export default function (pi: ExtensionAPI) {
 			let displayStyle: "dim" | "toolOutput"
 			const terminalWidth = process.stdout.columns ?? 80
 			if (toolCall) {
-				const toolCallVisualLines = wrapTextWithAnsi(`> ${toolCall}`, terminalWidth)
-				const paddedLines = [...toolCallVisualLines, ...Array(5 - toolCallVisualLines.length).fill("")]
-				displayText = paddedLines.slice(0, 5).join("\n")
+				const truncated = truncateToWidth(`> ${toolCall}`, terminalWidth * 5)
+				const toolCallVisualLines = wrapTextWithAnsi(truncated, terminalWidth)
+				const paddedLines = [
+					...toolCallVisualLines.slice(0, 5),
+					...Array(5 - Math.min(toolCallVisualLines.length, 5)).fill(""),
+				]
+				displayText = paddedLines.join("\n")
 				displayStyle = "dim"
 			} else {
 				const nonEmptyLines = textContent.text.split("\n").filter((l) => l.trim())
