@@ -110,7 +110,7 @@ export function parseSubagentEvent(line: string): ParsedSubagentEvent {
 	}
 
 	if (event.type === "tool_execution_start") {
-		const name = typeof event.toolName === "string" ? event.toolName : null
+		const name = typeof event.toolName === "string" && event.toolName.length > 0 ? event.toolName : null
 		const args = event.args !== null && typeof event.args === "object" ? (event.args as Record<string, unknown>) : {}
 		if (name !== null) {
 			return { delta: null, inputTokens: 0, outputTokens: 0, toolCall: { name, args } }

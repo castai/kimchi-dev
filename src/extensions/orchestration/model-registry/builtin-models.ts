@@ -53,7 +53,7 @@ export const MODEL_CAPABILITIES: ReadonlyMap<string, ModelCapabilities | "ignore
 		"kimi-k2.5",
 		{
 			vision: true,
-			strengths: ["explore", "research", "plan"],
+			strengths: ["explore", "research", "plan", "review"],
 			tier: "heavy",
 			description: KIMI_K25_DESCRIPTION,
 		},
@@ -62,7 +62,7 @@ export const MODEL_CAPABILITIES: ReadonlyMap<string, ModelCapabilities | "ignore
 		"minimax-m2.7",
 		{
 			vision: false,
-			strengths: ["build", "plan"],
+			strengths: ["build", "review"],
 			tier: "standard",
 			description: MINIMAX_M27_DESCRIPTION,
 		},

@@ -478,8 +478,9 @@ export default function tagsExtension(pi: ExtensionAPI) {
 		},
 	})
 
-	// Initialize footer status on session start
+	// Initialize footer status and default phase on session start
 	pi.on("session_start", async (_event, ctx) => {
+		tagManager.setPhase("explore")
 		updateFooterStatus(tagManager, ctx)
 	})
 
