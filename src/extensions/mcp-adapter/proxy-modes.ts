@@ -16,7 +16,7 @@ import { authenticate, supportsOAuth } from "./mcp-auth-flow.js"
 import type { McpExtensionState } from "./state.js"
 import { buildToolMetadata, findToolByName, formatSchema, getToolNames } from "./tool-metadata.js"
 import { transformMcpContent } from "./tool-registrar.js"
-import type { McpContent, ToolMetadata } from "./types.js"
+import type { DirectToolSpec, McpContent, ToolMetadata } from "./types.js"
 import { getServerPrefix, parseUiPromptHandoff } from "./types.js"
 import { type UiSessionRuntime, maybeStartUiSession } from "./ui-session.js"
 import { truncateAtWord } from "./utils.js"
@@ -250,7 +250,7 @@ export function executeStatus(state: McpExtensionState): ProxyToolResult {
 	}
 
 	if (servers.length > 0) {
-		text += `\nmcp({ server: "name" }) to list tools, mcp({ search: "..." }) to search`
+		text += `\nmcp({ search: "..." }) to find tools, mcp({ describe: "tool_name" }) to get schema`
 	}
 
 	return {
@@ -259,7 +259,11 @@ export function executeStatus(state: McpExtensionState): ProxyToolResult {
 	}
 }
 
-export function executeDescribe(state: McpExtensionState, toolName: string): ProxyToolResult {
+export function executeDescribe(
+	state: McpExtensionState,
+	toolName: string,
+	onInject?: (specs: DirectToolSpec[]) => string[],
+): ProxyToolResult {
 	let serverName: string | undefined
 	let toolMeta: ToolMetadata | undefined
 
@@ -279,6 +283,21 @@ export function executeDescribe(state: McpExtensionState, toolName: string): Pro
 		}
 	}
 
+	let injectedNames: string[] = []
+	if (onInject && !toolMeta.resourceUri) {
+		injectedNames = onInject([
+			{
+				serverName,
+				originalName: toolMeta.name,
+				prefixedName: toolName,
+				description: toolMeta.description ?? "",
+				inputSchema: toolMeta.inputSchema,
+				uiResourceUri: toolMeta.uiResourceUri,
+				uiStreamMode: toolMeta.uiStreamMode,
+			},
+		])
+	}
+
 	let text = `${toolMeta.name}\n`
 	text += `Server: ${serverName}\n`
 	if (toolMeta.resourceUri) {
@@ -294,9 +313,13 @@ export function executeDescribe(state: McpExtensionState, toolName: string): Pro
 		text += `\nNo parameters defined.`
 	}
 
+	if (injectedNames.length > 0) {
+		text += `\n\nInjected into context. Call it using the exact name shown above (do NOT add any prefix): ${injectedNames[0]}`
+	}
+
 	return {
 		content: [{ type: "text" as const, text: text.trim() }],
-		details: { mode: "describe", tool: toolMeta, server: serverName },
+		details: { mode: "describe", tool: toolMeta, server: serverName, injected: injectedNames },
 	}
 }
 
@@ -309,6 +332,7 @@ export function executeSearch(
 	getPiTools?: () => ToolInfo[],
 	limit = 5,
 	strategy?: SearchStrategy,
+	onInject?: (specs: DirectToolSpec[]) => string[],
 ): ProxyToolResult {
 	const showSchemas = includeSchemas !== false
 
@@ -407,6 +431,23 @@ export function executeSearch(
 	const shownCount = limitedPiMatches.length + limitedMatches.length
 	const truncated = totalCount > shownCount
 
+	// Inject matched MCP tools as native pi tools for the next turn
+	let injectedNames: string[] = []
+	if (onInject && limitedMatches.length > 0) {
+		const specs: DirectToolSpec[] = limitedMatches
+			.filter((m) => !m.tool.resourceUri)
+			.map((m) => ({
+				serverName: m.server,
+				originalName: m.tool.name,
+				prefixedName: m.tool.name,
+				description: m.tool.description ?? "",
+				inputSchema: m.tool.inputSchema,
+				uiResourceUri: m.tool.uiResourceUri,
+				uiStreamMode: m.tool.uiStreamMode,
+			}))
+		if (specs.length > 0) injectedNames = onInject(specs)
+	}
+
 	let text = truncated
 		? `Found ${totalCount} tool${totalCount === 1 ? "" : "s"} matching "${query}" (showing ${shownCount}, refine your query for more):\n\n`
 		: `Found ${totalCount} tool${totalCount === 1 ? "" : "s"} matching "${query}":\n\n`
@@ -445,6 +486,10 @@ export function executeSearch(
 		}
 	}
 
+	if (injectedNames.length > 0) {
+		text += `\nInjected into context. Call using the exact names shown above (do NOT add any prefix): ${injectedNames.join(", ")}`
+	}
+
 	return {
 		content: [{ type: "text" as const, text: text.trim() }],
 		details: {
@@ -456,6 +501,7 @@ export function executeSearch(
 			count: totalCount,
 			shown: shownCount,
 			query,
+			injected: injectedNames,
 		},
 	}
 }

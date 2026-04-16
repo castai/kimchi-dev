@@ -40,4 +40,6 @@ export interface McpExtensionState {
 	ui?: ExtensionContext["ui"]
 	sendMessage?: SendMessageFn
 	searchStrategy?: SearchStrategy
+	/** Prefixed names of tools registered dynamically via search/describe injection */
+	dynamicToolNames: Set<string>
 }

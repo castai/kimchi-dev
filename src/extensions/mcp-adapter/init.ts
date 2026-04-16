@@ -49,6 +49,7 @@ export async function initializeMcp(pi: ExtensionAPI, ctx: ExtensionContext): Pr
 		openBrowser: (url: string) => openUrl(pi, url, process.env.BROWSER),
 		ui,
 		sendMessage: (message, options) => pi.sendMessage(message, options),
+		dynamicToolNames: new Set(),
 	}
 
 	const serverEntries = Object.entries(config.mcpServers)

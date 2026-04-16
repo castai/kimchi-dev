@@ -216,14 +216,12 @@ export function buildProxyDescription(
 	}
 
 	desc += `\nUsage:\n`
-	desc += `  mcp({ })                              → Show server status\n`
-	desc += `  mcp({ server: "name" })               → List tools from server\n`
-	desc += `  mcp({ search: "query" })              → Search for tools (MCP + pi, space-separated words OR'd)\n`
-	desc += `  mcp({ describe: "tool_name" })        → Show tool details and parameters\n`
+	desc += `  mcp({ search: "query" })              → ALWAYS START HERE. Search tools by name/description. Injects matched tool schemas into context so you can call them directly.\n`
+	desc += `  mcp({ describe: "tool_name" })        → Get full schema for a specific tool. Use when you know the tool name but need its parameters.\n`
+	desc += `  mcp({ tool: "name", args: '{"key": "value"}' })    → Call a tool by proxy (args is JSON string). Prefer calling injected tools directly after search/describe.\n`
 	desc += `  mcp({ connect: "server-name" })       → Connect to a server and refresh metadata\n`
-	desc += `  mcp({ tool: "name", args: '{"key": "value"}' })    → Call a tool (args is JSON string)\n`
 	desc += `  mcp({ action: "ui-messages" })        → Retrieve accumulated messages from completed UI sessions\n`
-	desc += `\nMode: tool (call) > connect > describe > search > server (list) > action > nothing (status)`
+	desc += `\nWorkflow: search → schemas injected → call tool directly (do NOT guess parameters without searching first)`
 
 	return desc
 }
