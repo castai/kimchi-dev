@@ -91,10 +91,10 @@ const promptSummaryRenderer: MessageRenderer<PromptSummaryData> = (message, _opt
 
 	container.addChild(new Text(INDENT + theme.fg("dim", "execution:".padEnd(LABEL_WIDTH)) + data.elapsed, 0, 0))
 
-	const rows: Array<{ label: string; totals: UsageTotals; dimTotal?: boolean }> = []
+	const rows: Array<{ label: string; totals: UsageTotals }> = []
 	if (data.orchestrator) rows.push({ label: "orchestrator:", totals: data.orchestrator })
 	if (data.subagents) rows.push({ label: "subagents:", totals: data.subagents })
-	rows.push({ label: "total:", totals: data.total, dimTotal: true })
+	rows.push({ label: "total:", totals: data.total })
 
 	for (const row of rows) {
 		const rowLabel = theme.fg("dim", row.label.padEnd(LABEL_WIDTH))
