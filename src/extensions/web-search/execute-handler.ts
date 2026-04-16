@@ -7,13 +7,14 @@
 
 import { truncateHead, truncateLine } from "@mariozechner/pi-coding-agent"
 
-export const SEARCH_ENDPOINT = "https://kimchi.dev/v1/search"
+export const SEARCH_ENDPOINT = "https://llm.kimchi.dev/v1/search"
 export const SEARCH_TIMEOUT_MS = 25_000
 export const DEFAULT_LIMIT = 8
-const MAX_LINE_LENGTH = 240
+export const DEFAULT_MAX_CONTENT_CHARS = 2000
 const MAX_LINES = 500
 
 export type Recency = "day" | "week" | "month" | "year"
+export type SearchDepth = "basic" | "deep"
 
 export interface SearchSource {
 	title: string
@@ -22,7 +23,6 @@ export interface SearchSource {
 }
 
 export interface SearchResponse {
-	answer?: string
 	sources: SearchSource[]
 }
 
@@ -30,27 +30,22 @@ export interface WebSearchParams {
 	query: string
 	limit?: number
 	recency?: Recency
+	search_depth?: SearchDepth
+	max_content_chars?: number
 }
 
 export interface WebSearchResult {
 	content: { type: "text"; text: string }[]
-	details: Record<string, never>
+	details: { sources?: SearchSource[] }
 }
 
-export function formatForLLM(response: SearchResponse): string {
+export function formatForLLM(response: SearchResponse, maxContentChars = DEFAULT_MAX_CONTENT_CHARS): string {
 	const parts: string[] = []
 
-	if (response.answer) {
-		parts.push(response.answer)
-	}
-
-	if (response.sources.length > 0) {
-		if (response.answer) parts.push("\n## Sources")
-		for (const [i, src] of response.sources.entries()) {
-			parts.push(`[${i + 1}] ${src.title}\n    ${src.url}`)
-			if (src.snippet) {
-				parts.push(`    ${truncateLine(src.snippet, MAX_LINE_LENGTH).text}`)
-			}
+	for (const [i, src] of response.sources.entries()) {
+		parts.push(`[${i + 1}] ${src.title}\n    ${src.url}`)
+		if (src.snippet) {
+			parts.push(`    ${truncateLine(src.snippet, maxContentChars).text}`)
 		}
 	}
 
@@ -105,10 +100,14 @@ export async function executeWebSearch(params: WebSearchParams, signal?: AbortSi
 		throw new Error("KIMCHI_API_KEY is not set")
 	}
 
+	const maxContentChars = params.max_content_chars ?? DEFAULT_MAX_CONTENT_CHARS
+
 	const body = {
 		query: params.query,
 		limit: Math.max(1, Math.min(params.limit ?? DEFAULT_LIMIT, 20)),
+		max_content_chars: maxContentChars,
 		...(params.recency !== undefined ? { recency: params.recency } : {}),
+		...(params.search_depth !== undefined ? { search_depth: params.search_depth } : {}),
 	}
 
 	const controller = new AbortController()
@@ -117,7 +116,7 @@ export async function executeWebSearch(params: WebSearchParams, signal?: AbortSi
 
 	try {
 		const data = await fetchSearchResponse(body, apiKey, combinedSignal)
-		const raw = formatForLLM(data)
+		const raw = formatForLLM(data, maxContentChars)
 		const truncation = truncateHead(raw, { maxLines: MAX_LINES })
 
 		let text = truncation.content || "No results found."
@@ -127,7 +126,7 @@ export async function executeWebSearch(params: WebSearchParams, signal?: AbortSi
 
 		return {
 			content: [{ type: "text" as const, text }],
-			details: {},
+			details: { sources: data.sources },
 		}
 	} finally {
 		clearTimeout(timeout)

@@ -168,21 +168,20 @@ describe("executeWebSearch", () => {
 	})
 
 	describe("successful response formatting", () => {
-		it("returns formatted text with answer and sources", async () => {
+		it("returns formatted text with sources", async () => {
 			const data: SearchResponse = {
-				answer: "TypeScript is a typed superset of JavaScript.",
 				sources: [{ title: "TypeScript Docs", url: "https://typescriptlang.org", snippet: "Official docs" }],
 			}
 			mockFetch(200, data)
 
 			const result = await executeWebSearch({ query: "what is TypeScript" })
 
-			expect(result.content[0].text).toContain("TypeScript is a typed superset")
 			expect(result.content[0].text).toContain("TypeScript Docs")
 			expect(result.content[0].text).toContain("https://typescriptlang.org")
+			expect(result.content[0].text).toContain("Official docs")
 		})
 
-		it("returns 'No results found.' when response has no sources or answer", async () => {
+		it("returns 'No results found.' when response has no sources", async () => {
 			mockFetch(200, { sources: [] })
 
 			const result = await executeWebSearch({ query: "xyzzy" })
@@ -190,7 +189,7 @@ describe("executeWebSearch", () => {
 			expect(result.content[0].text).toBe("No results found.")
 		})
 
-		it("returns sources without answer when answer is absent", async () => {
+		it("returns numbered sources with title and url", async () => {
 			const data: SearchResponse = {
 				sources: [{ title: "Example", url: "https://example.com" }],
 			}
