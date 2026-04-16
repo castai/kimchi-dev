@@ -13,7 +13,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, resolve } from "node:path"
-import { Container, Text } from "@mariozechner/pi-tui"
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
@@ -21,6 +20,7 @@ import type {
 	Theme,
 	ThemeColor,
 } from "@mariozechner/pi-coding-agent"
+import { Container, Text } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
