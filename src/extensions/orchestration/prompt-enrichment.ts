@@ -103,6 +103,11 @@ export default function (pi: ExtensionAPI) {
 			return { systemPrompt }
 		}
 
+		const orchestratorTools = pi.getActiveTools().filter(
+			(name) => name !== "write" && name !== "edit" && name !== "bash" && name !== "read",
+		)
+		pi.setActiveTools(orchestratorTools)
+
 		const systemPrompt = buildOrchestratorSystemPrompt(tools, cachedContextFiles, cachedSkills)
 		return { systemPrompt }
 	})
