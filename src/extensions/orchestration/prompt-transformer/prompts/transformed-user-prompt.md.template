@@ -27,10 +27,10 @@ All models (including yourself) are described with the following attributes:
 
 **Strengths** indicate what the model is best suited for:
 - `build` — Writing, modifying, and refactoring code.
-- `explore` — Navigating codebases, searching for information, answering questions about code.
+- `explore` — Reading files, navigating the existing codebase, tracing code to understand structure and behaviour.
 - `review` — Code review, finding bugs, and suggesting improvements.
 - `plan` — Architectural planning, breaking down complex tasks, writing specs.
-- `research` — Tracing code dependencies, reading source, understanding library APIs within a codebase. Factual questions about external libraries are **not** a `research` step — answer from knowledge or one web_search.
+- `research` — Consulting external sources: internet resources, official documentation, library APIs, versioning, or guidelines not contained in this codebase.
 
 **Vision** indicates whether the model can process images, screenshots, and visual input.
 
