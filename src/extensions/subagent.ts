@@ -2,19 +2,18 @@ import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent"
-import { Container, Spacer, Text } from "@mariozechner/pi-tui"
+import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
 import { isBunBinary } from "../env.js"
+import { formatCount } from "./format.js"
+import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./spinner.js"
 
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
 const STDERR_MAX = 8192
 const TIMEOUT_MS = 30 * 60 * 1000
 
-interface SubagentState {
-	spinnerIdx: number
-	spinnerInterval: ReturnType<typeof setInterval> | undefined
+interface SubagentState extends SpinnerState {
 	lastToolCall: string | undefined
 }
 
@@ -276,13 +275,6 @@ function formatFooterStatus(counts: Map<string, number>, theme: Theme): string {
 	return theme.fg("dim", `subagents: ${entries}`)
 }
 
-function clearSpinner(state: SubagentState) {
-	if (state.spinnerInterval) {
-		clearInterval(state.spinnerInterval)
-		state.spinnerInterval = undefined
-	}
-}
-
 interface SubagentStats {
 	durationMs: number
 	tokenUsage: SubagentTokenUsage
@@ -295,13 +287,9 @@ function formatDuration(ms: number): string {
 
 function formatStats(stats: SubagentStats, theme: Theme): string {
 	const duration = theme.fg("dim", formatDuration(stats.durationMs))
-	const input = theme.fg("dim", `↑${stats.tokenUsage.input.toLocaleString()}`)
-	const output = theme.fg("dim", `↓${stats.tokenUsage.output.toLocaleString()}`)
+	const input = theme.fg("dim", `↑${formatCount(stats.tokenUsage.input)}`)
+	const output = theme.fg("dim", `↓${formatCount(stats.tokenUsage.output)}`)
 	return `- ${duration}  ${input}  ${output}`
-}
-
-function buildErrorResponse(error: SubagentError): string {
-	return JSON.stringify(error)
 }
 
 const SubagentParams = Type.Object({
@@ -355,7 +343,10 @@ export default function (pi: ExtensionAPI) {
 				ctx.cwd,
 				signal,
 				params.tokenBudget,
-				(text) => onUpdate?.({ content: [{ type: "text", text }], details: lastToolCall }),
+				(text) => {
+					lastToolCall = undefined
+					onUpdate?.({ content: [{ type: "text", text }], details: undefined })
+				},
 				(name, toolArgs, text) => {
 					const firstArg = Object.values(toolArgs)[0]
 					const argHint =
@@ -381,7 +372,7 @@ export default function (pi: ExtensionAPI) {
 					detail: stderr.trim() || accumulated || "(no output)",
 				}
 				return {
-					content: [{ type: "text", text: buildErrorResponse(error) }],
+					content: [{ type: "text", text: JSON.stringify(error) }],
 					details: stats,
 					isError: true,
 				}
@@ -396,65 +387,70 @@ export default function (pi: ExtensionAPI) {
 		renderCall(args, theme, context) {
 			const state = context.state as SubagentState
 
-			if (!context.executionStarted || !context.isPartial) {
+			const running = context.executionStarted && context.isPartial
+			if (!running) {
 				clearSpinner(state)
-			} else if (!state.spinnerInterval) {
-				state.spinnerIdx = 0
-				state.spinnerInterval = setInterval(() => {
-					state.spinnerIdx = (state.spinnerIdx + 1) % SPINNER_FRAMES.length
-					context.invalidate()
-				}, 80)
+			} else {
+				tickSpinner(state, context.invalidate)
 			}
 
-			const spinner =
-				context.executionStarted && context.isPartial
-					? theme.fg("accent", SPINNER_FRAMES[state.spinnerIdx ?? 0])
-					: theme.fg("muted", "-")
+			const spinner = running ? theme.fg("accent", spinnerFrame(state)) : theme.fg("muted", "-")
 
 			const header = `${spinner} ${theme.fg("toolTitle", theme.bold("Subagent session"))}`
 			const modelLine = `  ${theme.fg("muted", "model:")}  ${theme.fg("accent", "`")}${theme.fg("accent", `${args.provider ?? ""}/${args.model ?? ""}`)}${theme.fg("accent", "`")}`
 			const promptLine = `  ${theme.fg("muted", "prompt:")} ${theme.fg("dim", "`")}${theme.fg("dim", truncatePrompt(args.prompt ?? ""))}${theme.fg("dim", "`")}`
-			const lines = [header, modelLine, promptLine]
 
-			const component = context.lastComponent ?? new Text("", 0, 0)
-			;(component as Text).setText(lines.join("\n"))
+			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
+			component.clear()
+			component.addChild(new Text(`${header}\n${modelLine}\n${promptLine}`, 0, 0))
 			return component
 		},
 
 		renderResult(result, options, theme, context) {
 			const state = context.state as SubagentState
 
-			if (!options.isPartial) {
+			if (options.isPartial) {
+				state.lastToolCall = result.details as string | undefined
+			} else {
 				clearSpinner(state)
 				state.lastToolCall = undefined
-			} else {
-				state.lastToolCall = result.details as string | undefined
 			}
 
 			const textContent = result.content.find((c): c is { type: "text"; text: string } => c.type === "text")
 			if (!textContent?.text) return new Text("", 0, 0)
 
-			const lines = options.isPartial ? textContent.text.split("\n").slice(-20) : textContent.text.split("\n")
-			const displayText = lines.filter((l) => l.trim()).join("\n")
+			const toolCall = state.lastToolCall
+			const stats = !options.isPartial ? (result.details as SubagentStats | undefined) : undefined
+
+			let displayText: string
+			let displayStyle: "dim" | "toolOutput"
+			const terminalWidth = process.stdout.columns ?? 80
+			if (toolCall) {
+				const truncated = truncateToWidth(`> ${toolCall}`, terminalWidth * 5)
+				const toolCallVisualLines = wrapTextWithAnsi(truncated, terminalWidth)
+				const paddedLines = [
+					...toolCallVisualLines.slice(0, 5),
+					...Array(5 - Math.min(toolCallVisualLines.length, 5)).fill(""),
+				]
+				displayText = paddedLines.join("\n")
+				displayStyle = "dim"
+			} else {
+				const nonEmptyLines = textContent.text.split("\n").filter((l) => l.trim())
+				const visualLines = nonEmptyLines.flatMap((l) => wrapTextWithAnsi(l, terminalWidth))
+				const last5 = visualLines.slice(-5)
+				const paddedLines = [...Array(5 - last5.length).fill(""), ...last5]
+				displayText = paddedLines.join("\n")
+				displayStyle = "toolOutput"
+			}
+
+			const detailText = stats !== undefined ? formatStats(stats, theme) : ""
 
 			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
 			component.clear()
 			component.addChild(new Spacer(1))
-			component.addChild(new Text(theme.fg("toolOutput", displayText), 0, 0))
-
-			if (options.isPartial) {
-				const toolCall = state.lastToolCall
-				if (toolCall) {
-					component.addChild(new Spacer(1))
-					component.addChild(new Text(theme.fg("dim", `> ${toolCall}`), 0, 0))
-				}
-			} else {
-				const stats = result.details as SubagentStats | undefined
-				if (stats !== undefined) {
-					component.addChild(new Spacer(1))
-					component.addChild(new Text(formatStats(stats, theme), 0, 0))
-				}
-			}
+			component.addChild(new Text(theme.fg(displayStyle, displayText), 0, 0))
+			component.addChild(new Spacer(1))
+			component.addChild(new Text(detailText, 0, 0))
 
 			return component
 		},

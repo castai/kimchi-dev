@@ -7,10 +7,28 @@
 
 import { StringEnum } from "@mariozechner/pi-ai"
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
+import { Container, Spacer, Text } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
+import { formatCount } from "../format.js"
+import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "../spinner.js"
 import { shutdownBrowserPool } from "./browser-pool.js"
 import { cacheClear } from "./cache.js"
-import { executeWebFetch } from "./execute-handler.js"
+import { type WebFetchDetails, executeWebFetch } from "./execute-handler.js"
+
+type WebFetchState = SpinnerState
+
+function formatDomain(url: string): string {
+	try {
+		return new URL(url).hostname
+	} catch {
+		return url
+	}
+}
+
+function formatDuration(ms: number): string {
+	if (ms < 1000) return `${ms}ms`
+	return `${(ms / 1000).toFixed(1)}s`
+}
 
 export default function webFetchExtension(pi: ExtensionAPI): void {
 	pi.registerTool({
@@ -41,6 +59,50 @@ export default function webFetchExtension(pi: ExtensionAPI): void {
 
 		async execute(_toolCallId, params) {
 			return executeWebFetch(params)
+		},
+
+		renderCall(args, theme, context) {
+			const state = context.state as WebFetchState
+
+			const running = context.executionStarted && context.isPartial
+			if (running) tickSpinner(state, context.invalidate)
+
+			const spinner = running ? theme.fg("accent", spinnerFrame(state)) : theme.fg("muted", "-")
+
+			const domain = formatDomain(args.url ?? "")
+			const header = `${spinner} ${theme.fg("toolTitle", theme.bold("Web fetch"))}`
+			const domainLine = `  ${theme.fg("muted", "domain:")} ${theme.fg("accent", "`")}${theme.fg("accent", domain)}${theme.fg("accent", "`")}`
+
+			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
+			component.clear()
+			component.addChild(new Text(`${header}\n${domainLine}`, 0, 0))
+			return component
+		},
+
+		renderResult(result, options, theme, context) {
+			const state = context.state as WebFetchState
+
+			if (!options.isPartial) {
+				clearSpinner(state)
+			}
+
+			const details = result.details as WebFetchDetails | undefined
+			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
+			component.clear()
+
+			if (details?.warning) {
+				component.addChild(new Spacer(1))
+				component.addChild(new Text(theme.fg("error", `  [WARNING] ${details.warning}`), 0, 0))
+			}
+
+			if (!options.isPartial && details !== undefined) {
+				if (details.warning) component.addChild(new Spacer(1))
+				const duration = theme.fg("dim", formatDuration(details.durationMs))
+				const chars = theme.fg("dim", `↓${formatCount(details.words)}`)
+				component.addChild(new Text(theme.fg("dim", `- ${duration}  ${chars}`), 0, 0))
+			}
+
+			return component
 		},
 	})
 

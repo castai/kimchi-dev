@@ -9,7 +9,16 @@ import { StringEnum } from "@mariozechner/pi-ai"
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Container, Text } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
-import { type SearchResponse, executeWebSearch } from "./execute-handler.js"
+import { formatCount } from "../format.js"
+import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "../spinner.js"
+import { executeWebSearch } from "./execute-handler.js"
+
+type WebSearchState = SpinnerState
+
+function formatDuration(ms: number): string {
+	if (ms < 1000) return `${ms}ms`
+	return `${(ms / 1000).toFixed(1)}s`
+}
 
 export default function webSearchExtension(pi: ExtensionAPI): void {
 	pi.registerTool({
@@ -59,40 +68,40 @@ export default function webSearchExtension(pi: ExtensionAPI): void {
 			return executeWebSearch(params, signal)
 		},
 
-		renderResult(result, options, theme, context) {
-			const sources = result.details?.sources ?? []
-			const count = sources.length
+		renderCall(args, theme, context) {
+			const state = context.state as WebSearchState
 
-			if (options.expanded) {
-				const lines = sources.map((s) => `${theme.fg("accent", s.url)}  ${theme.fg("muted", s.title)}`).join("\n")
-				const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
-				component.clear()
-				component.addChild(new Text(lines, 0, 0))
-				component.invalidate()
-				return component
-			}
+			const running = context.executionStarted && context.isPartial
+			if (running) tickSpinner(state, context.invalidate)
 
-			const summary = `${theme.fg("dim", `${count} result${count === 1 ? "" : "s"}`)}  ${theme.fg("muted", "(ctrl+o to expand)")}`
+			const spinner = running ? theme.fg("accent", spinnerFrame(state)) : theme.fg("muted", "-")
+
+			const header = `${spinner} ${theme.fg("toolTitle", theme.bold("Web search"))}`
+			const phraseLine = `  ${theme.fg("muted", "phrase:")} ${theme.fg("accent", "`")}${theme.fg("accent", args.query ?? "")}${theme.fg("accent", "`")}`
+
 			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
 			component.clear()
-			component.addChild(new Text(summary, 0, 0))
-			component.invalidate()
+			component.addChild(new Text(`${header}\n${phraseLine}`, 0, 0))
 			return component
 		},
 
-		renderCall(args, theme, context) {
-			const text = (context.lastComponent ?? new Text("", 0, 0)) as Text
-			const parts = [
-				theme.fg("toolTitle", theme.bold("web_search")),
-				theme.fg("muted", "("),
-				theme.fg("accent", `"${args.query}"`),
-				theme.fg("muted", ")"),
-				...(args.recency ? [theme.fg("muted", ` recency:${args.recency}`)] : []),
-				...(args.limit !== undefined ? [theme.fg("muted", ` limit:${args.limit}`)] : []),
-				...(args.search_depth ? [theme.fg("muted", ` depth:${args.search_depth}`)] : []),
-			]
-			text.setText(parts.join(""))
-			return text
+		renderResult(result, options, theme, context) {
+			const state = context.state as WebSearchState
+
+			if (!options.isPartial) {
+				clearSpinner(state)
+			}
+
+			if (options.isPartial) return new Container()
+
+			const details = result.details as { durationMs: number; words: number } | undefined
+			const duration = theme.fg("dim", formatDuration(details?.durationMs ?? 0))
+			const chars = theme.fg("dim", `↓${formatCount(details?.words ?? 0)}`)
+
+			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
+			component.clear()
+			component.addChild(new Text(theme.fg("dim", `- ${duration}  ${chars}`), 0, 0))
+			return component
 		},
 	})
 }

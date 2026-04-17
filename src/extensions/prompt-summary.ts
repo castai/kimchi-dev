@@ -1,6 +1,7 @@
 import type { AssistantMessage, Usage } from "@mariozechner/pi-ai"
 import type { ExtensionAPI, MessageRenderer, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Text } from "@mariozechner/pi-tui"
+import { formatCount } from "./format.js"
 import { isSubagent } from "./orchestration/prompt-transformer/prompt-transformer.js"
 
 interface UsageTotals {
@@ -46,38 +47,34 @@ function formatDuration(ms: number): string {
 	return `${m}m ${rem}s`
 }
 
-function formatTokenCount(n: number): string {
-	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`
-	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
-	return String(n)
-}
-
-// Fixed column widths (prefix + max value "1000.0k" = 7 chars):
-//   ↑/↓ cols:          2 + 7 = 9  → pad to 10
-//   cache-read col:   11 + 7 = 18  → pad to 20
-//   cache-write col:  12 + 7 = 19  → pad to 21
-//   total col:         6 + 7 = 13  (last, no padding needed)
-const COL_IN_OUT_WIDTH = 10
-const COL_CACHE_READ_WIDTH = 20
-const COL_CACHE_WRITE_WIDTH = 21
 const COL_GAP = "  "
-
-function formatUsageValues(totals: UsageTotals, theme: Theme): string {
-	const total = totals.input + totals.output + totals.cacheRead + totals.cacheWrite
-	const cols = [
-		`↑${formatTokenCount(totals.input)}`.padEnd(COL_IN_OUT_WIDTH),
-		`↓${formatTokenCount(totals.output)}`.padEnd(COL_IN_OUT_WIDTH),
-	]
-	if (totals.cacheRead > 0 || totals.cacheWrite > 0) {
-		cols.push(`cache-read ${formatTokenCount(totals.cacheRead)}`.padEnd(COL_CACHE_READ_WIDTH))
-		cols.push(`cache-write ${formatTokenCount(totals.cacheWrite)}`.padEnd(COL_CACHE_WRITE_WIDTH))
-	}
-	cols.push(`${theme.fg("dim", "total ")}${formatTokenCount(total)}`)
-	return cols.join(COL_GAP)
-}
-
 const LABEL_WIDTH = 16
 const INDENT = "  "
+
+function usageRawCols(totals: UsageTotals): string[] {
+	const total = totals.input + totals.output + totals.cacheRead + totals.cacheWrite
+	const cols = [`↑${formatCount(totals.input)}`, `↓${formatCount(totals.output)}`]
+	if (totals.cacheRead > 0 || totals.cacheWrite > 0) {
+		cols.push(`cache-read ${formatCount(totals.cacheRead)}`)
+		cols.push(`cache-write ${formatCount(totals.cacheWrite)}`)
+	}
+	cols.push(formatCount(total))
+	return cols
+}
+
+function formatUsageRows(rows: Array<{ label: string; totals: UsageTotals }>, theme: Theme): string[] {
+	const colSets = rows.map((r) => usageRawCols(r.totals))
+	const colCount = Math.max(...colSets.map((c) => c.length))
+	const colWidths = Array.from({ length: colCount - 1 }, (_, i) => Math.max(...colSets.map((c) => (c[i] ?? "").length)))
+
+	return rows.map((row, ri) => {
+		const cols = colSets[ri]
+		const padded = cols.slice(0, -1).map((c, i) => c.padEnd(colWidths[i]))
+		const totalCol = theme.fg("dim", "total ") + cols[cols.length - 1]
+		const values = [...padded, totalCol].join(COL_GAP)
+		return INDENT + theme.fg("dim", row.label.padEnd(LABEL_WIDTH)) + values
+	})
+}
 
 const promptSummaryRenderer: MessageRenderer<PromptSummaryData> = (message, _options, theme) => {
 	const data = message.details as PromptSummaryData
@@ -92,14 +89,12 @@ const promptSummaryRenderer: MessageRenderer<PromptSummaryData> = (message, _opt
 	container.addChild(new Text(INDENT + theme.fg("dim", "execution:".padEnd(LABEL_WIDTH)) + data.elapsed, 0, 0))
 
 	const rows: Array<{ label: string; totals: UsageTotals }> = []
-	if (data.orchestrator) rows.push({ label: "orchestrator:", totals: data.orchestrator })
+	if (data.orchestrator) rows.push({ label: "model:", totals: data.orchestrator })
 	if (data.subagents) rows.push({ label: "subagents:", totals: data.subagents })
 	rows.push({ label: "total:", totals: data.total })
 
-	for (const row of rows) {
-		const rowLabel = theme.fg("dim", row.label.padEnd(LABEL_WIDTH))
-		const values = formatUsageValues(row.totals, theme)
-		container.addChild(new Text(INDENT + rowLabel + values, 0, 0))
+	for (const line of formatUsageRows(rows, theme)) {
+		container.addChild(new Text(line, 0, 0))
 	}
 
 	return container
