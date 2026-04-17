@@ -91,7 +91,7 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, cwd)
+			const client = await getOrCreateClient(server, clientCwd(filePath, cwd))
 			await refreshFile(client, filePath)
 
 			const waitMs = Math.min(params.wait_ms ?? 2000, 10000)
@@ -129,7 +129,7 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, cwd)
+			const client = await getOrCreateClient(server, clientCwd(filePath, cwd))
 			await ensureFileOpen(client, filePath)
 
 			const result = (await sendRequest(client, "textDocument/hover", {
@@ -172,7 +172,7 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, cwd)
+			const client = await getOrCreateClient(server, clientCwd(filePath, cwd))
 			await ensureFileOpen(client, filePath)
 
 			const lspMethod = `textDocument/${params.method ?? "definition"}`
@@ -218,7 +218,7 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, cwd)
+			const client = await getOrCreateClient(server, clientCwd(filePath, cwd))
 			await ensureFileOpen(client, filePath)
 
 			const result = (await sendRequest(client, "textDocument/references", {
@@ -261,7 +261,7 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, cwd)
+			const client = await getOrCreateClient(server, clientCwd(filePath, cwd))
 			await ensureFileOpen(client, filePath)
 
 			// Check if rename is valid at this position
