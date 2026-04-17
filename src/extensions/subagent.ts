@@ -6,16 +6,14 @@ import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mar
 import { Type } from "@sinclair/typebox"
 import { isBunBinary } from "../env.js"
 import { formatCount } from "./format.js"
+import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./spinner.js"
 
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
 const STDERR_MAX = 8192
 const TIMEOUT_MS = 30 * 60 * 1000
 
-interface SubagentState {
-	spinnerIdx: number
-	spinnerInterval: ReturnType<typeof setInterval> | undefined
+interface SubagentState extends SpinnerState {
 	lastToolCall: string | undefined
 }
 
@@ -277,13 +275,6 @@ function formatFooterStatus(counts: Map<string, number>, theme: Theme): string {
 	return theme.fg("dim", `subagents: ${entries}`)
 }
 
-function clearSpinner(state: SubagentState) {
-	if (state.spinnerInterval) {
-		clearInterval(state.spinnerInterval)
-		state.spinnerInterval = undefined
-	}
-}
-
 interface SubagentStats {
 	durationMs: number
 	tokenUsage: SubagentTokenUsage
@@ -399,15 +390,11 @@ export default function (pi: ExtensionAPI) {
 			const running = context.executionStarted && context.isPartial
 			if (!running) {
 				clearSpinner(state)
-			} else if (!state.spinnerInterval) {
-				state.spinnerIdx = 0
-				state.spinnerInterval = setInterval(() => {
-					state.spinnerIdx = (state.spinnerIdx + 1) % SPINNER_FRAMES.length
-					context.invalidate()
-				}, 80)
+			} else {
+				tickSpinner(state, context.invalidate)
 			}
 
-			const spinner = running ? theme.fg("accent", SPINNER_FRAMES[state.spinnerIdx ?? 0]) : theme.fg("muted", "-")
+			const spinner = running ? theme.fg("accent", spinnerFrame(state)) : theme.fg("muted", "-")
 
 			const header = `${spinner} ${theme.fg("toolTitle", theme.bold("Subagent session"))}`
 			const modelLine = `  ${theme.fg("muted", "model:")}  ${theme.fg("accent", "`")}${theme.fg("accent", `${args.provider ?? ""}/${args.model ?? ""}`)}${theme.fg("accent", "`")}`

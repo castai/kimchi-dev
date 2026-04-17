@@ -10,23 +10,12 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
 import { formatCount } from "../format.js"
+import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "../spinner.js"
 import { shutdownBrowserPool } from "./browser-pool.js"
 import { cacheClear } from "./cache.js"
 import { type WebFetchDetails, executeWebFetch } from "./execute-handler.js"
 
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-
-interface WebFetchState {
-	spinnerIdx: number
-	spinnerInterval: ReturnType<typeof setInterval> | undefined
-}
-
-function clearSpinner(state: WebFetchState) {
-	if (state.spinnerInterval) {
-		clearInterval(state.spinnerInterval)
-		state.spinnerInterval = undefined
-	}
-}
+type WebFetchState = SpinnerState
 
 function formatDomain(url: string): string {
 	try {
@@ -76,15 +65,9 @@ export default function webFetchExtension(pi: ExtensionAPI): void {
 			const state = context.state as WebFetchState
 
 			const running = context.executionStarted && context.isPartial
-			if (running && !state.spinnerInterval) {
-				state.spinnerIdx = 0
-				state.spinnerInterval = setInterval(() => {
-					state.spinnerIdx = (state.spinnerIdx + 1) % SPINNER_FRAMES.length
-					context.invalidate()
-				}, 80)
-			}
+			if (running) tickSpinner(state, context.invalidate)
 
-			const spinner = running ? theme.fg("accent", SPINNER_FRAMES[state.spinnerIdx ?? 0]) : theme.fg("muted", "-")
+			const spinner = running ? theme.fg("accent", spinnerFrame(state)) : theme.fg("muted", "-")
 
 			const domain = formatDomain(args.url ?? "")
 			const header = `${spinner} ${theme.fg("toolTitle", theme.bold("Web fetch"))}`

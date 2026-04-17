@@ -10,21 +10,10 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Container, Text } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
 import { formatCount } from "../format.js"
+import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "../spinner.js"
 import { executeWebSearch } from "./execute-handler.js"
 
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-
-interface WebSearchState {
-	spinnerIdx: number
-	spinnerInterval: ReturnType<typeof setInterval> | undefined
-}
-
-function clearSpinner(state: WebSearchState) {
-	if (state.spinnerInterval) {
-		clearInterval(state.spinnerInterval)
-		state.spinnerInterval = undefined
-	}
-}
+type WebSearchState = SpinnerState
 
 function formatDuration(ms: number): string {
 	if (ms < 1000) return `${ms}ms`
@@ -83,15 +72,9 @@ export default function webSearchExtension(pi: ExtensionAPI): void {
 			const state = context.state as WebSearchState
 
 			const running = context.executionStarted && context.isPartial
-			if (running && !state.spinnerInterval) {
-				state.spinnerIdx = 0
-				state.spinnerInterval = setInterval(() => {
-					state.spinnerIdx = (state.spinnerIdx + 1) % SPINNER_FRAMES.length
-					context.invalidate()
-				}, 80)
-			}
+			if (running) tickSpinner(state, context.invalidate)
 
-			const spinner = running ? theme.fg("accent", SPINNER_FRAMES[state.spinnerIdx ?? 0]) : theme.fg("muted", "-")
+			const spinner = running ? theme.fg("accent", spinnerFrame(state)) : theme.fg("muted", "-")
 
 			const header = `${spinner} ${theme.fg("toolTitle", theme.bold("Web search"))}`
 			const phraseLine = `  ${theme.fg("muted", "phrase:")} ${theme.fg("accent", "`")}${theme.fg("accent", args.query ?? "")}${theme.fg("accent", "`")}`
