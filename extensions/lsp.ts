@@ -80,7 +80,8 @@ export default function (pi: ExtensionAPI) {
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const server = serverForFile(filePath, activeServers)
+			const servers = activeServers.length > 0 ? activeServers : detectServers(ctx.cwd)
+			const server = serverForFile(filePath, servers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
@@ -117,7 +118,8 @@ export default function (pi: ExtensionAPI) {
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const server = serverForFile(filePath, activeServers)
+			const servers = activeServers.length > 0 ? activeServers : detectServers(ctx.cwd)
+			const server = serverForFile(filePath, servers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
@@ -159,7 +161,8 @@ export default function (pi: ExtensionAPI) {
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const server = serverForFile(filePath, activeServers)
+			const servers = activeServers.length > 0 ? activeServers : detectServers(ctx.cwd)
+			const server = serverForFile(filePath, servers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
@@ -204,7 +207,8 @@ export default function (pi: ExtensionAPI) {
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const server = serverForFile(filePath, activeServers)
+			const servers = activeServers.length > 0 ? activeServers : detectServers(ctx.cwd)
+			const server = serverForFile(filePath, servers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
@@ -246,7 +250,8 @@ export default function (pi: ExtensionAPI) {
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const server = serverForFile(filePath, activeServers)
+			const servers = activeServers.length > 0 ? activeServers : detectServers(ctx.cwd)
+			const server = serverForFile(filePath, servers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
