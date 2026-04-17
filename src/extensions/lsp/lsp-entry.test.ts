@@ -1,4 +1,3 @@
-import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { clientCwd } from "../../../extensions/lsp.js"
 
