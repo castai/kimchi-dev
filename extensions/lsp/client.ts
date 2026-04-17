@@ -1,5 +1,4 @@
 // extensions/lsp/client.ts
-import fs from "node:fs"
 import type {
 	BunProcess,
 	LspClient,
@@ -10,11 +9,6 @@ import type {
 	ServerConfig,
 } from "./types.js"
 import { detectLanguageId, fileToUri } from "./utils.js"
-
-const LSP_LOG = "/tmp/lsp-debug.log"
-function appendLspLog(msg: string): void {
-	fs.appendFileSync(LSP_LOG, `${new Date().toISOString()} ${msg}`)
-}
 
 // =============================================================================
 // Client State
@@ -65,7 +59,7 @@ function parseMessage(buf: Buffer): { message: LspJsonRpcResponse | LspJsonRpcNo
 	const lenMatch = headerText.match(/Content-Length: (\d+)/i)
 	if (!lenMatch) return null
 
-	const contentLen = parseInt(lenMatch[1], 10)
+	const contentLen = Number.parseInt(lenMatch[1], 10)
 	const start = headerEnd + 4
 	const end = start + contentLen
 	if (buf.length < end) return null
@@ -82,7 +76,6 @@ async function writeMessage(
 ): Promise<void> {
 	const content = JSON.stringify(msg)
 	const header = `Content-Length: ${Buffer.byteLength(content, "utf-8")}\r\n\r\n`
-	appendLspLog(`→ ${header.trim()} ${content}\n`)
 	proc.stdin.write(header + content)
 	if (proc.stdin.flush) await proc.stdin.flush()
 }
@@ -100,14 +93,12 @@ async function startMessageReader(client: LspClient): Promise<void> {
 		while (true) {
 			const { done, value } = await reader.read()
 			if (done) break
-			appendLspLog(`← ${value.length} bytes from ${client.name}\n`)
 
 			client.messageBuffer = Buffer.concat([client.messageBuffer, value])
 			let parsed = parseMessage(client.messageBuffer)
 			while (parsed) {
 				const { message, remaining } = parsed
 				client.messageBuffer = remaining
-				appendLspLog(`← parsed: ${JSON.stringify(message).slice(0, 300)}\n`)
 
 				if ("id" in message && message.id !== undefined) {
 					const pending = client.pendingRequests.get(message.id as number)
@@ -126,7 +117,6 @@ async function startMessageReader(client: LspClient): Promise<void> {
 						writeMessage(client.proc, response).catch(() => {})
 					}
 				} else if ("method" in message) {
-					appendLspLog(`notification: ${message.method}\n`)
 					if (message.method === "textDocument/publishDiagnostics" && message.params) {
 						const params = message.params as PublishDiagnosticsParams
 						client.diagnostics.set(params.uri, {
@@ -169,30 +159,29 @@ const DEFAULT_TIMEOUT_MS = 30_000
 export async function getOrCreateClient(config: ServerConfig, cwd: string): Promise<LspClient> {
 	const key = `${config.command}:${cwd}`
 
-	// TODO: re-enable caching once LSP integration is stable
-	// const existing = clients.get(key)
-	// if (existing) {
-	// 	existing.lastActivity = Date.now()
-	// 	return existing
-	// }
+	const existing = clients.get(key)
+	if (existing) {
+		existing.lastActivity = Date.now()
+		return existing
+	}
 
-	// const existingLock = clientLocks.get(key)
-	// if (existingLock) return existingLock
+	const existingLock = clientLocks.get(key)
+	if (existingLock) return existingLock
 
 	const clientPromise = (async () => {
 		// Bun global available at runtime but not typed — use globalThis cast
+		// biome-ignore lint/suspicious/noExplicitAny: Bun not typed without @types/bun
 		const Bun = (globalThis as any).Bun
-		appendLspLog(`spawning ${config.command} in ${cwd}\n`)
+		// biome-ignore lint/suspicious/noExplicitAny: Bun not typed without @types/bun
 		const proc = Bun.spawn([config.command, ...(config.args ?? [])], {
 			cwd,
 			stdin: "pipe",
 			stdout: "pipe",
 			stderr: "pipe",
 		}) as BunProcess
-		appendLspLog(`spawned pid=${(proc as any).pid ?? "?"}\n`)
 
 		let resolveProjectLoaded!: () => void
-		const projectLoaded = new Promise<void>(resolve => {
+		const projectLoaded = new Promise<void>((resolve) => {
 			resolveProjectLoaded = resolve
 		})
 		const timeout = setTimeout(resolveProjectLoaded, PROJECT_LOAD_TIMEOUT_MS)
@@ -220,11 +209,12 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string): Prom
 		}
 		clients.set(key, client)
 
+		// biome-ignore lint/suspicious/noExplicitAny: Bun not typed without @types/bun
 		;(proc as any).exited.then(() => {
-			appendLspLog(`exited code=${( proc as any).exitCode} key=${key}\n`)
 			clients.delete(key)
 			clientLocks.delete(key)
 			client.resolveProjectLoaded()
+			// biome-ignore lint/suspicious/noExplicitAny: Bun not typed without @types/bun
 			const err = new Error(`LSP server exited (code ${(proc as any).exitCode})`)
 			for (const pending of client.pendingRequests.values()) pending.reject(err)
 			client.pendingRequests.clear()
@@ -236,11 +226,12 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string): Prom
 			const reader = client.proc.stderr.getReader()
 			try {
 				while (true) {
-					const { done, value } = await reader.read()
+					const { done } = await reader.read()
 					if (done) break
-					appendLspLog(`stderr(${config.command}): ${Buffer.from(value).toString()}`)
 				}
-			} finally { reader.releaseLock() }
+			} finally {
+				reader.releaseLock()
+			}
 		})()
 
 		try {
@@ -254,7 +245,6 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string): Prom
 			})
 			await sendNotification(client, "initialized", {})
 			await client.projectLoaded
-			appendLspLog(`projectLoaded for ${key}\n`)
 			return client
 		} catch (err) {
 			clients.delete(key)
@@ -298,12 +288,18 @@ export async function sendRequest(client: LspClient, method: string, params: unk
 		}, DEFAULT_TIMEOUT_MS)
 
 		client.pendingRequests.set(id, {
-			resolve: v => { clearTimeout(timer); resolve(v) },
-			reject: e => { clearTimeout(timer); reject(e) },
+			resolve: (v) => {
+				clearTimeout(timer)
+				resolve(v)
+			},
+			reject: (e) => {
+				clearTimeout(timer)
+				reject(e)
+			},
 			method,
 		})
 
-		writeMessage(client.proc, request).catch(err => {
+		writeMessage(client.proc, request).catch((err) => {
 			clearTimeout(timer)
 			client.pendingRequests.delete(id)
 			reject(err)
@@ -327,12 +323,16 @@ export async function ensureFileOpen(client: LspClient, filePath: string): Promi
 
 	const lockKey = `${client.name}:${uri}`
 	const existingLock = fileOperationLocks.get(lockKey)
-	if (existingLock) { await existingLock; return }
+	if (existingLock) {
+		await existingLock
+		return
+	}
 
 	const openPromise = (async () => {
 		if (client.openFiles.has(uri)) return
 		let content: string
 		try {
+			// biome-ignore lint/suspicious/noExplicitAny: Bun not typed without @types/bun
 			const Bun = (globalThis as any).Bun
 			content = await Bun.file(filePath).text()
 		} catch {
@@ -347,7 +347,11 @@ export async function ensureFileOpen(client: LspClient, filePath: string): Promi
 	})()
 
 	fileOperationLocks.set(lockKey, openPromise)
-	try { await openPromise } finally { fileOperationLocks.delete(lockKey) }
+	try {
+		await openPromise
+	} finally {
+		fileOperationLocks.delete(lockKey)
+	}
 }
 
 export async function refreshFile(client: LspClient, filePath: string): Promise<void> {
@@ -371,6 +375,7 @@ export async function refreshFile(client: LspClient, filePath: string): Promise<
 
 		let content: string
 		try {
+			// biome-ignore lint/suspicious/noExplicitAny: Bun not typed without @types/bun
 			const Bun = (globalThis as any).Bun
 			content = await Bun.file(filePath).text()
 		} catch {
@@ -390,7 +395,11 @@ export async function refreshFile(client: LspClient, filePath: string): Promise<
 	})()
 
 	fileOperationLocks.set(lockKey, refreshPromise)
-	try { await refreshPromise } finally { fileOperationLocks.delete(lockKey) }
+	try {
+		await refreshPromise
+	} finally {
+		fileOperationLocks.delete(lockKey)
+	}
 }
 
 export function getAllClients(): LspClient[] {
