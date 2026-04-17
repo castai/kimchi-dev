@@ -10,14 +10,7 @@
 import path from "node:path"
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Type } from "@sinclair/typebox"
-import {
-	ensureFileOpen,
-	getAllClients,
-	getOrCreateClient,
-	refreshFile,
-	sendRequest,
-	shutdownAll,
-} from "./lsp/client.js"
+import { ensureFileOpen, getOrCreateClient, refreshFile, sendRequest, shutdownAll } from "./lsp/client.js"
 import { applyWorkspaceEdit } from "./lsp/edits.js"
 import { detectServers, serverForFile } from "./lsp/servers.js"
 import type { Hover, Location, LocationLink, TextDocumentEdit, WorkspaceEdit } from "./lsp/types.js"
@@ -25,16 +18,17 @@ import { fileToUri, formatDiagnostic, uriToFile } from "./lsp/utils.js"
 
 export default function (pi: ExtensionAPI) {
 	let cwd = ""
+	let activeServers: ReturnType<typeof detectServers> = []
 
 	// ── Session start: detect servers, hook file sync, shutdown on exit ─────────
 
 	pi.on("session_start", async (_event, ctx) => {
 		cwd = ctx.cwd
-		const servers = detectServers(cwd)
-		if (servers.length === 0) return
+		activeServers = detectServers(cwd)
+		if (activeServers.length === 0) return
 
 		// Eagerly start servers so they're warm when first tool is called
-		for (const server of servers) {
+		for (const server of activeServers) {
 			getOrCreateClient(server, cwd).catch(() => {})
 		}
 	})
@@ -56,8 +50,7 @@ export default function (pi: ExtensionAPI) {
 		if (!filePath) return
 
 		const resolved = path.isAbsolute(filePath) ? filePath : path.join(cwd, filePath)
-		const servers = detectServers(cwd)
-		const server = serverForFile(resolved, servers)
+		const server = serverForFile(resolved, activeServers)
 		if (!server) return
 
 		try {
@@ -87,8 +80,7 @@ export default function (pi: ExtensionAPI) {
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const servers = detectServers(ctx.cwd)
-			const server = serverForFile(filePath, servers)
+			const server = serverForFile(filePath, activeServers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
@@ -125,8 +117,7 @@ export default function (pi: ExtensionAPI) {
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const servers = detectServers(ctx.cwd)
-			const server = serverForFile(filePath, servers)
+			const server = serverForFile(filePath, activeServers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
@@ -168,8 +159,7 @@ export default function (pi: ExtensionAPI) {
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const servers = detectServers(ctx.cwd)
-			const server = serverForFile(filePath, servers)
+			const server = serverForFile(filePath, activeServers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
@@ -214,8 +204,7 @@ export default function (pi: ExtensionAPI) {
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const servers = detectServers(ctx.cwd)
-			const server = serverForFile(filePath, servers)
+			const server = serverForFile(filePath, activeServers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
@@ -257,8 +246,7 @@ export default function (pi: ExtensionAPI) {
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const servers = detectServers(ctx.cwd)
-			const server = serverForFile(filePath, servers)
+			const server = serverForFile(filePath, activeServers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
@@ -292,18 +280,15 @@ export default function (pi: ExtensionAPI) {
 
 			const applied = await applyWorkspaceEdit(edit, ctx.cwd)
 
-			// Refresh all modified files in LSP clients
-			for (const client of getAllClients()) {
-				const affectedUris = [
-					...Object.keys(edit.changes ?? {}),
-					...(edit.documentChanges ?? [])
-						.filter((c): c is TextDocumentEdit => "textDocument" in c)
-						.map((c) => c.textDocument.uri),
-				]
-				for (const uri of affectedUris) {
-					const file = uriToFile(uri)
-					refreshFile(client, file).catch(() => {})
-				}
+			// Refresh all modified files in the client that performed the rename
+			const affectedUris = [
+				...Object.keys(edit.changes ?? {}),
+				...(edit.documentChanges ?? [])
+					.filter((c): c is TextDocumentEdit => "textDocument" in c)
+					.map((c) => c.textDocument.uri),
+			]
+			for (const uri of affectedUris) {
+				refreshFile(client, uriToFile(uri)).catch(() => {})
 			}
 
 			return { content: [{ type: "text", text: applied.join("\n") }], details: null }
