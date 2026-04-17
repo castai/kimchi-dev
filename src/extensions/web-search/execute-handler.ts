@@ -36,7 +36,11 @@ export interface WebSearchParams {
 
 export interface WebSearchResult {
 	content: { type: "text"; text: string }[]
-	details: { sources?: SearchSource[]; durationMs: number; chars: number }
+	details: { sources?: SearchSource[]; durationMs: number; chars: number; words: number }
+}
+
+function countWords(text: string): number {
+	return text.trim().split(/\s+/).filter(Boolean).length
 }
 
 export function formatForLLM(response: SearchResponse, maxContentChars = DEFAULT_MAX_CONTENT_CHARS): string {
@@ -127,7 +131,12 @@ export async function executeWebSearch(params: WebSearchParams, signal?: AbortSi
 
 		return {
 			content: [{ type: "text" as const, text }],
-			details: { sources: data.sources, durationMs: Date.now() - startedAt, chars: text.length },
+			details: {
+				sources: data.sources,
+				durationMs: Date.now() - startedAt,
+				chars: text.length,
+				words: countWords(text),
+			},
 		}
 	} finally {
 		clearTimeout(timeout)

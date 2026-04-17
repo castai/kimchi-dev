@@ -9,6 +9,7 @@ import { StringEnum } from "@mariozechner/pi-ai"
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
+import { formatCount } from "../format.js"
 import { shutdownBrowserPool } from "./browser-pool.js"
 import { cacheClear } from "./cache.js"
 import { type WebFetchDetails, executeWebFetch } from "./execute-handler.js"
@@ -114,7 +115,7 @@ export default function webFetchExtension(pi: ExtensionAPI): void {
 			if (!options.isPartial && details !== undefined) {
 				if (details.warning) component.addChild(new Spacer(1))
 				const duration = theme.fg("dim", formatDuration(details.durationMs))
-				const chars = theme.fg("dim", `↓${details.chars.toLocaleString()}`)
+				const chars = theme.fg("dim", `↓${formatCount(details.words)}`)
 				component.addChild(new Text(theme.fg("dim", `- ${duration}  ${chars}`), 0, 0))
 			}
 

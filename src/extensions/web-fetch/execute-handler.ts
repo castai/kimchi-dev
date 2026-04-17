@@ -24,13 +24,17 @@ export interface WebFetchParams {
 
 export interface WebFetchDetails {
 	durationMs: number
-	chars: number
+	words: number
 	warning: string | undefined
 }
 
 export interface WebFetchResult {
 	content: { type: "text"; text: string }[]
 	details: WebFetchDetails
+}
+
+function countWords(text: string): number {
+	return text.trim().split(/\s+/).filter(Boolean).length
 }
 
 function buildOutput(metadataLines: string[], content: string, truncationNotice: string): string {
@@ -44,7 +48,7 @@ export async function executeWebFetch(params: WebFetchParams): Promise<WebFetchR
 
 	const errorResult = (text: string): WebFetchResult => ({
 		content: [{ type: "text" as const, text }],
-		details: { durationMs: Date.now() - startedAt, chars: text.length, warning: undefined },
+		details: { durationMs: Date.now() - startedAt, words: countWords(text), warning: undefined },
 	})
 
 	// Validate URL
@@ -58,7 +62,7 @@ export async function executeWebFetch(params: WebFetchParams): Promise<WebFetchR
 	if (cached != null) {
 		return {
 			content: [{ type: "text" as const, text: cached }],
-			details: { durationMs: Date.now() - startedAt, chars: cached.length, warning: undefined },
+			details: { durationMs: Date.now() - startedAt, words: countWords(cached), warning: undefined },
 		}
 	}
 
@@ -120,7 +124,7 @@ export async function executeWebFetch(params: WebFetchParams): Promise<WebFetchR
 		content: [{ type: "text" as const, text: output }],
 		details: {
 			durationMs: Date.now() - startedAt,
-			chars: content.length,
+			words: countWords(output),
 			warning: result.fallbackWarning,
 		},
 	}

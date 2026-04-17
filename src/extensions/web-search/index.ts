@@ -9,6 +9,7 @@ import { StringEnum } from "@mariozechner/pi-ai"
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Container, Text } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
+import { formatCount } from "../format.js"
 import { executeWebSearch } from "./execute-handler.js"
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -110,9 +111,9 @@ export default function webSearchExtension(pi: ExtensionAPI): void {
 
 			if (options.isPartial) return new Container()
 
-			const details = result.details as { durationMs: number; chars: number } | undefined
+			const details = result.details as { durationMs: number; words: number } | undefined
 			const duration = theme.fg("dim", formatDuration(details?.durationMs ?? 0))
-			const chars = theme.fg("dim", `↓${(details?.chars ?? 0).toLocaleString()}`)
+			const chars = theme.fg("dim", `↓${formatCount(details?.words ?? 0)}`)
 
 			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
 			component.clear()

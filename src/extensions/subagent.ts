@@ -5,6 +5,7 @@ import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
 import { isBunBinary } from "../env.js"
+import { formatCount } from "./format.js"
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 const PROMPT_MAX_LENGTH = 60
@@ -295,8 +296,8 @@ function formatDuration(ms: number): string {
 
 function formatStats(stats: SubagentStats, theme: Theme): string {
 	const duration = theme.fg("dim", formatDuration(stats.durationMs))
-	const input = theme.fg("dim", `↑${stats.tokenUsage.input.toLocaleString()}`)
-	const output = theme.fg("dim", `↓${stats.tokenUsage.output.toLocaleString()}`)
+	const input = theme.fg("dim", `↑${formatCount(stats.tokenUsage.input)}`)
+	const output = theme.fg("dim", `↓${formatCount(stats.tokenUsage.output)}`)
 	return `- ${duration}  ${input}  ${output}`
 }
 

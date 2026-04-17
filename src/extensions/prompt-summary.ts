@@ -1,6 +1,7 @@
 import type { AssistantMessage, Usage } from "@mariozechner/pi-ai"
 import type { ExtensionAPI, MessageRenderer, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Text } from "@mariozechner/pi-tui"
+import { formatCount } from "./format.js"
 import { isSubagent } from "./orchestration/prompt-transformer/prompt-transformer.js"
 
 interface UsageTotals {
@@ -46,24 +47,18 @@ function formatDuration(ms: number): string {
 	return `${m}m ${rem}s`
 }
 
-function formatTokenCount(n: number): string {
-	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`
-	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
-	return String(n)
-}
-
 const COL_GAP = "  "
 const LABEL_WIDTH = 16
 const INDENT = "  "
 
 function usageRawCols(totals: UsageTotals): string[] {
 	const total = totals.input + totals.output + totals.cacheRead + totals.cacheWrite
-	const cols = [`↑${formatTokenCount(totals.input)}`, `↓${formatTokenCount(totals.output)}`]
+	const cols = [`↑${formatCount(totals.input)}`, `↓${formatCount(totals.output)}`]
 	if (totals.cacheRead > 0 || totals.cacheWrite > 0) {
-		cols.push(`cache-read ${formatTokenCount(totals.cacheRead)}`)
-		cols.push(`cache-write ${formatTokenCount(totals.cacheWrite)}`)
+		cols.push(`cache-read ${formatCount(totals.cacheRead)}`)
+		cols.push(`cache-write ${formatCount(totals.cacheWrite)}`)
 	}
-	cols.push(formatTokenCount(total))
+	cols.push(formatCount(total))
 	return cols
 }
 
