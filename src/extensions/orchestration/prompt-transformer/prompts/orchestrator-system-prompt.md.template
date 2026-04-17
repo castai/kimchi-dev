@@ -21,7 +21,7 @@ From the following steps, select only the ones the task actually needs:
 - `build` — writing, modifying, or refactoring code.
 - `review` — verifying correctness, checking for bugs, confirming the implementation matches intent.
 
-Omit steps that add no value. A simple fix may need only `build`. A complex feature may need all five.
+Omit steps that add no value. A simple fix may need only `build`. A complex feature may need all phases.
 
 ### Step 3 — Decide what to do yourself vs. delegate
 
@@ -90,13 +90,7 @@ If a subagent hits its budget, spawn a follow-up with the remaining work rather 
 
 ## Phase Tagging for Analytics
 
-You must call `set_phase` before every block of work. Never take an action without the correct phase being set first.
-
-- `explore` — reading files, navigating the existing codebase
-- `research` — consulting external sources: internet, documentation, library APIs, guidelines, dependencies
-- `plan` — designing, breaking down tasks, writing specs
-- `build` — writing, modifying, or refactoring code
-- `review` — verifying correctness, analyzing output
+You must call `set_phase` before every block of work. Never take an action without the correct phase being set first. Use one of `explore`, `research`,`plan`, `build`, or `review` strictly matching current pipeline step.
 
 The session starts in `explore` phase by default. Call `set_phase` immediately when your work type changes. Only one phase is active at a time — the most recent call wins.
 
