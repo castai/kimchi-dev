@@ -78,15 +78,15 @@ export default function (pi: ExtensionAPI) {
 				}),
 			),
 		}),
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const servers = activeServers.length > 0 ? activeServers : detectServers(ctx.cwd)
+		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(cwd, params.file_path)
+			const servers = activeServers.length > 0 ? activeServers : detectServers(cwd)
 			const server = serverForFile(filePath, servers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, ctx.cwd)
+			const client = await getOrCreateClient(server, cwd)
 			await refreshFile(client, filePath)
 
 			const waitMs = Math.min(params.wait_ms ?? 2000, 10000)
@@ -116,15 +116,15 @@ export default function (pi: ExtensionAPI) {
 			line: Type.Number({ description: "0-based line number" }),
 			character: Type.Number({ description: "0-based character offset" }),
 		}),
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const servers = activeServers.length > 0 ? activeServers : detectServers(ctx.cwd)
+		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(cwd, params.file_path)
+			const servers = activeServers.length > 0 ? activeServers : detectServers(cwd)
 			const server = serverForFile(filePath, servers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, ctx.cwd)
+			const client = await getOrCreateClient(server, cwd)
 			await ensureFileOpen(client, filePath)
 
 			const result = (await sendRequest(client, "textDocument/hover", {
@@ -159,15 +159,15 @@ export default function (pi: ExtensionAPI) {
 				}),
 			),
 		}),
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const servers = activeServers.length > 0 ? activeServers : detectServers(ctx.cwd)
+		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(cwd, params.file_path)
+			const servers = activeServers.length > 0 ? activeServers : detectServers(cwd)
 			const server = serverForFile(filePath, servers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, ctx.cwd)
+			const client = await getOrCreateClient(server, cwd)
 			await ensureFileOpen(client, filePath)
 
 			const lspMethod = `textDocument/${params.method ?? "definition"}`
@@ -182,7 +182,7 @@ export default function (pi: ExtensionAPI) {
 
 			const locations = normalizeLocations(result)
 			const lines = locations.map((loc) => {
-				const file = path.relative(ctx.cwd, uriToFile(loc.uri))
+				const file = path.relative(cwd, uriToFile(loc.uri))
 				return `${file}:${loc.range.start.line + 1}:${loc.range.start.character + 1}`
 			})
 			return { content: [{ type: "text", text: lines.join("\n") }], details: null }
@@ -205,15 +205,15 @@ export default function (pi: ExtensionAPI) {
 				Type.Boolean({ description: "Include the declaration itself in results (default: true)", default: true }),
 			),
 		}),
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const servers = activeServers.length > 0 ? activeServers : detectServers(ctx.cwd)
+		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(cwd, params.file_path)
+			const servers = activeServers.length > 0 ? activeServers : detectServers(cwd)
 			const server = serverForFile(filePath, servers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, ctx.cwd)
+			const client = await getOrCreateClient(server, cwd)
 			await ensureFileOpen(client, filePath)
 
 			const result = (await sendRequest(client, "textDocument/references", {
@@ -227,7 +227,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			const lines = result.map((loc) => {
-				const file = path.relative(ctx.cwd, uriToFile(loc.uri))
+				const file = path.relative(cwd, uriToFile(loc.uri))
 				return `${file}:${loc.range.start.line + 1}:${loc.range.start.character + 1}`
 			})
 			return { content: [{ type: "text", text: `${result.length} reference(s):\n${lines.join("\n")}` }], details: null }
@@ -248,15 +248,15 @@ export default function (pi: ExtensionAPI) {
 			character: Type.Number({ description: "0-based character offset of the symbol" }),
 			new_name: Type.String({ description: "New name for the symbol" }),
 		}),
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(ctx.cwd, params.file_path)
-			const servers = activeServers.length > 0 ? activeServers : detectServers(ctx.cwd)
+		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+			const filePath = path.isAbsolute(params.file_path) ? params.file_path : path.join(cwd, params.file_path)
+			const servers = activeServers.length > 0 ? activeServers : detectServers(cwd)
 			const server = serverForFile(filePath, servers)
 			if (!server) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, ctx.cwd)
+			const client = await getOrCreateClient(server, cwd)
 			await ensureFileOpen(client, filePath)
 
 			// Check if rename is valid at this position
@@ -283,7 +283,7 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "Rename returned no changes." }], details: null }
 			}
 
-			const applied = await applyWorkspaceEdit(edit, ctx.cwd)
+			const applied = await applyWorkspaceEdit(edit, cwd)
 
 			// Refresh all modified files in the client that performed the rename
 			const affectedUris = [
