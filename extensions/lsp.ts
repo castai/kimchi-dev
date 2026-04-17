@@ -16,6 +16,11 @@ import { detectServers, serverForFile } from "./lsp/servers.js"
 import type { Hover, Location, LocationLink, TextDocumentEdit, WorkspaceEdit } from "./lsp/types.js"
 import { fileToUri, formatDiagnostic, uriToFile } from "./lsp/utils.js"
 
+export function clientCwd(filePath: string, sessionCwd: string): string {
+	if (filePath.startsWith(sessionCwd + path.sep) || filePath === sessionCwd) return sessionCwd
+	return path.dirname(filePath)
+}
+
 export default function (pi: ExtensionAPI) {
 	let cwd = ""
 	let activeServers: ReturnType<typeof detectServers> = []
