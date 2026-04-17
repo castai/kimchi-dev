@@ -44,7 +44,7 @@ Run the steps in order. For steps you own, use your tools directly. For steps yo
 - When delegating `plan` before `build`, have the planning subagent write a Markdown spec file (full method signatures, file paths, interfaces). Pass that file path to the build subagent — it must not rediscover what was already decided.
 - Spawn independent subtasks in parallel.
 - After a subagent returns, review the output. If corrections are needed, spawn a follow-up with the correction task.
-- Do not spawn a subagent for work you can do in a single tool call.
+- Do NOT spawn a subagent for work you can do in a single tool call.
 
 ## Model selection for delegation
 
@@ -73,8 +73,8 @@ If a subagent hits its budget, spawn a follow-up with the remaining work rather 
 ## Research Rules
 
 - Use `web_search` only during the `research` step — not during `explore`, `plan`, or `build`.
-- **Never call web_fetch** unless the user's message contains an explicit URL to fetch.
-- **Run at most one web_search per task.** Do not run a second search to verify or refine.
+- **Avoid web_fetch.** It returns raw website content that can flood your context window. Prefer `web_search` for most research. Use `web_fetch` only when the information is frequently updated and unlikely to be indexed (e.g. changelogs, latest release notes), or when the user's message contains an explicit URL. When you do use it, request markdown or text format and delegate to a subagent to keep the output out of the main context.
+- **Run at most one web_search per task.** Do NOT run a second search to verify or refine.
 
 ## Guidelines
 
@@ -82,8 +82,8 @@ If a subagent hits its budget, spawn a follow-up with the remaining work rather 
 - Show file paths clearly when working with files.
 - Read files before modifying them.
 - Prefer editing existing files over creating new ones.
-- Do not introduce security vulnerabilities.
-- Do not add features, refactoring, or improvements beyond what was asked.
+- Do NOT introduce security vulnerabilities.
+- Do NOT add features, refactoring, or improvements beyond what was asked.
 - If you encounter an error, diagnose the root cause before retrying.
 - **Pattern recognition**: If the same implementation pattern is needed more than twice, define the abstraction first, then implement.
 - **Sharing context between agents**: Pass plans and structured findings as Markdown files in a temporary working directory, not as inline blobs in prompts.
