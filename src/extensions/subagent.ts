@@ -23,6 +23,8 @@ type SubagentFailureReason = "exit_error" | "timeout" | "token_budget_exceeded" 
 interface SubagentTokenUsage {
 	input: number
 	output: number
+	cacheRead: number
+	cacheWrite: number
 }
 
 interface SubagentResult {
@@ -46,6 +48,8 @@ interface ParsedSubagentEvent {
 	delta: string | null
 	inputTokens: number
 	outputTokens: number
+	cacheReadTokens: number
+	cacheWriteTokens: number
 	toolCall: { name: string; args: Record<string, unknown> } | null
 }
 
@@ -83,20 +87,21 @@ function getSubagentInvocation(args: string[]): { command: string; args: string[
 // input/output token counts from message_end events.
 // The event shapes are internal to pi-coding-agent and may change across versions.
 export function parseSubagentEvent(line: string): ParsedSubagentEvent {
-	if (!line.trim()) return { delta: null, inputTokens: 0, outputTokens: 0, toolCall: null }
+	const empty = { delta: null, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, toolCall: null }
+	if (!line.trim()) return empty
 	let event: Record<string, unknown>
 	try {
 		event = JSON.parse(line)
 	} catch {
-		return { delta: null, inputTokens: 0, outputTokens: 0, toolCall: null }
+		return empty
 	}
 
 	if (event.type === "message_update") {
 		const assistantEvent = event.assistantMessageEvent as Record<string, unknown> | undefined
 		if (assistantEvent?.type === "text_delta" && typeof assistantEvent.delta === "string") {
-			return { delta: assistantEvent.delta, inputTokens: 0, outputTokens: 0, toolCall: null }
+			return { ...empty, delta: assistantEvent.delta }
 		}
-		return { delta: null, inputTokens: 0, outputTokens: 0, toolCall: null }
+		return empty
 	}
 
 	if (event.type === "message_end") {
@@ -105,7 +110,9 @@ export function parseSubagentEvent(line: string): ParsedSubagentEvent {
 		if (usage) {
 			const inputTokens = typeof usage.input === "number" ? usage.input : 0
 			const outputTokens = typeof usage.output === "number" ? usage.output : 0
-			return { delta: null, inputTokens, outputTokens, toolCall: null }
+			const cacheReadTokens = typeof usage.cacheRead === "number" ? usage.cacheRead : 0
+			const cacheWriteTokens = typeof usage.cacheWrite === "number" ? usage.cacheWrite : 0
+			return { ...empty, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens }
 		}
 	}
 
@@ -113,11 +120,11 @@ export function parseSubagentEvent(line: string): ParsedSubagentEvent {
 		const name = typeof event.toolName === "string" && event.toolName.length > 0 ? event.toolName : null
 		const args = event.args !== null && typeof event.args === "object" ? (event.args as Record<string, unknown>) : {}
 		if (name !== null) {
-			return { delta: null, inputTokens: 0, outputTokens: 0, toolCall: { name, args } }
+			return { ...empty, toolCall: { name, args } }
 		}
 	}
 
-	return { delta: null, inputTokens: 0, outputTokens: 0, toolCall: null }
+	return empty
 }
 
 function spawnSubagent(
@@ -149,6 +156,8 @@ function spawnSubagent(
 		let stderr = ""
 		let inputTokens = 0
 		let outputTokens = 0
+		let cacheReadTokens = 0
+		let cacheWriteTokens = 0
 		let failureReason: SubagentFailureReason | undefined
 		let closed = false
 
@@ -159,7 +168,7 @@ function spawnSubagent(
 				exitCode,
 				accumulated,
 				stderr,
-				tokenUsage: { input: inputTokens, output: outputTokens },
+				tokenUsage: { input: inputTokens, output: outputTokens, cacheRead: cacheReadTokens, cacheWrite: cacheWriteTokens },
 				failureReason,
 				durationMs: Date.now() - startedAt,
 			})
@@ -176,7 +185,7 @@ function spawnSubagent(
 		}
 
 		const processLine = (line: string) => {
-			const { delta, inputTokens: lineInput, outputTokens: lineOutput, toolCall } = parseSubagentEvent(line)
+			const { delta, inputTokens: lineInput, outputTokens: lineOutput, cacheReadTokens: lineCacheRead, cacheWriteTokens: lineCacheWrite, toolCall } = parseSubagentEvent(line)
 			if (delta !== null) {
 				accumulated += delta
 				onToken(accumulated)
@@ -188,6 +197,8 @@ function spawnSubagent(
 					kill("token_budget_exceeded")
 				}
 			}
+			cacheReadTokens += lineCacheRead
+			cacheWriteTokens += lineCacheWrite
 			if (toolCall !== null) {
 				onToolCall(toolCall.name, toolCall.args, accumulated)
 			}

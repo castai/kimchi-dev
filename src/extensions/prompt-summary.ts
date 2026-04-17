@@ -14,6 +14,8 @@ interface SubagentStats {
 	tokenUsage: {
 		input: number
 		output: number
+		cacheRead: number
+		cacheWrite: number
 	}
 }
 
@@ -124,6 +126,8 @@ export default function promptSummaryExtension(pi: ExtensionAPI) {
 		if (!stats?.tokenUsage) return
 		subagents.input += stats.tokenUsage.input
 		subagents.output += stats.tokenUsage.output
+		subagents.cacheRead += stats.tokenUsage.cacheRead
+		subagents.cacheWrite += stats.tokenUsage.cacheWrite
 	})
 
 	pi.on("agent_end", async () => {
