@@ -332,6 +332,9 @@ export async function refreshFile(client: LspClient, filePath: string): Promise<
 
 		if (!info) {
 			await ensureFileOpen(client, filePath)
+			// Send didSave after didOpen so servers like gopls publish diagnostics
+			const uri = fileToUri(filePath)
+			await sendNotification(client, "textDocument/didSave", { textDocument: { uri } })
 			return
 		}
 
