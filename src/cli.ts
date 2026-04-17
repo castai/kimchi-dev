@@ -2,6 +2,21 @@
 
 import { homedir } from "node:os"
 import { resolve } from "node:path"
+import { resolveAuxiliaryFilesDir } from "./auxiliary-files/resolver.js"
+import { validateAuxiliaryFiles } from "./auxiliary-files/validator.js"
+
+// Resolve and validate auxiliary files before any pi-mono imports.
+// Skip if PI_PACKAGE_DIR is already set (e.g., by development preload).
+if (!process.env.PI_PACKAGE_DIR) {
+	const auxiliaryDir = resolveAuxiliaryFilesDir(process.env, homedir())
+	try {
+		validateAuxiliaryFiles(auxiliaryDir)
+	} catch (err) {
+		console.error((err as Error).message)
+		process.exit(1)
+	}
+	process.env.PI_PACKAGE_DIR = auxiliaryDir
+}
 
 // Set agent config directory before any pi-mono imports.
 // pi-mono computes the env var name as APP_NAME.toUpperCase() + "_CODING_AGENT_DIR",

@@ -3,9 +3,9 @@
 // --dev   (used by `build`):        theme files from node_modules → src/modes/interactive/theme/
 //                                   so `bun run src/cli.ts` resolves themes via pi-mono's getThemesDir()
 //
-// default (used by `build-binary`): theme files from node_modules → dist/theme/
-//                                   plus package.json → dist/
-//                                   so the compiled binary resolves assets next to its executable
+// default (used by `build-binary`): theme files from node_modules → dist/share/kimchi/theme/
+//                                   plus package.json → dist/share/kimchi/
+//                                   so the compiled binary resolves assets from the shared data directory
 
 import { cpSync, mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
@@ -26,7 +26,9 @@ const themeSrc = join(
 )
 
 const isDev = process.argv.includes("--dev")
-const themeDest = isDev ? join(projectRoot, "src", "modes", "interactive", "theme") : join(projectRoot, "dist", "theme")
+const themeDest = isDev
+	? join(projectRoot, "src", "modes", "interactive", "theme")
+	: join(projectRoot, "dist", "share", "kimchi", "theme")
 
 mkdirSync(themeDest, { recursive: true })
 for (const file of themeFiles) {
@@ -34,5 +36,5 @@ for (const file of themeFiles) {
 }
 
 if (!isDev) {
-	cpSync(join(projectRoot, "package.json"), join(projectRoot, "dist", "package.json"))
+	cpSync(join(projectRoot, "package.json"), join(projectRoot, "dist", "share", "kimchi", "package.json"))
 }
