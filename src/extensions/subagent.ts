@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { dirname, resolve } from "node:path"
-import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent"
+import type { AssistantMessage, ToolCall } from "@mariozechner/pi-ai"
+import type { ExtensionAPI, SessionEntry, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
 import { isBunBinary } from "../env.js"
@@ -12,6 +13,25 @@ const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
 const STDERR_MAX = 8192
 const TIMEOUT_MS = 30 * 60 * 1000
+const CHECKPOINT_START_TYPE = "subagent-start"
+const CHECKPOINT_END_TYPE = "subagent-end"
+const RECOVERY_MESSAGE_TYPE = "subagent-recovery"
+const INTERRUPTED_MESSAGE_TYPE = "subagent-interrupted"
+
+interface SubagentStartCheckpoint {
+	toolCallId: string
+	model: string
+	provider: string
+	prompt: string
+	tokenBudget: number | undefined
+}
+
+interface SubagentEndCheckpoint {
+	toolCallId: string
+	accumulated: string
+	exitCode: number
+	failureReason: SubagentFailureReason | undefined
+}
 
 interface SubagentState extends SpinnerState {
 	lastToolCall: string | undefined
@@ -50,6 +70,43 @@ interface ParsedSubagentEvent {
 	cacheReadTokens: number
 	cacheWriteTokens: number
 	toolCall: { name: string; args: Record<string, unknown> } | null
+}
+
+function findDanglingSubagentCalls(branch: SessionEntry[]): ToolCall[] {
+	const toolResultIds = new Set<string>()
+	let lastToolUseMessage: AssistantMessage | undefined
+	for (const entry of branch) {
+		if (entry.type !== "message") continue
+		const { message } = entry
+		if (message.role === "toolResult") toolResultIds.add(message.toolCallId)
+		else if (message.role === "assistant" && message.stopReason === "toolUse")
+			lastToolUseMessage = message as AssistantMessage
+	}
+	if (!lastToolUseMessage) return []
+	return lastToolUseMessage.content
+		.filter((c): c is ToolCall => c.type === "toolCall" && c.name === "subagent")
+		.filter((tc) => !toolResultIds.has(tc.id))
+}
+
+function findCheckpointInBranch<T extends { toolCallId: string }>(
+	branch: SessionEntry[],
+	customType: string,
+	toolCallId: string,
+): T | undefined {
+	for (const entry of branch) {
+		if (entry.type !== "custom" || entry.customType !== customType) continue
+		const data = entry.data as T
+		if (data?.toolCallId === toolCallId) return data
+	}
+	return undefined
+}
+
+function isAlreadyRecovered(branch: SessionEntry[]): boolean {
+	return branch.some(
+		(e) =>
+			e.type === "custom_message" &&
+			(e.customType === RECOVERY_MESSAGE_TYPE || e.customType === INTERRUPTED_MESSAGE_TYPE),
+	)
 }
 
 function resolveTsx(): string | undefined {
@@ -327,10 +384,52 @@ const SubagentParams = Type.Object({
 export default function (pi: ExtensionAPI) {
 	const sessionCounts = new Map<string, number>()
 
-	pi.on("session_start", (_event, ctx) => {
-		if (!ctx.hasUI) return
-		sessionCounts.clear()
-		ctx.ui.setStatus(FOOTER_STATUS_KEY, undefined)
+	pi.on("session_start", (event, ctx) => {
+		if (ctx.hasUI) {
+			sessionCounts.clear()
+			ctx.ui.setStatus(FOOTER_STATUS_KEY, undefined)
+		}
+		if (event.reason === "new") return
+		const branch = ctx.sessionManager.getBranch()
+		if (isAlreadyRecovered(branch)) return
+		const danglingCalls = findDanglingSubagentCalls(branch)
+		if (danglingCalls.length === 0) return
+		for (const toolCall of danglingCalls) {
+			const startCheckpoint = findCheckpointInBranch<SubagentStartCheckpoint>(
+				branch,
+				CHECKPOINT_START_TYPE,
+				toolCall.id,
+			)
+			const endCheckpoint = findCheckpointInBranch<SubagentEndCheckpoint>(branch, CHECKPOINT_END_TYPE, toolCall.id)
+			const modelName =
+				startCheckpoint?.model ?? ((toolCall.arguments as Record<string, unknown>)?.model as string) ?? "unknown"
+			if (endCheckpoint) {
+				pi.sendMessage(
+					{
+						customType: RECOVERY_MESSAGE_TYPE,
+						content: [
+							{
+								type: "text",
+								text: `[Subagent (${modelName}) completed but the result was not captured due to session interruption. Recovered output:]\n\n${endCheckpoint.accumulated || "(no output)"}`,
+							},
+						],
+						display: true,
+					},
+					{ triggerTurn: true },
+				)
+			} else {
+				pi.sendMessage({
+					customType: INTERRUPTED_MESSAGE_TYPE,
+					content: [
+						{
+							type: "text",
+							text: `[Subagent (${modelName}) was interrupted before completing. The tool call did not return a result.]`,
+						},
+					],
+					display: true,
+				})
+			}
+		}
 	})
 
 	pi.registerTool({
@@ -340,6 +439,14 @@ export default function (pi: ExtensionAPI) {
 		parameters: SubagentParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+			pi.appendEntry<SubagentStartCheckpoint>(CHECKPOINT_START_TYPE, {
+				toolCallId: _toolCallId,
+				model: params.model,
+				provider: params.provider,
+				prompt: params.prompt,
+				tokenBudget: params.tokenBudget,
+			})
+
 			const extensionArgs = collectExtensionArgs()
 			const args = [
 				"--mode",
@@ -373,6 +480,13 @@ export default function (pi: ExtensionAPI) {
 					onUpdate?.({ content: [{ type: "text", text }], details: lastToolCall })
 				},
 			)
+
+			pi.appendEntry<SubagentEndCheckpoint>(CHECKPOINT_END_TYPE, {
+				toolCallId: _toolCallId,
+				accumulated,
+				exitCode,
+				failureReason,
+			})
 
 			sessionCounts.set(params.model, (sessionCounts.get(params.model) ?? 0) + 1)
 			if (ctx.hasUI) {
