@@ -190,6 +190,15 @@ describe("LoopGuard.checkAndRecord - repeated call blocking", () => {
 		expect(result.block).toBe(true)
 	})
 
+	it("treats undefined values as equivalent to missing keys", () => {
+		const guard = new LoopGuard()
+		for (let i = 0; i < MAX_REPEATED_CALLS; i++) {
+			guard.checkAndRecord("bash", { command: "ls" })
+		}
+		const result = guard.checkAndRecord("bash", { command: "ls", timeout: undefined })
+		expect(result.block).toBe(true)
+	})
+
 	it("does not add to history when blocking on repeated call", () => {
 		const guard = new LoopGuard()
 		for (let i = 0; i < MAX_REPEATED_CALLS; i++) {
