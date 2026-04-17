@@ -100,9 +100,10 @@ describe("buildOrchestratorSystemPrompt", () => {
 		expect(result).toContain("- subagent: Spawn an isolated subagent process")
 	})
 
-	it("contains orchestration instructions", () => {
+	it("contains self-classification instructions", () => {
 		const result = buildOrchestratorSystemPrompt(tools)
-		expect(result).toContain("orchestrator")
+		expect(result).toContain("subagent")
+		expect(result).toContain("delegate")
 	})
 
 	it("replaces the {{TOOLS}} placeholder", () => {

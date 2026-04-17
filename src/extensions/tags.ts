@@ -20,6 +20,7 @@ import type {
 	Theme,
 	ThemeColor,
 } from "@mariozechner/pi-coding-agent"
+import { Container, Text } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -457,18 +458,29 @@ export default function tagsExtension(pi: ExtensionAPI) {
 
 			if (ctx.hasUI) {
 				updateFooterStatus(tagManager, ctx)
-				ctx.ui.notify(`Phase changed to: ${phase}`, "info")
 			}
 
 			return {
-				content: [{ type: "text", text: `Phase set to: ${phase}` }],
-				details: undefined,
+				content: [{ type: "text", text: `Phase changed to: ${phase}` }],
+				details: { phase },
 			}
+		},
+
+		renderCall(_args, _theme) {
+			return new Container()
+		},
+
+		renderResult(result, _options, theme) {
+			const phase = (result.details as { phase: string } | undefined)?.phase ?? "unknown"
+			const dash = theme.fg("dim", "- ")
+			const label = theme.bold(theme.fg("toolTitle", `Phase changed: ${phase}`))
+			return new Text(dash + label, 0, 0)
 		},
 	})
 
-	// Initialize footer status on session start
+	// Initialize footer status and default phase on session start
 	pi.on("session_start", async (_event, ctx) => {
+		tagManager.setPhase("explore")
 		updateFooterStatus(tagManager, ctx)
 	})
 
