@@ -215,6 +215,7 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string): Prom
 		clients.set(key, client)
 
 		;(proc as any).exited.then(() => {
+			appendLspLog(`exited code=${( proc as any).exitCode} key=${key}\n`)
 			clients.delete(key)
 			clientLocks.delete(key)
 			client.resolveProjectLoaded()
