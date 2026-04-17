@@ -113,6 +113,7 @@ async function startMessageReader(client: LspClient): Promise<void> {
 					// Silently ignore server-initiated requests (workspace/configuration, workspace/applyEdit)
 					// We advertise applyEdit: false and configuration: false in capabilities.
 				} else if ("method" in message) {
+					process.stderr.write(`[LSP] notification: ${message.method}\n`)
 					if (message.method === "textDocument/publishDiagnostics" && message.params) {
 						const params = message.params as PublishDiagnosticsParams
 						client.diagnostics.set(params.uri, {
@@ -213,6 +214,11 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string): Prom
 		})
 
 		startMessageReader(client)
+		// Drain stderr to prevent pipe buffer filling and blocking gopls stdout
+		;(async () => {
+			const reader = client.proc.stderr.getReader()
+			try { while (!(await reader.read()).done) {} } finally { reader.releaseLock() }
+		})()
 
 		try {
 			await sendRequest(client, "initialize", {
