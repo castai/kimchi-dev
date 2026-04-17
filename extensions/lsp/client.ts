@@ -168,12 +168,14 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string): Prom
 	const clientPromise = (async () => {
 		// Bun global available at runtime but not typed — use globalThis cast
 		const Bun = (globalThis as any).Bun
+		process.stderr.write(`[LSP] spawning ${config.command} in ${cwd}\n`)
 		const proc = Bun.spawn([config.command, ...(config.args ?? [])], {
 			cwd,
 			stdin: "pipe",
 			stdout: "pipe",
 			stderr: "pipe",
 		}) as BunProcess
+		process.stderr.write(`[LSP] spawned pid=${proc.pid ?? "?"}\n`)
 
 		let resolveProjectLoaded!: () => void
 		const projectLoaded = new Promise<void>(resolve => {
