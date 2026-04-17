@@ -217,7 +217,13 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string): Prom
 		// Drain stderr to prevent pipe buffer filling and blocking gopls stdout
 		;(async () => {
 			const reader = client.proc.stderr.getReader()
-			try { while (!(await reader.read()).done) {} } finally { reader.releaseLock() }
+			try {
+				while (true) {
+					const { done, value } = await reader.read()
+					if (done) break
+					process.stderr.write(`[LSP stderr ${config.command}] ${Buffer.from(value).toString()}\n`)
+				}
+			} finally { reader.releaseLock() }
 		})()
 
 		try {
