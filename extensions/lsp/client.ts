@@ -164,14 +164,15 @@ const DEFAULT_TIMEOUT_MS = 30_000
 export async function getOrCreateClient(config: ServerConfig, cwd: string): Promise<LspClient> {
 	const key = `${config.command}:${cwd}`
 
-	const existing = clients.get(key)
-	if (existing) {
-		existing.lastActivity = Date.now()
-		return existing
-	}
+	// TODO: re-enable caching once LSP integration is stable
+	// const existing = clients.get(key)
+	// if (existing) {
+	// 	existing.lastActivity = Date.now()
+	// 	return existing
+	// }
 
-	const existingLock = clientLocks.get(key)
-	if (existingLock) return existingLock
+	// const existingLock = clientLocks.get(key)
+	// if (existingLock) return existingLock
 
 	const clientPromise = (async () => {
 		// Bun global available at runtime but not typed — use globalThis cast
