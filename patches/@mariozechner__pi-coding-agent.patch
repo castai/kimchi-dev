@@ -1,5 +1,4 @@
 diff --git a/dist/main.js b/dist/main.js
-index 3c556afcf50cc9e2db108f6db3e8f9f94b1b2753..dd35fa884080cb2c2cddd9b01340b84e988dcbc8 100644
 --- a/dist/main.js
 +++ b/dist/main.js
 @@ -321,7 +321,7 @@ async function promptForMissingSessionCwd(issue, settingsManager) {
@@ -19,3 +18,16 @@ index 3c556afcf50cc9e2db108f6db3e8f9f94b1b2753..dd35fa884080cb2c2cddd9b01340b84e
              },
          });
          const { settingsManager, modelRegistry, resourceLoader } = services;
+diff --git a/dist/config.js b/dist/config.js
+--- a/dist/config.js
++++ b/dist/config.js
+@@ -92,6 +92,9 @@
+  */
+ export function getThemesDir() {
+     if (isBunBinary) {
++        const envDir = process.env.PI_PACKAGE_DIR;
++        if (envDir)
++            return join(envDir, "theme");
+         return join(dirname(process.execPath), "theme");
+     }
+     // Theme is in modes/interactive/theme/ relative to src/ or dist/

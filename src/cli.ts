@@ -1,29 +1,7 @@
-#!/usr/bin/env node
+// CLI logic — imported dynamically by entry.ts after PI_PACKAGE_DIR is set.
+// All static imports here (extensions, pi-mono) are safe because the env is already configured.
 
-import { homedir } from "node:os"
 import { resolve } from "node:path"
-import { resolveAuxiliaryFilesDir } from "./auxiliary-files/resolver.js"
-import { validateAuxiliaryFiles } from "./auxiliary-files/validator.js"
-
-// Resolve and validate auxiliary files before any pi-mono imports.
-const auxiliaryDir = resolveAuxiliaryFilesDir(process.env, homedir())
-try {
-	validateAuxiliaryFiles(auxiliaryDir)
-} catch (err) {
-	console.error((err as Error).message)
-	process.exit(1)
-}
-process.env.PI_PACKAGE_DIR = auxiliaryDir
-
-// Set agent config directory before any pi-mono imports.
-// pi-mono computes the env var name as APP_NAME.toUpperCase() + "_CODING_AGENT_DIR",
-// and APP_NAME is "kimchi" from piConfig, so the env var is "KIMCHI_CODING_AGENT_DIR".
-const agentDir = resolve(homedir(), ".config", "kimchi", "harness")
-process.env.KIMCHI_CODING_AGENT_DIR = agentDir
-
-process.title = "kimchi"
-process.env.PI_SKIP_VERSION_CHECK = "1"
-
 import { loadConfig, readTelemetryConfig } from "./config.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
@@ -47,6 +25,7 @@ try {
 	process.env.KIMCHI_API_KEY = config.apiKey
 
 	// Ensure models.json exists with Cast AI provider configuration
+	const agentDir = process.env.KIMCHI_CODING_AGENT_DIR as string
 	const modelsJsonPath = resolve(agentDir, "models.json")
 	const modelsResult = await updateModelsConfig(modelsJsonPath, config.apiKey)
 	if (modelsResult.source === "default") {

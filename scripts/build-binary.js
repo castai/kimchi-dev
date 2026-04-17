@@ -38,7 +38,7 @@ run("typecheck", "pnpm run typecheck")
 const targetFlag = crossTarget ? ` --target=${crossTarget}` : ""
 run(
 	"compile",
-	`bun build src/cli.ts --compile${targetFlag} --outfile dist/bin/kimchi-code --external chromium-bidi --external electron`,
+	`bun build src/entry.ts --compile${targetFlag} --outfile dist/bin/kimchi-code --external chromium-bidi --external electron`,
 )
 
 // Bun --compile produces binaries with an invalid code signature on macOS.

@@ -13,7 +13,8 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { afterAll, beforeAll } from "vitest"
 
-export const BINARY_PATH = resolve("dist/kimchi-code")
+export const BINARY_PATH = resolve("dist/bin/kimchi-code")
+export const PACKAGE_DIR = resolve("dist/share/kimchi")
 
 let tempHome: string | undefined
 
@@ -70,6 +71,7 @@ export function runBinary(opts: RunBinaryOptions = {}): SpawnSyncReturns<string>
 		env: {
 			PATH: process.env.PATH,
 			HOME: home,
+			PI_PACKAGE_DIR: PACKAGE_DIR,
 			...extraEnv,
 		},
 	})

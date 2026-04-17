@@ -5,7 +5,7 @@
 	"type": "module",
 	"license": "MIT",
 	"bin": {
-		"kimchi-code": "src/cli.ts"
+		"kimchi-code": "src/entry.ts"
 	},
 	"scripts": {
 		"clean": "rm -rf dist",
@@ -13,7 +13,7 @@
 		"build:binary": "node scripts/build-binary.js",
 		"build:binary-linux-arm64": "node scripts/build-binary.js --target linux-arm64",
 		"build:binary-linux-x64": "node scripts/build-binary.js --target linux-x64",
-		"dev": "bun run --preload ./src/set-package-dir.ts src/cli.ts",
+		"dev": "bun run --preload ./src/set-package-dir.ts src/entry.ts",
 		"lint": "biome check src/ scripts/",
 		"lint:fix": "biome check --write src/ scripts/",
 		"typecheck": "tsc --noEmit",

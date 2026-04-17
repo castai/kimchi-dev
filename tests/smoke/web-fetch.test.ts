@@ -13,7 +13,11 @@ import { runBinary } from "./harness.js"
 describe("web_fetch smoke tests", () => {
 	it.skipIf(!process.env.KIMCHI_API_KEY)("web_fetch tool is registered and available", { retry: 2 }, () => {
 		const result = runBinary({
-			args: ["-p", "List all your available tools, one per line. Just the tool names, nothing else."],
+			args: [
+				"--debug-prompts",
+				"-p",
+				"List all your available tools, one per line. Just the tool names, nothing else.",
+			],
 			extraEnv: { KIMCHI_API_KEY: process.env.KIMCHI_API_KEY as string },
 		})
 
@@ -23,6 +27,7 @@ describe("web_fetch smoke tests", () => {
 	it.skipIf(!process.env.KIMCHI_API_KEY)("fetches a web page via the web_fetch tool", { retry: 2 }, () => {
 		const result = runBinary({
 			args: [
+				"--debug-prompts",
 				"-p",
 				"Use the web_fetch tool to fetch https://example.com in markdown format. After fetching, repeat the first heading you see in the page content verbatim.",
 			],
