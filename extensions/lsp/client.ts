@@ -1,4 +1,5 @@
 // extensions/lsp/client.ts
+import fs from "node:fs"
 import type {
 	BunProcess,
 	LspClient,
@@ -9,6 +10,11 @@ import type {
 	ServerConfig,
 } from "./types.js"
 import { detectLanguageId, fileToUri } from "./utils.js"
+
+const LSP_LOG = "/tmp/lsp-debug.log"
+function appendLspLog(msg: string): void {
+	fs.appendFileSync(LSP_LOG, `${new Date().toISOString()} ${msg}`)
+}
 
 // =============================================================================
 // Client State
@@ -76,7 +82,7 @@ async function writeMessage(
 ): Promise<void> {
 	const content = JSON.stringify(msg)
 	const header = `Content-Length: ${Buffer.byteLength(content, "utf-8")}\r\n\r\n`
-	process.stderr.write(`[LSP →] ${header.trim()} ${content.slice(0, 80)}\n`)
+	appendLspLog(`→ ${header.trim()} ${content}\n`)
 	proc.stdin.write(header + content)
 	if (proc.stdin.flush) await proc.stdin.flush()
 }
@@ -94,7 +100,7 @@ async function startMessageReader(client: LspClient): Promise<void> {
 		while (true) {
 			const { done, value } = await reader.read()
 			if (done) break
-			process.stderr.write(`[LSP ←] ${value.length} bytes from ${client.name}\n`)
+			appendLspLog(`← ${value.length} bytes from ${client.name}\n`)
 
 			client.messageBuffer = Buffer.concat([client.messageBuffer, value])
 			let parsed = parseMessage(client.messageBuffer)
@@ -115,7 +121,7 @@ async function startMessageReader(client: LspClient): Promise<void> {
 					// Silently ignore server-initiated requests (workspace/configuration, workspace/applyEdit)
 					// We advertise applyEdit: false and configuration: false in capabilities.
 				} else if ("method" in message) {
-					process.stderr.write(`[LSP] notification: ${message.method}\n`)
+					appendLspLog(`notification: ${message.method}\n`)
 					if (message.method === "textDocument/publishDiagnostics" && message.params) {
 						const params = message.params as PublishDiagnosticsParams
 						client.diagnostics.set(params.uri, {
@@ -170,14 +176,14 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string): Prom
 	const clientPromise = (async () => {
 		// Bun global available at runtime but not typed — use globalThis cast
 		const Bun = (globalThis as any).Bun
-		process.stderr.write(`[LSP] spawning ${config.command} in ${cwd}\n`)
+		appendLspLog(`spawning ${config.command} in ${cwd}\n`)
 		const proc = Bun.spawn([config.command, ...(config.args ?? [])], {
 			cwd,
 			stdin: "pipe",
 			stdout: "pipe",
 			stderr: "pipe",
 		}) as BunProcess
-		process.stderr.write(`[LSP] spawned pid=${(proc as any).pid ?? "?"}\n`)
+		appendLspLog(`spawned pid=${(proc as any).pid ?? "?"}\n`)
 
 		let resolveProjectLoaded!: () => void
 		const projectLoaded = new Promise<void>(resolve => {
@@ -225,7 +231,7 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string): Prom
 				while (true) {
 					const { done, value } = await reader.read()
 					if (done) break
-					process.stderr.write(`[LSP stderr ${config.command}] ${Buffer.from(value).toString()}\n`)
+					appendLspLog(`stderr(${config.command}): ${Buffer.from(value).toString()}`)
 				}
 			} finally { reader.releaseLock() }
 		})()
