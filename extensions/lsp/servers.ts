@@ -1,4 +1,5 @@
 // extensions/lsp/servers.ts
+import fs from "node:fs"
 import path from "node:path"
 import type { ServerConfig } from "./types.js"
 
@@ -36,4 +37,29 @@ export function detectServers(_cwd: string): ServerConfig[] {
 export function serverForFile(filePath: string, servers: ServerConfig[]): ServerConfig | null {
 	const ext = path.extname(filePath).slice(1).toLowerCase()
 	return servers.find((s) => s.extensions.includes(ext)) ?? null
+}
+
+const ROOT_MARKERS: Record<string, string[]> = {
+	gopls: ["go.mod"],
+	"typescript-language-server": ["tsconfig.json", "package.json"],
+}
+
+/**
+ * Walk up from filePath to find the nearest project root for the given server.
+ * Clamps to sessionCwd — never escapes above it.
+ * Falls back to path.dirname(filePath) if no marker found.
+ */
+export function findRoot(filePath: string, serverName: string, sessionCwd: string): string {
+	const markers = ROOT_MARKERS[serverName] ?? []
+	let dir = path.dirname(filePath)
+	const boundary = sessionCwd
+
+	while (true) {
+		if (markers.some((m) => fs.existsSync(path.join(dir, m)))) return dir
+		if (dir === boundary || dir === path.dirname(dir)) break
+		dir = path.dirname(dir)
+	}
+
+	// If no marker found within sessionCwd, use file's own directory
+	return path.dirname(filePath)
 }

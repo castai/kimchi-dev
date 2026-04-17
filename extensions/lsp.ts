@@ -7,12 +7,13 @@
  *
  * Usage: kimchi -e extensions/lsp.ts
  */
+import fs from "node:fs"
 import path from "node:path"
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Type } from "@sinclair/typebox"
 import { ensureFileOpen, getOrCreateClient, refreshFile, sendRequest, shutdownAll } from "./lsp/client.js"
 import { applyWorkspaceEdit } from "./lsp/edits.js"
-import { detectServers, serverForFile } from "./lsp/servers.js"
+import { detectServers, findRoot, serverForFile } from "./lsp/servers.js"
 import type { Hover, Location, LocationLink, TextDocumentEdit, WorkspaceEdit } from "./lsp/types.js"
 import { fileToUri, formatDiagnostic, uriToFile } from "./lsp/utils.js"
 
@@ -32,8 +33,12 @@ export default function (pi: ExtensionAPI) {
 		activeServers = detectServers(cwd)
 		if (activeServers.length === 0) return
 
-		// Eagerly start servers so they're warm when first tool is called
+		// Eagerly start servers that have a project marker directly in sessionCwd
+		const goMarkers = ["go.mod"]
+		const tsMarkers = ["tsconfig.json", "package.json"]
 		for (const server of activeServers) {
+			const markers = server.name === "gopls" ? goMarkers : tsMarkers
+			if (!markers.some((m) => fs.existsSync(path.join(cwd, m)))) continue
 			getOrCreateClient(server, cwd).catch(() => {})
 		}
 	})
@@ -91,7 +96,7 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, clientCwd(filePath, cwd))
+			const client = await getOrCreateClient(server, findRoot(filePath, server.name, cwd))
 			await refreshFile(client, filePath)
 
 			const waitMs = Math.min(params.wait_ms ?? 2000, 10000)
@@ -129,7 +134,7 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, clientCwd(filePath, cwd))
+			const client = await getOrCreateClient(server, findRoot(filePath, server.name, cwd))
 			await ensureFileOpen(client, filePath)
 
 			const result = (await sendRequest(client, "textDocument/hover", {
@@ -172,7 +177,7 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, clientCwd(filePath, cwd))
+			const client = await getOrCreateClient(server, findRoot(filePath, server.name, cwd))
 			await ensureFileOpen(client, filePath)
 
 			const lspMethod = `textDocument/${params.method ?? "definition"}`
@@ -218,7 +223,7 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, clientCwd(filePath, cwd))
+			const client = await getOrCreateClient(server, findRoot(filePath, server.name, cwd))
 			await ensureFileOpen(client, filePath)
 
 			const result = (await sendRequest(client, "textDocument/references", {
@@ -261,7 +266,7 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "No LSP server available for this file type." }], details: null }
 			}
 
-			const client = await getOrCreateClient(server, clientCwd(filePath, cwd))
+			const client = await getOrCreateClient(server, findRoot(filePath, server.name, cwd))
 			await ensureFileOpen(client, filePath)
 
 			// Check if rename is valid at this position
