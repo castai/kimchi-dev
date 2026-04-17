@@ -248,6 +248,8 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string): Prom
 				workspaceFolders: [{ uri: fileToUri(cwd), name: cwd.split("/").pop() ?? "workspace" }],
 			})
 			await sendNotification(client, "initialized", {})
+			await client.projectLoaded
+			appendLspLog(`projectLoaded for ${key}\n`)
 			return client
 		} catch (err) {
 			clients.delete(key)
