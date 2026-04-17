@@ -87,7 +87,14 @@ function getSubagentInvocation(args: string[]): { command: string; args: string[
 // input/output token counts from message_end events.
 // The event shapes are internal to pi-coding-agent and may change across versions.
 export function parseSubagentEvent(line: string): ParsedSubagentEvent {
-	const empty = { delta: null, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, toolCall: null }
+	const empty = {
+		delta: null,
+		inputTokens: 0,
+		outputTokens: 0,
+		cacheReadTokens: 0,
+		cacheWriteTokens: 0,
+		toolCall: null,
+	}
 	if (!line.trim()) return empty
 	let event: Record<string, unknown>
 	try {
@@ -168,7 +175,12 @@ function spawnSubagent(
 				exitCode,
 				accumulated,
 				stderr,
-				tokenUsage: { input: inputTokens, output: outputTokens, cacheRead: cacheReadTokens, cacheWrite: cacheWriteTokens },
+				tokenUsage: {
+					input: inputTokens,
+					output: outputTokens,
+					cacheRead: cacheReadTokens,
+					cacheWrite: cacheWriteTokens,
+				},
 				failureReason,
 				durationMs: Date.now() - startedAt,
 			})
@@ -185,7 +197,14 @@ function spawnSubagent(
 		}
 
 		const processLine = (line: string) => {
-			const { delta, inputTokens: lineInput, outputTokens: lineOutput, cacheReadTokens: lineCacheRead, cacheWriteTokens: lineCacheWrite, toolCall } = parseSubagentEvent(line)
+			const {
+				delta,
+				inputTokens: lineInput,
+				outputTokens: lineOutput,
+				cacheReadTokens: lineCacheRead,
+				cacheWriteTokens: lineCacheWrite,
+				toolCall,
+			} = parseSubagentEvent(line)
 			if (delta !== null) {
 				accumulated += delta
 				onToken(accumulated)
