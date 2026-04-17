@@ -76,6 +76,7 @@ async function writeMessage(
 ): Promise<void> {
 	const content = JSON.stringify(msg)
 	const header = `Content-Length: ${Buffer.byteLength(content, "utf-8")}\r\n\r\n`
+	process.stderr.write(`[LSP →] ${header.trim()} ${content.slice(0, 80)}\n`)
 	proc.stdin.write(header + content)
 	if (proc.stdin.flush) await proc.stdin.flush()
 }
@@ -93,6 +94,7 @@ async function startMessageReader(client: LspClient): Promise<void> {
 		while (true) {
 			const { done, value } = await reader.read()
 			if (done) break
+			process.stderr.write(`[LSP ←] ${value.length} bytes from ${client.name}\n`)
 
 			client.messageBuffer = Buffer.concat([client.messageBuffer, value])
 			let parsed = parseMessage(client.messageBuffer)
