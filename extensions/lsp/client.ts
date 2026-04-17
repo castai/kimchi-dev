@@ -175,7 +175,7 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string): Prom
 			stdout: "pipe",
 			stderr: "pipe",
 		}) as BunProcess
-		process.stderr.write(`[LSP] spawned pid=${proc.pid ?? "?"}\n`)
+		process.stderr.write(`[LSP] spawned pid=${(proc as any).pid ?? "?"}\n`)
 
 		let resolveProjectLoaded!: () => void
 		const projectLoaded = new Promise<void>(resolve => {
