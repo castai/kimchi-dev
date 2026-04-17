@@ -78,7 +78,7 @@ function parseMessage(buf: Buffer): { message: LspJsonRpcResponse | LspJsonRpcNo
 
 async function writeMessage(
 	proc: BunProcess,
-	msg: LspJsonRpcRequest | LspJsonRpcNotification,
+	msg: LspJsonRpcRequest | LspJsonRpcNotification | LspJsonRpcResponse,
 ): Promise<void> {
 	const content = JSON.stringify(msg)
 	const header = `Content-Length: ${Buffer.byteLength(content, "utf-8")}\r\n\r\n`
@@ -107,6 +107,7 @@ async function startMessageReader(client: LspClient): Promise<void> {
 			while (parsed) {
 				const { message, remaining } = parsed
 				client.messageBuffer = remaining
+				appendLspLog(`← parsed: ${JSON.stringify(message).slice(0, 300)}\n`)
 
 				if ("id" in message && message.id !== undefined) {
 					const pending = client.pendingRequests.get(message.id as number)
@@ -118,8 +119,12 @@ async function startMessageReader(client: LspClient): Promise<void> {
 							pending.resolve(message.result)
 						}
 					}
-					// Silently ignore server-initiated requests (workspace/configuration, workspace/applyEdit)
-					// We advertise applyEdit: false and configuration: false in capabilities.
+					// Reply null to server-initiated requests so servers don't block waiting for a response.
+					// (e.g. window/workDoneProgress/create, workspace/configuration)
+					if ("method" in message) {
+						const response: LspJsonRpcResponse = { jsonrpc: "2.0", id: message.id as number, result: null }
+						writeMessage(client.proc, response).catch(() => {})
+					}
 				} else if ("method" in message) {
 					appendLspLog(`notification: ${message.method}\n`)
 					if (message.method === "textDocument/publishDiagnostics" && message.params) {
