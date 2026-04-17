@@ -678,12 +678,7 @@ export async function executeCall(
 						if (connectedAfterAuth) {
 							toolMeta = findToolByName(state.toolMetadata.get(serverName), toolName)
 							if (!toolMeta) {
-								return {
-									content: [
-										{ type: "text" as const, text: `Tool "${toolName}" not found on "${serverName}" after reconnect.` },
-									],
-									details: { mode: "call", error: "tool_not_found_after_reconnect", requestedTool: toolName },
-								}
+								throw new Error(`Tool "${toolName}" not found on "${serverName}" after reconnect.`)
 							}
 						}
 					}
@@ -761,10 +756,7 @@ export async function executeCall(
 		} else {
 			msg += ` Use mcp({ search: "..." }) to search.`
 		}
-		return {
-			content: [{ type: "text" as const, text: msg }],
-			details: { mode: "call", error: "tool_not_found", requestedTool: toolName, hintServer },
-		}
+		throw new Error(msg)
 	}
 
 	let connection = state.manager.getConnection(serverName)
@@ -812,6 +804,7 @@ export async function executeCall(
 			}
 		}
 
+		let toolNotFoundAfterReconnect: string | undefined
 		try {
 			if (state.ui) {
 				state.ui.setStatus("mcp", `MCP: connecting to ${serverName}...`)
@@ -852,12 +845,7 @@ export async function executeCall(
 					available.length > 0
 						? `Available tools on "${serverName}": ${available.join(", ")}`
 						: `Server "${serverName}" has no tools.`
-				return {
-					content: [
-						{ type: "text" as const, text: `Tool "${toolName}" not found on "${serverName}" after reconnect. ${hint}` },
-					],
-					details: { mode: "call", error: "tool_not_found_after_reconnect", requestedTool: toolName },
-				}
+				toolNotFoundAfterReconnect = `Tool "${toolName}" not found on "${serverName}" after reconnect. ${hint}`
 			}
 		} catch (error) {
 			state.failureTracker.set(serverName, Date.now())
@@ -868,6 +856,13 @@ export async function executeCall(
 				details: { mode: "call", error: "connect_failed", message },
 			}
 		}
+		if (toolNotFoundAfterReconnect) {
+			throw new Error(toolNotFoundAfterReconnect)
+		}
+	}
+
+	if (!toolMeta) {
+		throw new Error(`Tool "${toolName}" not found.`)
 	}
 
 	let uiSession: UiSessionRuntime | null = null

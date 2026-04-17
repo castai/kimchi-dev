@@ -14,6 +14,7 @@ process.env.PI_SKIP_VERSION_CHECK = "1"
 
 import { loadConfig, readTelemetryConfig } from "./config.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
+import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
 import promptSummaryExtension from "./extensions/prompt-summary.js"
@@ -57,6 +58,7 @@ try {
 	await main(process.argv.slice(2), {
 		extensionFactories: [
 			bashCollapseExtension,
+			loopGuardExtension,
 			mcpAdapterExtension,
 			promptEnrichmentExtension,
 			promptSummaryExtension,
