@@ -11,6 +11,7 @@ import bashCollapseExtension from "./extensions/bash-collapse.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
+import permissionsExtension from "./extensions/permissions/index.js"
 import promptSummaryExtension from "./extensions/prompt-summary.js"
 import subagentExtension from "./extensions/subagent.js"
 import tagsExtension from "./extensions/tags.js"
@@ -150,6 +151,7 @@ try {
 		bashCollapseExtension,
 		loopGuardExtension,
 		mcpAdapterExtension,
+        permissionsExtension,
 		promptEnrichmentExtension(skillPaths),
 		promptSummaryExtension,
 		uiExtension,
