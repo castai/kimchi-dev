@@ -1,0 +1,8 @@
+.venv/
+.harbor/
+.ruff_cache/
+jobs/
+__pycache__/
+*.egg-info/
+dist/
+build/
