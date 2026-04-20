@@ -11,15 +11,20 @@ from pydantic import ValidationError
 
 from kimchi_agent.config import KimchiAgentConfig
 from kimchi_agent.messages import MessageEndEvent
-from kimchi_agent.release import GitHubClient
+from kimchi_agent.release import BINARY_RELPATH, SHARE_RELPATH, GitHubClient
 
 if TYPE_CHECKING:
     from harbor.environments.base import BaseEnvironment
     from harbor.models.agent.context import AgentContext
 
 
+# The release tarball (and local `pnpm run build:binary` output) is laid out as
+# `bin/kimchi-code` + `share/kimchi/{package.json, theme/, export-html/}`. We
+# preserve that layout under /installed-agent so the binary can find its auxiliary
+# files via PI_PACKAGE_DIR (see src/entry.ts → resolveAuxiliaryFilesDir).
 INSTALL_DIR = "/installed-agent"
-BINARY_PATH = f"{INSTALL_DIR}/kimchi-code"
+BINARY_PATH = f"{INSTALL_DIR}/{BINARY_RELPATH.as_posix()}"
+PI_PACKAGE_DIR = f"{INSTALL_DIR}/{SHARE_RELPATH.as_posix()}"
 UPLOAD_STAGE_DIR = "/tmp/kimchi-stage"
 
 
@@ -56,17 +61,18 @@ class KimchiCode(BaseInstalledAgent):
         return "kimchi-code"
 
     def get_version_command(self) -> str | None:
-        return f"{BINARY_PATH} --version"
+        # PI_PACKAGE_DIR tells entry.ts where to find package.json + theme/; without it
+        # the binary falls back to $XDG_DATA_HOME/$HOME and errors out before printing the version.
+        return f"PI_PACKAGE_DIR={shlex.quote(PI_PACKAGE_DIR)} {shlex.quote(BINARY_PATH)} --version"
 
     def parse_version(self, stdout: str) -> str:
         return stdout.strip().splitlines()[-1].strip()
 
     async def install(self, environment: BaseEnvironment) -> None:
-        host_binary = await self._resolve_host_binary(environment)
-        # Upload the binary's parent dir verbatim. For releases this contains
-        # kimchi-code + package.json + theme/ (all needed at runtime by the bun
-        # bundle); for local builds it's typically just the binary.
-        await environment.upload_dir(source_dir=host_binary.parent, target_dir=UPLOAD_STAGE_DIR)
+        host_stage_dir = await self._resolve_host_stage_dir(environment)
+        # Upload the stage dir verbatim. It contains bin/kimchi-code and
+        # share/kimchi/{package.json, theme/, export-html/} — resolved at runtime via PI_PACKAGE_DIR.
+        await environment.upload_dir(source_dir=host_stage_dir, target_dir=UPLOAD_STAGE_DIR)
         await self.exec_as_root(
             environment,
             command=(
@@ -77,9 +83,20 @@ class KimchiCode(BaseInstalledAgent):
             ),
         )
 
-    async def _resolve_host_binary(self, environment: BaseEnvironment) -> Path:
+    async def _resolve_host_stage_dir(self, environment: BaseEnvironment) -> Path:
+        """Return the host directory to upload — a ``bin/`` + ``share/kimchi/`` tree."""
         if self._config.binary_path is not None:
-            return self._config.binary_path
+            # KIMCHI_CODE_BINARY points at the binary (e.g. dist/bin/kimchi-code). The stage dir is
+            # the tarball-layout root two levels up (e.g. dist/), which also holds share/kimchi/.
+            stage_dir = self._config.binary_path.parent.parent
+            share_marker = stage_dir / SHARE_RELPATH / "package.json"
+            if not share_marker.is_file():
+                raise RuntimeError(
+                    f"Expected auxiliary files at {share_marker} alongside the binary at "
+                    f"{self._config.binary_path}. Run `pnpm run build:binary` (or build:binary-linux-x64) "
+                    "to produce the full bin/ + share/ layout."
+                )
+            return stage_dir
         arch = await self._detect_container_arch(environment)
         with GitHubClient(token=self._config.github_token) as gh:
             release = gh.resolve_latest(self._config.github_repo)
@@ -141,7 +158,7 @@ class KimchiCode(BaseInstalledAgent):
                 f"{shlex.quote(instruction)} "
                 f"2>&1 </dev/null | stdbuf -oL tee /logs/agent/{self._OUTPUT_FILENAME}"
             ),
-            env={"KIMCHI_API_KEY": self._config.api_key},
+            env={"KIMCHI_API_KEY": self._config.api_key, "PI_PACKAGE_DIR": PI_PACKAGE_DIR},
         )
 
     def populate_context_post_run(self, context: AgentContext) -> None:

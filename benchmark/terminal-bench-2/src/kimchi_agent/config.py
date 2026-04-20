@@ -14,7 +14,11 @@ class KimchiAgentConfig(BaseSettings):
     binary_path: Path | None = Field(
         default=None,
         validation_alias="KIMCHI_CODE_BINARY",
-        description="Host path to a prebuilt linux kimchi-code binary. If unset, the latest GitHub release is fetched.",
+        description=(
+            "Host path to a prebuilt linux kimchi-code binary (e.g. dist/bin/kimchi-code). "
+            "The agent uploads the binary's grandparent directory so share/kimchi/ auxiliary files travel with it. "
+            "If unset, the latest GitHub release is fetched."
+        ),
     )
     api_key: str = Field(
         validation_alias="KIMCHI_API_KEY",

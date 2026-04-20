@@ -11,6 +11,10 @@ from pydantic import BaseModel, Field
 DEFAULT_CACHE_ROOT = Path.home() / ".cache" / "kimchi-bench" / "releases"
 CHECKSUMS_ASSET = "checksums.txt"
 BINARY_NAME = "kimchi-code"
+# Release tarballs extract to a `bin/` + `share/kimchi/` layout (see release.yml: `tar -C dist bin share`).
+# The compiled binary lives at bin/kimchi-code; it reads package.json, theme/, and export-html/ from share/kimchi/.
+BINARY_RELPATH = Path("bin") / BINARY_NAME
+SHARE_RELPATH = Path("share") / "kimchi"
 _GITHUB_API = "https://api.github.com"
 
 
@@ -106,16 +110,18 @@ class GitHubClient:
     def download_and_extract(self, release: Release, arch: str) -> Path:
         """Download + verify + extract the linux release tarball for ``arch``.
 
-        Returns the path to the extracted ``kimchi-code`` binary. Cached per
-        ``(tag, arch)`` under ``<cache_root>/<tag>/<arch>/``; second call is a no-op.
-        The arch subdir contains exactly the tarball contents (kimchi-code,
-        package.json, theme/) so callers can upload the whole directory verbatim.
+        Returns the path to the extracted **stage directory** — i.e. the tarball root,
+        which contains ``bin/kimchi-code`` and ``share/kimchi/{package.json, theme/, export-html/}``.
+        Callers upload this directory verbatim so the install layout in the container mirrors
+        what the binary expects at runtime (see ``resolveAuxiliaryFilesDir`` in ``src/entry.ts``).
+
+        Cached per ``(tag, arch)`` under ``<cache_root>/<tag>/<arch>/``; second call is a no-op.
         """
         tag_dir = self._cache_root / release.tag_name
         arch_dir = tag_dir / arch
-        bin_path = arch_dir / BINARY_NAME
+        bin_path = arch_dir / BINARY_RELPATH
         if bin_path.is_file():
-            return bin_path
+            return arch_dir
 
         asset_name = asset_name_for_arch(arch)
         tarball_asset = release.asset(asset_name)
@@ -142,10 +148,16 @@ class GitHubClient:
 
         if not bin_path.is_file():
             raise RuntimeError(
-                f"Extracted tarball {asset_name} does not contain a {BINARY_NAME!r} file at the top level"
+                f"Extracted tarball {asset_name} does not contain {BINARY_RELPATH.as_posix()!r}"
+            )
+        share_marker = arch_dir / SHARE_RELPATH / "package.json"
+        if not share_marker.is_file():
+            raise RuntimeError(
+                f"Extracted tarball {asset_name} is missing {SHARE_RELPATH.as_posix()}/package.json; "
+                "the binary cannot run without its auxiliary files"
             )
         bin_path.chmod(0o755)
-        return bin_path
+        return arch_dir
 
     def _download_to(self, url: str, dst: Path) -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)

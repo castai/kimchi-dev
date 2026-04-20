@@ -84,7 +84,7 @@ MODEL=kimchi-dev/kimi-k2.5 ./scripts/run-local.sh -i terminal-bench/fix-git
 | Var | Required | Purpose |
 | --- | --- | --- |
 | `KIMCHI_API_KEY` | yes | Bearer token for `llm.kimchi.dev`; forwarded to the agent via `--ae` |
-| `KIMCHI_CODE_BINARY` | no | Host path to a prebuilt Linux `kimchi-code` binary. When set, the agent skips the GitHub release download. `./scripts/run-local.sh` sets this for you. |
+| `KIMCHI_CODE_BINARY` | no | Host path to a prebuilt Linux `kimchi-code` binary (produced by `pnpm run build:binary-linux-x64` at `dist/bin/kimchi-code`). The agent uploads the binary's grandparent directory (the build/tarball root containing `bin/` + `share/kimchi/`), so the auxiliary files travel with it. When set, the agent skips the GitHub release download. `./scripts/run-local.sh` sets this for you. |
 | `GITHUB_TOKEN` | no | Raises GitHub API rate limits when fetching the latest release. Not required for public repos |
 | `MODEL` | no | Default `kimchi-dev/kimi-k2.5`. See "Picking a model" for the `<provider>/<id>` requirement |
 

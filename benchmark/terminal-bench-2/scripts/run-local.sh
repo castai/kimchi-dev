@@ -17,7 +17,9 @@ REPO_ROOT="$(git -C "$BENCH_DIR" rev-parse --show-toplevel)"
 
 echo "==> Cross-building kimchi-code (target=linux-x64)"
 (cd "$REPO_ROOT" && pnpm run build:binary-linux-x64)
-export KIMCHI_CODE_BINARY="$REPO_ROOT/dist/kimchi-code"
+# `build:binary-linux-x64` produces dist/bin/kimchi-code alongside dist/share/kimchi/{package.json,theme,export-html}.
+# The agent walks up from the binary to find the share/ tree, so point KIMCHI_CODE_BINARY at bin/kimchi-code.
+export KIMCHI_CODE_BINARY="$REPO_ROOT/dist/bin/kimchi-code"
 
 cd "$BENCH_DIR"
 exec uv run --python 3.14 harbor run \
