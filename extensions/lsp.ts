@@ -112,7 +112,7 @@ export default function (pi: ExtensionAPI) {
 			const lines = entry.diagnostics.map((d) => formatDiagnostic(d))
 			return { content: [{ type: "text", text: lines.join("\n") }], details: null }
 		},
-		renderCall: (args, theme, context) => renderLspCall("LSP: Get Diagnostics", args, theme, context),
+		renderCall: lspRenderCall("LSP: Get Diagnostics"),
 	})
 
 	// ── Tool: lsp_hover ───────────────────────────────────────────────────────
@@ -151,7 +151,7 @@ export default function (pi: ExtensionAPI) {
 			const text = extractHoverText(result)
 			return { content: [{ type: "text", text }], details: null }
 		},
-		renderCall: (args, theme, context) => renderLspCall("LSP: Hover Info", args, theme, context),
+		renderCall: lspRenderCall("LSP: Hover Info"),
 	})
 
 	// ── Tool: lsp_definition ─────────────────────────────────────────────────
@@ -200,7 +200,7 @@ export default function (pi: ExtensionAPI) {
 			})
 			return { content: [{ type: "text", text: lines.join("\n") }], details: null }
 		},
-		renderCall: (args, theme, context) => renderLspCall("LSP: Go to Definition", args, theme, context),
+		renderCall: lspRenderCall("LSP: Go to Definition"),
 	})
 
 	// ── Tool: lsp_references ─────────────────────────────────────────────────
@@ -246,7 +246,7 @@ export default function (pi: ExtensionAPI) {
 			})
 			return { content: [{ type: "text", text: `${result.length} reference(s):\n${lines.join("\n")}` }], details: null }
 		},
-		renderCall: (args, theme, context) => renderLspCall("LSP: Find References", args, theme, context),
+		renderCall: lspRenderCall("LSP: Find References"),
 	})
 
 	// ── Tool: lsp_rename ─────────────────────────────────────────────────────
@@ -313,7 +313,7 @@ export default function (pi: ExtensionAPI) {
 
 			return { content: [{ type: "text", text: applied.join("\n") }], details: null }
 		},
-		renderCall: (args, theme, context) => renderLspCall("LSP: Rename Symbol", args, theme, context),
+		renderCall: lspRenderCall("LSP: Rename Symbol"),
 	})
 }
 
@@ -321,23 +321,20 @@ export default function (pi: ExtensionAPI) {
 // Helpers
 // =============================================================================
 
-function renderLspCall(
-	label: string,
-	args: Record<string, unknown>,
-	theme: Theme,
-	context: { lastComponent: unknown },
-): Container {
-	const filePath = (args.file_path as string | undefined) ?? ""
-	const line = args.line !== undefined ? `:${(args.line as number) + 1}` : ""
-	const char = args.character !== undefined ? `:${(args.character as number) + 1}` : ""
-	const loc = filePath ? `${filePath}${line}${char}` : ""
-	const header = `${theme.fg("muted", "-")} ${theme.fg("toolTitle", theme.bold(label))}`
-	const fileLine = loc ? `  ${theme.fg("muted", "file:")} ${theme.fg("accent", "`")}${theme.fg("accent", loc)}${theme.fg("accent", "`")}` : ""
-	const text = fileLine ? `${header}\n${fileLine}` : header
-	const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
-	component.clear()
-	component.addChild(new Text(text, 0, 0))
-	return component
+function lspRenderCall(label: string) {
+	return (args: Record<string, unknown>, theme: Theme, context: { lastComponent: unknown }): Container => {
+		const filePath = (args.file_path as string | undefined) ?? ""
+		const line = args.line !== undefined ? `:${(args.line as number) + 1}` : ""
+		const char = args.character !== undefined ? `:${(args.character as number) + 1}` : ""
+		const loc = filePath ? `${filePath}${line}${char}` : ""
+		const header = `${theme.fg("muted", "-")} ${theme.fg("toolTitle", theme.bold(label))}`
+		const fileLine = loc ? `  ${theme.fg("muted", "file:")} ${theme.fg("accent", "`")}${theme.fg("accent", loc)}${theme.fg("accent", "`")}` : ""
+		const text = fileLine ? `${header}\n${fileLine}` : header
+		const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
+		component.clear()
+		component.addChild(new Text(text, 0, 0))
+		return component
+	}
 }
 
 function extractHoverText(hover: Hover): string {
