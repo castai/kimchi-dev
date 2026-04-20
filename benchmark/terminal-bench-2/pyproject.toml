@@ -1,0 +1,31 @@
+[project]
+name = "kimchi-agent"
+version = "0.1.0"
+description = "Harbor terminal-bench agent that runs the kimchi-code binary inside the task container."
+requires-python = ">=3.14"
+dependencies = [
+    "harbor>=0.4.0",
+    "pydantic>=2.11",
+    "pydantic-settings>=2.5",
+    "httpx>=0.27",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.7",
+]
+
+[build-system]
+requires = ["uv_build>=0.10"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "src"
+module-name = "kimchi_agent"
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

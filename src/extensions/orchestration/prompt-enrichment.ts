@@ -68,8 +68,14 @@ export default function (pi: ExtensionAPI) {
 			const currentModel = ctx.model ? { id: ctx.model.id, name: ctx.model.id } : undefined
 			const enrichedPrompt = transformPrompt(event.text, registry, currentModel)
 
+			// Non-interactive (--print/--mode rpc) and debug-prompts mode: replace the user
+			// text inline. The "handled" + sendUserMessage path below relies on the TUI event
+			// loop staying alive long enough for the queued message to drain — in --print mode
+			// the loop returns as soon as session.prompt resolves and disposeRuntime cancels
+			// the in-flight LLM call, so nothing is ever sent. Transforming inline lets the
+			// caller's await session.prompt(enrichedPrompt) do the work synchronously.
 			const debugPrompts = pi.getFlag("debug-prompts") === true
-			if (debugPrompts) {
+			if (debugPrompts || !ctx.hasUI) {
 				return { action: "transform" as const, text: enrichedPrompt, images: event.images }
 			}
 
