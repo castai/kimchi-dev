@@ -12,7 +12,7 @@ import { resolveAuxiliaryFilesDir } from "./auxiliary-files/resolver.js"
 import { validateAuxiliaryFiles } from "./auxiliary-files/validator.js"
 
 const preSet = !!process.env.PI_PACKAGE_DIR
-const auxiliaryDir = resolveAuxiliaryFilesDir(process.env, homedir())
+const auxiliaryDir = resolveAuxiliaryFilesDir(process.env, homedir(), process.execPath)
 if (!preSet) {
 	try {
 		validateAuxiliaryFiles(auxiliaryDir)

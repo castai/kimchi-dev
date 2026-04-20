@@ -65,6 +65,22 @@ function resolveTsx(): string | undefined {
 	return undefined
 }
 
+function collectExtensionArgs(): string[] {
+	const result: string[] = []
+	const argv = process.argv
+	for (let i = 0; i < argv.length; i++) {
+		if (argv[i] === "-e" || argv[i] === "--extension") {
+			if (i + 1 < argv.length) {
+				result.push("-e", argv[i + 1])
+				i++
+			}
+		} else if (argv[i].startsWith("--extension=")) {
+			result.push("-e", argv[i].slice("--extension=".length))
+		}
+	}
+	return result
+}
+
 function getSubagentInvocation(args: string[]): { command: string; args: string[] } {
 	if (isBunBinary) {
 		return { command: process.execPath, args }
@@ -324,6 +340,7 @@ export default function (pi: ExtensionAPI) {
 		parameters: SubagentParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+			const extensionArgs = collectExtensionArgs()
 			const args = [
 				"--mode",
 				"json",
@@ -333,6 +350,7 @@ export default function (pi: ExtensionAPI) {
 				params.provider,
 				"--model",
 				params.model,
+				...extensionArgs,
 				params.prompt,
 			]
 			const invocation = getSubagentInvocation(args)
