@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest"
+import { mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { resolveAuxiliaryFilesDir } from "./resolver.js"
 
 describe("resolveAuxiliaryFilesDir", () => {
@@ -43,5 +46,40 @@ describe("resolveAuxiliaryFilesDir", () => {
 	it("handles XDG_DATA_HOME with a trailing slash", () => {
 		const env = { XDG_DATA_HOME: "/xdg/data/" }
 		expect(resolveAuxiliaryFilesDir(env, home)).toBe("/xdg/data/kimchi")
+	})
+
+	describe("binary-sibling share directory", () => {
+		let tmpBase: string
+
+		beforeEach(() => {
+			tmpBase = join(tmpdir(), `kimchi-resolver-test-${process.pid}`)
+			// Simulate dist/bin/kimchi-code + dist/share/kimchi/package.json
+			mkdirSync(join(tmpBase, "bin"), { recursive: true })
+			mkdirSync(join(tmpBase, "share", "kimchi"), { recursive: true })
+			writeFileSync(join(tmpBase, "share", "kimchi", "package.json"), "{}")
+		})
+
+		afterEach(() => {
+			rmSync(tmpBase, { recursive: true, force: true })
+		})
+
+		it("returns sibling share dir when package.json exists next to the binary", () => {
+			const execPath = join(tmpBase, "bin", "kimchi-code")
+			const env: Record<string, string | undefined> = {}
+			expect(resolveAuxiliaryFilesDir(env, home, execPath)).toBe(join(tmpBase, "share", "kimchi"))
+		})
+
+		it("PI_PACKAGE_DIR takes precedence over sibling share dir", () => {
+			const execPath = join(tmpBase, "bin", "kimchi-code")
+			const env = { PI_PACKAGE_DIR: "/custom/path" }
+			expect(resolveAuxiliaryFilesDir(env, home, execPath)).toBe("/custom/path")
+		})
+
+		it("falls through to XDG when sibling share dir has no package.json", () => {
+			rmSync(join(tmpBase, "share", "kimchi", "package.json"))
+			const execPath = join(tmpBase, "bin", "kimchi-code")
+			const env = { XDG_DATA_HOME: "/xdg/data" }
+			expect(resolveAuxiliaryFilesDir(env, home, execPath)).toBe("/xdg/data/kimchi")
+		})
 	})
 })
