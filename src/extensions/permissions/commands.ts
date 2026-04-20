@@ -119,11 +119,11 @@ async function openModePicker(ctx: ExtensionContext, deps: CommandDeps): Promise
 		return
 	}
 	const current = deps.getMode()
-	const label = (m: PermissionMode, desc: string) => `${m === current ? "● " : "  "}${m.padEnd(8)} ${desc}`
+	const marker = (m: PermissionMode) => (m === current ? "●" : "○")
 
-	const OPT_DEFAULT = label("default", "ask before each tool call")
-	const OPT_PLAN = label("plan", "read-only exploration")
-	const OPT_AUTO = label("auto", "YOLO with classifier")
+	const OPT_DEFAULT = `${marker("default")}  default — ask before each tool call`
+	const OPT_PLAN = `${marker("plan")}  plan — read-only exploration`
+	const OPT_AUTO = `${marker("auto")}  yolo — run freely, classifier guards the rest`
 	const CANCEL = "Cancel"
 
 	const choice = await ctx.ui.select("Select permission mode", [OPT_DEFAULT, OPT_PLAN, OPT_AUTO, CANCEL])

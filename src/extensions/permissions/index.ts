@@ -11,6 +11,19 @@ import type { PermissionMode, Rule } from "./types.js"
 
 const READ_ONLY_TOOL_NAMES = ["read", "grep", "find", "ls", "web_search", "web_fetch", "questionnaire"]
 
+const MODE_LABELS: Record<PermissionMode, string> = {
+	default: "default",
+	plan: "plan",
+	auto: "yolo",
+}
+
+const MODE_ORDER: PermissionMode[] = ["default", "plan", "auto"]
+const MODE_COLORS: Record<PermissionMode, "success" | "warning" | "error"> = {
+	default: "success",
+	plan: "warning",
+	auto: "error",
+}
+
 interface PlanModeSupplement {
 	systemPrompt: string
 }
@@ -46,6 +59,14 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	pi.registerFlag("deny-tool", {
 		description: "Add a session deny rule (may repeat via comma-separated list).",
 		type: "string",
+	})
+
+	// -----------------------------------------------------------------------
+	// Shortcuts
+	// -----------------------------------------------------------------------
+	pi.registerShortcut("shift+tab", {
+		description: "Cycle permission mode (default → plan → auto)",
+		handler: (ctx) => cycleMode(ctx),
 	})
 
 	// -----------------------------------------------------------------------
@@ -107,9 +128,6 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 			if (available.has("bash") && !planTools.includes("bash")) planTools.push("bash")
 			pi.setActiveTools(planTools)
 			planModeApplied = true
-			if (ctx.hasUI) {
-				ctx.ui.setStatus("permissions-mode", ctx.ui.theme.fg("warning", "⏸ plan"))
-			}
 		} catch {
 			// setActiveTools may be unavailable in some modes (RPC/print); fall
 			// through — the tool_call handler still enforces the policy.
@@ -126,19 +144,41 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 			}
 		}
 		planModeApplied = false
-		if (ctx.hasUI) ctx.ui.setStatus("permissions-mode", undefined)
 	}
 
 	function updateStatus(ctx: ExtensionContext): void {
 		if (!ctx.hasUI) return
 		const mode = currentMode()
-		const label =
-			mode === "plan"
-				? ctx.ui.theme.fg("warning", "⏸ plan")
-				: mode === "auto"
-					? ctx.ui.theme.fg("error", "⏵⏵ auto")
-					: undefined
-		ctx.ui.setStatus("permissions-mode", label)
+		const theme = ctx.ui.theme
+		// Header status: compact dot + name for the active mode only.
+		ctx.ui.setStatus("permissions-mode", theme.fg(MODE_COLORS[mode], `● ${MODE_LABELS[mode]}`))
+		updateBelowWidget(ctx)
+	}
+
+	function updateBelowWidget(ctx: ExtensionContext): void {
+		if (!ctx.hasUI) return
+		const mode = currentMode()
+		const theme = ctx.ui.theme
+
+		// Three-dot indicator: the active mode is filled in its risk-color,
+		// the others are muted empty circles.
+		const dots = MODE_ORDER.map((m) => (m === mode ? theme.fg(MODE_COLORS[m], "●") : theme.fg("muted", "○"))).join(" ")
+		const name = theme.fg(MODE_COLORS[mode], MODE_LABELS[mode])
+		const hint = theme.fg("muted", "→ shift+tab")
+		const line = `${dots}  ${name}  ${hint}`
+		ctx.ui.setWidget("permissions-mode-widget", [line], { placement: "belowEditor" })
+	}
+
+	function cycleMode(ctx: ExtensionContext): void {
+		const current = currentMode()
+		const idx = MODE_ORDER.indexOf(current)
+		const next = MODE_ORDER[(idx + 1) % MODE_ORDER.length]
+		const wasPlan = current === "plan"
+		runtimeMode = next
+		if (wasPlan && next !== "plan") restoreToolsFromPlanMode(ctx)
+		if (next === "plan") applyPlanModeTools(ctx)
+		updateStatus(ctx)
+		if (ctx.hasUI) ctx.ui.notify(`permissions: ${MODE_LABELS[next]}`, "info")
 	}
 
 	// -----------------------------------------------------------------------

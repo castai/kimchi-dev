@@ -11,6 +11,7 @@ import bashCollapseExtension from "./extensions/bash-collapse.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
+import { reserveShiftTabForPermissions } from "./extensions/permissions/config.js"
 import permissionsExtension from "./extensions/permissions/index.js"
 import promptSummaryExtension from "./extensions/prompt-summary.js"
 import subagentExtension from "./extensions/subagent.js"
@@ -107,6 +108,11 @@ try {
 	if (modelsResult.source === "default") {
 		console.error(`Warning: using default models (${modelsResult.error})`)
 	}
+
+	// Reserve shift+tab for the permissions extension (replaces the built-in
+	// thinking-level cycle). Must run before main() so the keybindings file
+	// is loaded with the override in place.
+	reserveShiftTabForPermissions(agentDir)
 
 	// Share the discovered model IDs with extensions before main() runs.
 	// prompt-enrichment reads this to build ModelRegistry with live model IDs.
