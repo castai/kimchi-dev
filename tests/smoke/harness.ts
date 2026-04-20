@@ -52,7 +52,7 @@ export function ensureAgentDir(): string {
 	return dir
 }
 
-const DEFAULT_TIMEOUT_MS = 14_000
+const DEFAULT_TIMEOUT_MS = 30_000
 
 interface RunBinaryOptions {
 	args?: string[]
