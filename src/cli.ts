@@ -25,7 +25,10 @@ try {
 	process.env.KIMCHI_API_KEY = config.apiKey
 
 	// Ensure models.json exists with Cast AI provider configuration
-	const agentDir = process.env.KIMCHI_CODING_AGENT_DIR as string
+	const agentDir = process.env.KIMCHI_CODING_AGENT_DIR
+	if (!agentDir) {
+		throw new Error("KIMCHI_CODING_AGENT_DIR is not set; cli.ts must be entered via entry.ts")
+	}
 	const modelsJsonPath = resolve(agentDir, "models.json")
 	const modelsResult = await updateModelsConfig(modelsJsonPath, config.apiKey)
 	if (modelsResult.source === "default") {
