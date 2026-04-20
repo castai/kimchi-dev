@@ -1,0 +1,3 @@
+{"type":"session","id":"smoke-export-0000","timestamp":"2026-04-20T12:00:00.000Z","cwd":"/tmp","provider":"anthropic","modelId":"claude-opus-4-5","version":3}
+{"type":"message","timestamp":"2026-04-20T12:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"hello"}]},"id":"f2785552","parentId":null}
+{"type":"message","timestamp":"2026-04-20T12:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]},"id":"f39d908f","parentId":"f2785552"}

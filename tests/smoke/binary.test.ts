@@ -1,5 +1,7 @@
-import { constants, accessSync } from "node:fs"
-import { describe, expect, it } from "vitest"
+import { constants, accessSync, copyFileSync, mkdtempSync, rmSync, statSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join, resolve } from "node:path"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { BINARY_PATH, runBinary } from "./harness.js"
 
 describe("binary smoke tests", () => {
@@ -39,6 +41,33 @@ describe("binary smoke tests", () => {
 		expect(result.status).toBe(0)
 		// The orchestration extension fires "input" and "before_agent_start" events, triggering template loading. If templates are missing from the compiled binary, the extension runner reports ENOENT via "Extension error" on stderr.
 		expect(result.stderr).not.toContain("Extension error")
+	})
+
+	describe("--export", () => {
+		const fixtureSrc = resolve("tests/smoke/fixtures/session.jsonl")
+		let workDir: string
+
+		beforeEach(() => {
+			workDir = mkdtempSync(join(tmpdir(), "kimchi-smoke-export-"))
+		})
+
+		afterEach(() => {
+			rmSync(workDir, { recursive: true, force: true })
+		})
+
+		it("exports a session to HTML using staged template assets", () => {
+			// Copy the fixture into a scratch dir — the binary rewrites the jsonl on load to populate IDs, which would mutate the checked-in file.
+			const sessionPath = join(workDir, "session.jsonl")
+			copyFileSync(fixtureSrc, sessionPath)
+			const outPath = join(workDir, "session.html")
+			const result = runBinary({
+				args: ["--export", sessionPath, outPath],
+				extraEnv: { KIMCHI_API_KEY: "smoke-test-dummy" },
+			})
+			expect(result.stdout).toContain(outPath)
+			// Output must load the template + vendor bundle (marked + highlight ≈ 200KB), so 10KB is a safe regression floor.
+			expect(statSync(outPath).size).toBeGreaterThan(10_000)
+		})
 	})
 
 	it.skipIf(!process.env.KIMCHI_API_KEY)("sends a request to a model via -p flag", { retry: 2 }, () => {
