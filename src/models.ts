@@ -45,6 +45,7 @@ function buildModelsConfig(models: string[]) {
 				apiKey: "KIMCHI_API_KEY",
 				api: "openai-completions",
 				authHeader: true,
+				headers: { "User-Agent": "kimchi/0.0.1" },
 				models: models.map((id) => ({
 					id,
 					name: modelIdToName(id),
