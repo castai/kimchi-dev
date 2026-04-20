@@ -19,6 +19,10 @@ const piAgentDist = join(projectRoot, "node_modules", "@mariozechner", "pi-codin
 
 const themeFiles = ["dark.json", "light.json", "theme-schema.json"]
 const themeSrc = join(piAgentDist, "modes", "interactive", "theme")
+
+// Skip TypeScript declarations and source maps when staging export-html — only template.{html,css,js}
+// and vendor/*.min.js are read at runtime, so .d.ts/.map files are pure payload bloat.
+const exportHtmlSkipSuffixes = [".d.ts", ".d.ts.map", ".js.map"]
 const exportHtmlSrc = join(piAgentDist, "core", "export-html")
 
 const isDev = process.argv.includes("--dev")
@@ -34,7 +38,10 @@ for (const file of themeFiles) {
 	cpSync(join(themeSrc, file), join(themeDest, file))
 }
 
-cpSync(exportHtmlSrc, exportHtmlDest, { recursive: true })
+cpSync(exportHtmlSrc, exportHtmlDest, {
+	recursive: true,
+	filter: (src) => !exportHtmlSkipSuffixes.some((suffix) => src.endsWith(suffix)),
+})
 
 if (!isDev) {
 	cpSync(join(projectRoot, "package.json"), join(projectRoot, "dist", "share", "kimchi", "package.json"))
