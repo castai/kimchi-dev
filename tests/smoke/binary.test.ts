@@ -43,7 +43,7 @@ describe("binary smoke tests", () => {
 
 	it.skipIf(!process.env.KIMCHI_API_KEY)("sends a request to a model via -p flag", { retry: 2 }, () => {
 		const result = runBinary({
-			args: ["-p", "respond with only the word hello"],
+			args: ["--debug-prompts", "-p", "respond with only the word hello"],
 			extraEnv: { KIMCHI_API_KEY: process.env.KIMCHI_API_KEY as string },
 		})
 		expect(result.stdout.trim()).not.toBe("")

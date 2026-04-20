@@ -5,7 +5,7 @@
 	"type": "module",
 	"license": "MIT",
 	"bin": {
-		"kimchi-code": "src/cli.ts"
+		"kimchi-code": "src/entry.ts"
 	},
 	"scripts": {
 		"clean": "rm -rf dist",
@@ -13,7 +13,7 @@
 		"build:binary": "node scripts/build-binary.js",
 		"build:binary-linux-arm64": "node scripts/build-binary.js --target linux-arm64",
 		"build:binary-linux-x64": "node scripts/build-binary.js --target linux-x64",
-		"dev": "bun run --preload ./src/set-package-dir.ts src/cli.ts",
+		"dev": "bun run --preload ./src/set-package-dir.ts src/entry.ts",
 		"lint": "biome check src/ scripts/",
 		"lint:fix": "biome check --write src/ scripts/",
 		"typecheck": "tsc --noEmit",
@@ -27,8 +27,8 @@
 		"configDir": ".config/kimchi/harness"
 	},
 	"dependencies": {
-		"@mariozechner/pi-coding-agent": "^0.65.2",
-		"@mariozechner/pi-tui": "^0.65.2",
+		"@mariozechner/pi-coding-agent": "^0.67.68",
+		"@mariozechner/pi-tui": "^0.67.68",
 		"@modelcontextprotocol/ext-apps": "^1.2.2",
 		"@modelcontextprotocol/sdk": "^1.25.1",
 		"open": "^10.2.0",
@@ -40,7 +40,7 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",
-		"@mariozechner/pi-ai": "^0.65.2",
+		"@mariozechner/pi-ai": "^0.67.68",
 		"@mixmark-io/domino": "^2.2.0",
 		"@types/node": "^22.15.2",
 		"@types/turndown": "^5.0.5",
@@ -55,9 +55,6 @@
 	},
 	"packageManager": "pnpm@10.8.1",
 	"pnpm": {
-		"onlyBuiltDependencies": ["@biomejs/biome", "esbuild", "koffi", "protobufjs"],
-		"patchedDependencies": {
-			"@mariozechner/pi-coding-agent": "patches/@mariozechner__pi-coding-agent.patch"
-		}
+		"onlyBuiltDependencies": ["@biomejs/biome", "esbuild", "koffi", "protobufjs"]
 	}
 }
