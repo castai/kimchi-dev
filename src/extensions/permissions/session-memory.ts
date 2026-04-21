@@ -1,7 +1,6 @@
-import { extractBashProgram } from "./taxonomy.js"
-import type { Rule, RuleBehavior } from "./types.js"
-
-const FILE_TOOLS = new Set(["read", "write", "edit", "ls", "grep", "find"])
+import { titleCase } from "./rules.js"
+import { FILE_TOOLS, extractBashProgram } from "./taxonomy.js"
+import type { Rule } from "./types.js"
 
 export interface Scope {
 	toolName: string
@@ -27,14 +26,6 @@ export class SessionMemory {
 	clear(): void {
 		this.rules = []
 	}
-
-	removeByScope(toolName: string, content: string | undefined, behavior: RuleBehavior): number {
-		const before = this.rules.length
-		this.rules = this.rules.filter(
-			(r) => !(r.toolName === toolName && r.content === content && r.behavior === behavior),
-		)
-		return before - this.rules.length
-	}
 }
 
 // Scope suggestion for "don't ask again this session":
@@ -57,13 +48,12 @@ export function suggestScope(toolName: string, input: Record<string, unknown>): 
 		const path = typeof input.path === "string" ? input.path : ""
 		const glob = dirGlob(path)
 		if (glob) {
-			const cap = capitalize(lower)
-			return { toolName: lower, content: glob, label: `${cap}(${glob})` }
+			return { toolName: lower, content: glob, label: `${titleCase(lower)}(${glob})` }
 		}
-		return { toolName: lower, content: undefined, label: capitalize(lower) }
+		return { toolName: lower, content: undefined, label: titleCase(lower) }
 	}
 
-	return { toolName: lower, content: undefined, label: capitalize(lower) }
+	return { toolName: lower, content: undefined, label: titleCase(lower) }
 }
 
 function bashPrefixScope(command: string): string | null {
@@ -81,10 +71,4 @@ function dirGlob(path: string): string | null {
 	const idx = path.lastIndexOf("/")
 	if (idx <= 0) return path
 	return `${path.slice(0, idx)}/**`
-}
-
-function capitalize(s: string): string {
-	if (s.startsWith("mcp__")) return s
-	if (s.length === 0) return s
-	return s[0].toUpperCase() + s.slice(1)
 }

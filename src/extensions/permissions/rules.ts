@@ -1,4 +1,5 @@
 import micromatch from "micromatch"
+import { FILE_TOOLS } from "./taxonomy.js"
 import type { Rule, RuleBehavior, RuleSource } from "./types.js"
 
 // Rule syntax: `ToolName` or `ToolName(content)`. Tool names are case-
@@ -22,14 +23,13 @@ export function stringifyRule(rule: Rule): string {
 	return rule.content === undefined ? name : `${name}(${rule.content})`
 }
 
-function titleCase(name: string): string {
+export function titleCase(name: string): string {
 	if (name.startsWith("mcp__")) return name
 	if (name.length === 0) return name
 	return name[0].toUpperCase() + name.slice(1)
 }
 
 const BASH_TOOL = "bash"
-const FILE_TOOLS = new Set(["read", "write", "edit", "ls", "grep", "find"])
 
 export function matchRule(rule: Rule, toolName: string, input: Record<string, unknown>): boolean {
 	if (rule.toolName !== toolName.toLowerCase()) return false

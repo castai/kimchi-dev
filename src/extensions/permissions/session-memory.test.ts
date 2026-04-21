@@ -45,14 +45,6 @@ describe("SessionMemory", () => {
 		expect(mem.all()).toHaveLength(2)
 	})
 
-	it("removes by scope + behavior", () => {
-		const mem = new SessionMemory()
-		mem.add({ toolName: "bash", content: "git:*", behavior: "allow", source: "session" })
-		const removed = mem.removeByScope("bash", "git:*", "allow")
-		expect(removed).toBe(1)
-		expect(mem.all()).toHaveLength(0)
-	})
-
 	it("clear empties the store", () => {
 		const mem = new SessionMemory()
 		mem.addMany([

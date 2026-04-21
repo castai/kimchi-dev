@@ -82,8 +82,8 @@ export function loadConfig(options: LoadConfigOptions): { loaded: LoadedConfig; 
 		const local = localRead.data
 		effective = {
 			defaultMode: local?.defaultMode ?? project?.defaultMode ?? user.defaultMode,
-			allow: [...(user.allow ?? []), ...(project?.allow ?? []), ...(local?.allow ?? [])],
-			deny: [...(user.deny ?? []), ...(project?.deny ?? []), ...(local?.deny ?? [])],
+			allow: [...user.allow, ...(project?.allow ?? []), ...(local?.allow ?? [])],
+			deny: [...user.deny, ...(project?.deny ?? []), ...(local?.deny ?? [])],
 			classifierTimeoutMs: local?.classifierTimeoutMs ?? project?.classifierTimeoutMs ?? user.classifierTimeoutMs,
 		}
 	}
@@ -119,10 +119,6 @@ export function userConfigPath(): string {
 
 export function projectConfigPath(cwd: string): string {
 	return resolve(cwd, PROJECT_CONFIG_SUFFIX)
-}
-
-export function localConfigPath(cwd: string): string {
-	return resolve(cwd, LOCAL_CONFIG_SUFFIX)
 }
 
 export function appendToConfig(path: string, toAdd: { allow?: string[]; deny?: string[] }): string {

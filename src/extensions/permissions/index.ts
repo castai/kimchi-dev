@@ -5,31 +5,22 @@ import { type LoadedConfig, loadConfig } from "./config.js"
 import { resolveMode } from "./mode.js"
 import { promptForApproval } from "./prompts.js"
 import planModeSupplement from "./prompts/plan-mode-supplement.js"
-import { evaluateRules, parseRules } from "./rules.js"
+import { evaluateRules, parseRules, stringifyRule } from "./rules.js"
 import { SessionMemory } from "./session-memory.js"
 import { isReadOnlyBashCommand, isReadOnlyTool } from "./taxonomy.js"
 import { BUILTIN_DENY, type PermissionMode, type Rule } from "./types.js"
 
-// Tools allowed in plan mode. bash is gated at the command level by
-// isReadOnlyBashCommand.
+// bash is allowed but gated per-command by isReadOnlyBashCommand.
 const PLAN_MODE_TOOLS = ["read", "grep", "find", "ls", "web_search", "web_fetch", "questionnaire", "bash"]
 
-// Orchestration-internal tool that delegates to sub-sessions; each subagent
-// enforces permissions on its own tool calls.
+// subagent delegates to a sub-session that enforces permissions on its own calls.
 const BUILTIN_ALLOW_TOOL_NAMES = ["subagent"]
 
-const MODE_LABELS: Record<PermissionMode, string> = {
-	default: "default",
-	plan: "plan",
-	auto: "yolo",
-}
-
-const MODE_ORDER: PermissionMode[] = ["default", "plan", "auto"]
-const MODE_COLORS: Record<PermissionMode, "success" | "warning" | "error"> = {
-	default: "success",
-	plan: "warning",
-	auto: "error",
-}
+const MODES: Array<{ mode: PermissionMode; label: string; color: "success" | "warning" | "error" }> = [
+	{ mode: "default", label: "default", color: "success" },
+	{ mode: "plan", label: "plan", color: "warning" },
+	{ mode: "auto", label: "yolo", color: "error" },
+]
 
 export default function permissionsExtension(pi: ExtensionAPI): void {
 	pi.registerFlag("plan", {
@@ -62,9 +53,8 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 
 	const session = new SessionMemory()
 	const builtinRules: Rule[] = parseRules(BUILTIN_DENY, "deny", "builtin")
-	// Snapshot the env-based mode hint before we overwrite process.env for
-	// subagent propagation; otherwise currentMode() would read back whatever
-	// we last wrote and ignore flag/runtime precedence.
+	// Snapshot env before propagateModeToEnv overwrites it; otherwise
+	// currentMode() would read its own writes and ignore flag/runtime precedence.
 	const envBaseline = process.env.KIMCHI_PERMISSIONS
 	let loaded: LoadedConfig
 	let configRules: Rule[] = []
@@ -75,11 +65,9 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 
 	function rebuildConfigRules(): void {
 		configRules = [
-			...parseRules(loaded.allowBySource.cli, "allow", "cli"),
 			...parseRules(loaded.allowBySource.local, "allow", "local"),
 			...parseRules(loaded.allowBySource.project, "allow", "project"),
 			...parseRules(loaded.allowBySource.user, "allow", "user"),
-			...parseRules(loaded.denyBySource.cli, "deny", "cli"),
 			...parseRules(loaded.denyBySource.local, "deny", "local"),
 			...parseRules(loaded.denyBySource.project, "deny", "project"),
 			...parseRules(loaded.denyBySource.user, "deny", "user"),
@@ -95,7 +83,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		}).mode
 	}
 
-	// Export effective mode so spawned subagents inherit it via process.env.
+	// Spawned subagents inherit the mode via process.env.
 	function propagateModeToEnv(): void {
 		process.env.KIMCHI_PERMISSIONS = currentMode()
 	}
@@ -110,18 +98,17 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 			if (originalActiveTools === null) {
 				originalActiveTools = pi.getActiveTools()
 			}
-			const available = new Set(pi.getAllTools().map((t) => t.name))
-			const planTools = PLAN_MODE_TOOLS.filter((n) => available.has(n))
-			for (const tool of pi.getAllTools()) {
-				if (!planTools.includes(tool.name) && isReadOnlyTool(tool.name)) {
-					planTools.push(tool.name)
+			const allTools = pi.getAllTools()
+			const planTools = new Set<string>()
+			for (const tool of allTools) {
+				if (PLAN_MODE_TOOLS.includes(tool.name) || isReadOnlyTool(tool.name)) {
+					planTools.add(tool.name)
 				}
 			}
-			pi.setActiveTools(planTools)
+			pi.setActiveTools([...planTools])
 			planModeApplied = true
 		} catch {
-			// setActiveTools may be unavailable in non-interactive modes; the
-			// tool_call handler still enforces the policy.
+			// setActiveTools may be unavailable; tool_call handler still enforces the policy.
 		}
 	}
 
@@ -131,7 +118,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 			try {
 				pi.setActiveTools(originalActiveTools)
 			} catch {
-				// ignore
+				// best-effort restore
 			}
 		}
 		planModeApplied = false
@@ -140,16 +127,18 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	function updateStatus(ctx: ExtensionContext): void {
 		if (!ctx.hasUI) return
 		const mode = currentMode()
+		const active = MODES.find((m) => m.mode === mode) ?? MODES[0]
 		const theme = ctx.ui.theme
-		const dots = MODE_ORDER.map((m) => (m === mode ? theme.fg(MODE_COLORS[m], "●") : theme.fg("muted", "○"))).join(" ")
-		const name = theme.fg(MODE_COLORS[mode], MODE_LABELS[mode])
+		const dots = MODES.map((m) => (m.mode === mode ? theme.fg(m.color, "●") : theme.fg("muted", "○"))).join(" ")
+		const name = theme.fg(active.color, active.label)
 		const hint = theme.fg("dim", "→ shift+tab")
 		ctx.ui.setWidget("permissions-mode-widget", [`${dots}  ${name}  ${hint}`], { placement: "belowEditor" })
 	}
 
 	function cycleMode(ctx: ExtensionContext): void {
 		const current = currentMode()
-		const next = MODE_ORDER[(MODE_ORDER.indexOf(current) + 1) % MODE_ORDER.length]
+		const idx = MODES.findIndex((m) => m.mode === current)
+		const next = MODES[(idx + 1) % MODES.length].mode
 		runtimeMode = next
 		if (current === "plan" && next !== "plan") restoreToolsFromPlanMode()
 		if (next === "plan") applyPlanModeTools()
@@ -222,9 +211,8 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 
 		if (BUILTIN_ALLOW_TOOL_NAMES.includes(toolName)) return undefined
 
-		// Auto mode, and default mode without a UI (subagents): classifier-gated.
-		// Mirrors Claude Code's async-agent pattern: automated checks resolve
-		// what they can, unresolved prompts fail closed.
+		// Auto mode + headless default mode (subagents) both go through the
+		// classifier; prompts without a UI fail closed.
 		if (mode === "auto" || !ctx.hasUI) {
 			if (isReadOnlyTool(toolName)) return undefined
 			if (toolName === "bash") {
@@ -316,9 +304,5 @@ function splitFlag(raw: boolean | string | undefined): string[] {
 }
 
 function formatRule(rule: Rule): string {
-	const name = rule.toolName.startsWith("mcp__")
-		? rule.toolName
-		: rule.toolName[0].toUpperCase() + rule.toolName.slice(1)
-	const base = rule.content === undefined ? name : `${name}(${rule.content})`
-	return `${base} [${rule.source}]`
+	return `${stringifyRule(rule)} [${rule.source}]`
 }

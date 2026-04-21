@@ -1,5 +1,7 @@
 import type { ToolCategory } from "./types.js"
 
+export const FILE_TOOLS = new Set(["read", "write", "edit", "ls", "grep", "find"])
+
 const STATIC_CATEGORIES: Record<string, ToolCategory> = {
 	read: "readOnly",
 	grep: "readOnly",

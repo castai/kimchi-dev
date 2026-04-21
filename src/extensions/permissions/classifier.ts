@@ -3,8 +3,6 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent"
 import classifierSystemPrompt from "./prompts/classifier-system-prompt.js"
 import type { ClassifierResult, ClassifierVerdict } from "./types.js"
 
-export const CLASSIFIER_SYSTEM_PROMPT = classifierSystemPrompt
-
 export interface ClassifyInput {
 	toolName: string
 	input: Record<string, unknown>
@@ -36,7 +34,7 @@ export async function classifyToolCall(
 		const response = await complete(
 			model,
 			{
-				systemPrompt: CLASSIFIER_SYSTEM_PROMPT,
+				systemPrompt: classifierSystemPrompt,
 				messages: [
 					{
 						role: "user",

@@ -110,14 +110,12 @@ try {
 		console.error(`Warning: using default models (${modelsResult.error})`)
 	}
 
-	// Reserve shift+tab for the permissions extension (replaces the built-in
-	// thinking-level cycle). Must run before main() so the keybindings file
-	// is loaded with the override in place.
+	// Must run before main() so the keybindings file is loaded with the
+	// override in place.
 	reserveShiftTabForPermissions(agentDir)
 
-	// Seed quietStartup=true so the built-in [Extensions] / [Skills] banners
-	// don't clutter the TUI. The 11 inline extensions kimchi registers show up
-	// as <inline:1>..<inline:N>. Users can flip this back in /settings.
+	// Default quietStartup=true so the built-in extension/skill banners don't
+	// clutter the TUI on first run. Users can flip this back in /settings.
 	seedDefaultSettings(agentDir)
 
 	// Share the discovered model IDs with extensions before main() runs.

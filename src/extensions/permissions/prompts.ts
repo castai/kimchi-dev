@@ -1,4 +1,5 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent"
+import { titleCase } from "./rules.js"
 import { suggestScope } from "./session-memory.js"
 import type { Rule } from "./types.js"
 
@@ -59,20 +60,14 @@ function describeCall(toolName: string, input: Record<string, unknown>): string 
 		return `Bash(${truncate(input.command, 200)})`
 	}
 	if (typeof input.path === "string") {
-		return `${capitalize(toolName)}(${truncate(input.path, 200)})`
+		return `${titleCase(toolName)}(${truncate(input.path, 200)})`
 	}
 	try {
 		const preview = truncate(JSON.stringify(input), 120)
-		return `${capitalize(toolName)}(${preview})`
+		return `${titleCase(toolName)}(${preview})`
 	} catch {
-		return capitalize(toolName)
+		return titleCase(toolName)
 	}
-}
-
-function capitalize(s: string): string {
-	if (s.startsWith("mcp__")) return s
-	if (s.length === 0) return s
-	return s[0].toUpperCase() + s.slice(1)
 }
 
 function truncate(s: string, max: number): string {
