@@ -79,6 +79,20 @@ MODEL=kimchi-dev/kimi-k2.5 ./scripts/run-local.sh -i terminal-bench/fix-git
 
 `MODEL` must be `<provider>/<id>`. Available `kimchi-dev` models include `kimi-k2.5`, `glm-5-fp8`, `minimax-m2.7`, `nemotron-3-super-fp4` (run `kimchi-code --list-models` for the live list). The qualifier is required because kimchi-code's built-in catalog also registers some IDs (notably `kimi-k2.5`) under the `opencode` provider — without `kimchi-dev/` the resolver picks `opencode` and fails auth with the kimchi key.
 
+### Tagging runs for tracking
+
+kimchi-code attaches tags from `KIMCHI_TAGS` to every outgoing LLM request payload and telemetry event, which lets you slice usage/tokens/cost server-side by run, experiment, or branch. Forward the variable into the task container with `--ae`:
+
+```bash
+./scripts/run-local.sh \
+  -i terminal-bench/fix-git \
+  --ae "KIMCHI_TAGS=bench:terminal-bench-2,task:fix-git,run:baseline"
+```
+
+Tag format is `key:value`, comma-separated; keys and values are alphanumeric plus `.`, `_`, `-`, max 64 chars each side. Invalid tags are dropped silently. Per-trial token/cost totals also land in `jobs/<timestamp>/<task>__<trial_id>/result.json` regardless of tags, so for local-only aggregation you can just group result files by the `KIMCHI_TAGS` value you ran them with.
+
+`--ae` is required: the agent passes an explicit env dict to the container and only `KIMCHI_API_KEY` is forwarded from the host by default. Harbor merges `--ae` values on top of that dict (`harbor/agents/installed/base.py` `_exec`), so `--ae KIMCHI_TAGS=...` reaches kimchi-code without any code changes.
+
 ## Environment variables
 
 | Var | Required | Purpose |
