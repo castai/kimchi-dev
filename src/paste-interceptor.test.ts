@@ -86,4 +86,19 @@ describe("installPasteInterceptor", () => {
 
 		expect(endCalled).toBe(1)
 	})
+
+	it("is idempotent — calling install twice does not double-wrap emit", () => {
+		const stdin = makeFakeStdin()
+		installPasteInterceptor(stdin as unknown as NodeJS.ReadStream)
+		const emitAfterFirst = stdin.emit
+		installPasteInterceptor(stdin as unknown as NodeJS.ReadStream)
+		expect(stdin.emit).toBe(emitAfterFirst)
+
+		// Sanity: a paste chunk still produces exactly one wrapped data event, not two.
+		const received: string[] = []
+		stdin.on("data", (chunk) => received.push(chunk.toString()))
+		stdin.emit("data", "one\rtwo\rthree")
+		expect(received).toHaveLength(1)
+		expect(received[0]).toBe(`${ESC}[200~one\ntwo\nthree${ESC}[201~`)
+	})
 })

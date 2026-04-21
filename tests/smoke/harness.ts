@@ -8,7 +8,7 @@
  */
 
 import { type SpawnSyncReturns, spawnSync } from "node:child_process"
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs"
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
@@ -100,8 +100,13 @@ function ensurePtySpawnHelperExecutable(): void {
 	// Derive the prebuilds dir from node-pty's own entry point so we track whatever version is installed rather than hardcoding it.
 	const ptyEntry = nodeRequire.resolve("node-pty") // .../node-pty/lib/index.js
 	const prebuildsDir = join(dirname(dirname(ptyEntry)), "prebuilds")
-	// The harness may run on any of these platforms; chmod whichever ones are present and ignore the rest.
-	for (const platform of ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"]) {
+	let entries: string[]
+	try {
+		entries = readdirSync(prebuildsDir)
+	} catch {
+		return // node-pty installed without prebuilds (e.g. built from source) — nothing to chmod.
+	}
+	for (const platform of entries) {
 		const helper = join(prebuildsDir, platform, "spawn-helper")
 		try {
 			const mode = statSync(helper).mode
@@ -109,7 +114,7 @@ function ensurePtySpawnHelperExecutable(): void {
 				chmodSync(helper, mode | 0o755)
 			}
 		} catch {
-			// Helper not present for this platform — ignore.
+			// Platform dir exists but has no spawn-helper — ignore.
 		}
 	}
 }
