@@ -34,8 +34,6 @@ export function isReadOnlyTool(toolName: string): boolean {
 	return classifyTool(toolName) === "readOnly"
 }
 
-// Read-only bash programs: commands that only inspect state.
-// Adapted in spirit from common POSIX read-only utilities — written fresh here.
 const READ_ONLY_PROGRAMS = new Set([
 	"cat",
 	"head",
@@ -96,7 +94,7 @@ const READ_ONLY_PROGRAMS = new Set([
 	"go",
 ])
 
-// Second-arg allowlist for programs where only some subcommands are read-only.
+// Programs where only specific subcommands are read-only.
 const READ_ONLY_SUBCOMMANDS: Record<string, Set<string>> = {
 	git: new Set([
 		"status",
@@ -124,7 +122,6 @@ const READ_ONLY_SUBCOMMANDS: Record<string, Set<string>> = {
 	kubectl: new Set(["get", "describe", "logs", "top", "version", "config"]),
 }
 
-// Always-blocked bash patterns regardless of other checks.
 const HARD_BLOCK = [
 	/\bsudo\b/,
 	/\bsu\b\s/,
@@ -141,7 +138,7 @@ export function isHardBlockedBash(command: string): boolean {
 }
 
 export function extractBashProgram(command: string): { program: string; subcommand: string | undefined } {
-	// Strip leading env-var assignments: FOO=bar BAZ=qux actual-command
+	// Strip leading env-var assignments (FOO=bar BAZ=qux actual-command).
 	const trimmed = command.replace(/^(?:\s*[A-Za-z_][\w]*=[^\s]*\s+)+/, "").trimStart()
 	const tokens = trimmed.split(/\s+/).filter(Boolean)
 	const program = tokens[0] ?? ""
@@ -164,18 +161,12 @@ export function isReadOnlyBashCommand(command: string): boolean {
 	return READ_ONLY_PROGRAMS.has(program)
 }
 
-// Detect shell-level side effects (output redirection, pipelines to writers).
-// This is a conservative best-effort — the goal is to err on the side of "not read-only".
+// Best-effort detection of output redirection / pipelines to writers / backgrounding.
+// /dev/null and /dev/stderr redirects are allowed since they're not persistent.
 function hasShellSideEffects(command: string): boolean {
-	// Output redirection: > or >> but not inside quotes (best effort).
-	// Allow /dev/null and /dev/stderr redirects since they're not persistent.
 	const redirected = command.replace(/\s*2?>&?\s*(?:\/dev\/(?:null|stderr|stdout))\s*/g, " ")
-	if (/(^|[^<>&])>>?(?!\s*&)/.test(redirected)) {
-		return true
-	}
-	// Writes via tee, sponge, etc.
+	if (/(^|[^<>&])>>?(?!\s*&)/.test(redirected)) return true
 	if (/\|\s*(tee|sponge|pv)\b/.test(command)) return true
-	// Background / disown
 	if (/\s&\s*$/.test(command)) return true
 	return false
 }

@@ -51,7 +51,6 @@ export async function promptForApproval(opts: PromptOptions): Promise<ApprovalOu
 		return { kind: "deny" }
 	}
 
-	// User dismissed the dialog (e.g. Esc) — treat as deny with no feedback.
 	return { kind: "deny" }
 }
 
@@ -62,7 +61,6 @@ function describeCall(toolName: string, input: Record<string, unknown>): string 
 	if (typeof input.path === "string") {
 		return `${capitalize(toolName)}(${truncate(input.path, 200)})`
 	}
-	// Fallback: tool name + compact arg preview.
 	try {
 		const preview = truncate(JSON.stringify(input), 120)
 		return `${capitalize(toolName)}(${preview})`

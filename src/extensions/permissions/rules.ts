@@ -1,18 +1,8 @@
 import micromatch from "micromatch"
 import type { Rule, RuleBehavior, RuleSource } from "./types.js"
 
-// ----------------------------------------------------------------------------
-// Rule string parsing
-// ----------------------------------------------------------------------------
-
-/**
- * Parse a rule string of the form:
- *   ToolName                  → matches any invocation of that tool
- *   ToolName(content)         → content is matched tool-specifically
- *
- * Tool names are case-insensitive (normalized to lowercase) — users may write
- * `Bash(...)` or `bash(...)`. MCP tool names containing `__` are preserved.
- */
+// Rule syntax: `ToolName` or `ToolName(content)`. Tool names are case-
+// insensitive; MCP names containing `__` are preserved verbatim.
 export function parseRule(raw: string, behavior: RuleBehavior, source: RuleSource): Rule | null {
 	const trimmed = raw.trim()
 	if (!trimmed) return null
@@ -38,21 +28,9 @@ function titleCase(name: string): string {
 	return name[0].toUpperCase() + name.slice(1)
 }
 
-// ----------------------------------------------------------------------------
-// Rule matching
-// ----------------------------------------------------------------------------
-
 const BASH_TOOL = "bash"
 const FILE_TOOLS = new Set(["read", "write", "edit", "ls", "grep", "find"])
 
-/**
- * Check whether a rule matches a tool call. Content-less rules match any
- * invocation of the tool. Content rules use per-tool matching semantics:
- *
- *   bash  — legacy prefix (`prefix:*`), wildcard (`*`), exact
- *   read/write/edit/ls/grep/find — path glob via micromatch
- *   other — exact string match against a stringified input
- */
 export function matchRule(rule: Rule, toolName: string, input: Record<string, unknown>): boolean {
 	if (rule.toolName !== toolName.toLowerCase()) return false
 	if (rule.content === undefined) return true
@@ -67,27 +45,12 @@ export function matchRule(rule: Rule, toolName: string, input: Record<string, un
 		return matchPathRule(rule.content, path)
 	}
 
-	// Fallback: exact match against JSON-stringified input.
 	return rule.content === stableStringify(input)
 }
 
-// ----------------------------------------------------------------------------
-// Bash matching: exact / legacy-prefix / wildcard
-// ----------------------------------------------------------------------------
-
-/**
- * Match a bash command against a rule content string.
- *
- * Semantics:
- *   "prefix:*"      — legacy prefix; matches if command starts with "prefix"
- *                     (followed by end-of-string or whitespace)
- *   contains "*"    — wildcard match; `*` = `.*`, trailing ` *` makes
- *                     arguments optional (so `git *` matches bare `git`)
- *                     Escape a literal `*` with `\*`.
- *   otherwise       — exact match after trim
- *
- * Case-sensitive. Matches the full command string (anchored).
- */
+// Bash content matching: `prefix:*` (legacy prefix), `*` wildcard (escape with
+// `\*`), or exact. Trailing ` *` makes arguments optional so `git *` matches
+// bare `git`. Anchored, case-sensitive.
 export function matchBashRule(pattern: string, command: string): boolean {
 	const pat = pattern.trim()
 	const cmd = command.trim()
@@ -153,8 +116,6 @@ function regexFromWildcard(pattern: string): RegExp {
 	let regex = processed.replace(/[.+?^${}()|[\]\\'"]/g, "\\$&").replace(/\*/g, ".*")
 	regex = regex.split(ESC_STAR).join("\\*").split(ESC_BACKSLASH).join("\\\\")
 
-	// Trailing ` *` → make args optional when it's the only wildcard, so
-	// `git *` matches both `git` and `git status`.
 	const unescapedStarCount = (processed.match(/\*/g) ?? []).length
 	if (regex.endsWith(" .*") && unescapedStarCount === 1) {
 		regex = `${regex.slice(0, -3)}( .*)?`
@@ -163,42 +124,23 @@ function regexFromWildcard(pattern: string): RegExp {
 	return new RegExp(`^${regex}$`, "s")
 }
 
-// ----------------------------------------------------------------------------
-// Path matching for file tools
-// ----------------------------------------------------------------------------
-
 export function matchPathRule(pattern: string, path: string): boolean {
 	if (!path) return false
-	// Support both literal path and glob. micromatch.isMatch handles both.
 	return micromatch.isMatch(path, pattern, { dot: true, nocase: false })
-}
-
-// ----------------------------------------------------------------------------
-// Rule-set evaluation
-// ----------------------------------------------------------------------------
-
-export type MatchedRule = {
-	rule: Rule
 }
 
 export type RuleMatch = { decision: "allow"; rule: Rule } | { decision: "deny"; rule: Rule } | { decision: "no-match" }
 
-/**
- * Evaluate a tool call against a set of rules.
- *
- * Precedence order (highest first): session > cli > local > project > user.
- * Within a single source, deny rules beat allow rules.
- * First match in precedence order wins; fall through if no source matches.
- */
+// Precedence (highest first): session > cli > local > project > user > builtin.
+// Deny beats allow within a source; first match wins.
 export function evaluateRules(rules: Rule[], toolName: string, input: Record<string, unknown>): RuleMatch {
 	const bySource = groupBySource(rules)
-	const order: RuleSource[] = ["session", "cli", "local", "project", "user"]
+	const order: RuleSource[] = ["session", "cli", "local", "project", "user", "builtin"]
 
 	for (const source of order) {
 		const group = bySource[source]
 		if (!group) continue
 
-		// Deny first within a source.
 		const deny = group.find((r) => r.behavior === "deny" && matchRule(r, toolName, input))
 		if (deny) return { decision: "deny", rule: deny }
 

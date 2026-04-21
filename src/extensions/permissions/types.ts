@@ -2,7 +2,7 @@ export type PermissionMode = "default" | "plan" | "auto"
 
 export type RuleBehavior = "allow" | "deny"
 
-export type RuleSource = "session" | "cli" | "local" | "project" | "user"
+export type RuleSource = "session" | "cli" | "local" | "project" | "user" | "builtin"
 
 export interface Rule {
 	toolName: string
@@ -17,7 +17,6 @@ export type ClassifierVerdict = "safe" | "requires-confirmation" | "blocked"
 
 export interface ClassifierResult {
 	verdict: ClassifierVerdict
-	confidence: "high" | "medium" | "low"
 	reason: string
 }
 
@@ -31,6 +30,17 @@ export interface PermissionsConfig {
 export const DEFAULT_CONFIG: PermissionsConfig = {
 	defaultMode: "default",
 	allow: [],
-	deny: ["Bash(rm -rf /*)", "Bash(sudo *)", "Write(.env)", "Write(.env.*)", "Edit(.env)", "Edit(.env.*)"],
+	deny: [],
 	classifierTimeoutMs: 8000,
 }
+
+// Denylist applied as the lowest-precedence rule source. Users can override by
+// adding matching allow rules at a higher-precedence source.
+export const BUILTIN_DENY: string[] = [
+	"Bash(rm -rf /*)",
+	"Bash(sudo *)",
+	"Write(.env)",
+	"Write(.env.*)",
+	"Edit(.env)",
+	"Edit(.env.*)",
+]

@@ -10,8 +10,8 @@ export interface CommandDeps {
 	getLoaded: () => LoadedConfig
 	getMode: () => PermissionMode
 	setRuntimeMode: (mode: PermissionMode | undefined) => void
-	applyPlanMode: (ctx: ExtensionContext) => void
-	restorePlanMode: (ctx: ExtensionContext) => void
+	applyPlanMode: () => void
+	restorePlanMode: () => void
 	rebuildConfigRules: () => void
 	reloadConfig: (ctx: ExtensionContext) => void
 	updateStatus: (ctx: ExtensionContext) => void
@@ -181,11 +181,7 @@ function showStatus(ctx: ExtensionCommandContext, deps: CommandDeps): void {
 	ctx.ui.notify(lines.join("\n"), "info")
 }
 
-function handleMode(ctx: ExtensionContext, deps: CommandDeps, arg: string | undefined): void {
-	if (!arg) {
-		ctx.ui.notify(`current mode: ${deps.getMode()}`, "info")
-		return
-	}
+function handleMode(ctx: ExtensionContext, deps: CommandDeps, arg: string): void {
 	const mode = parseModeString(arg)
 	if (!mode) {
 		ctx.ui.notify(`unknown mode "${arg}". Valid: default, plan, auto`, "warning")
@@ -193,8 +189,8 @@ function handleMode(ctx: ExtensionContext, deps: CommandDeps, arg: string | unde
 	}
 	const prev = deps.getMode()
 	deps.setRuntimeMode(mode)
-	if (prev === "plan" && mode !== "plan") deps.restorePlanMode(ctx)
-	if (mode === "plan") deps.applyPlanMode(ctx)
+	if (prev === "plan" && mode !== "plan") deps.restorePlanMode()
+	if (mode === "plan") deps.applyPlanMode()
 	deps.updateStatus(ctx)
 	if (ctx.hasUI) ctx.ui.notify(`permissions: mode → ${mode}`, "info")
 }

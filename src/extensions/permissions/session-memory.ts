@@ -9,10 +9,6 @@ export interface Scope {
 	label: string
 }
 
-/**
- * Session rule store. In-memory only; cleared when the process exits.
- * Session rules have the highest precedence (see evaluateRules).
- */
 export class SessionMemory {
 	private rules: Rule[] = []
 
@@ -41,14 +37,10 @@ export class SessionMemory {
 	}
 }
 
-/**
- * Compute a per-tool scope suggestion for "don't ask again this session".
- *
- * - bash: prefix up to the first argument starting with `-`, or first two
- *   tokens if none; offered as `Bash(prefix:*)`.
- * - file tools: directory glob (`Write(src/**)` when the path is `src/cli.ts`).
- * - other tools: just the tool name with no content.
- */
+// Scope suggestion for "don't ask again this session":
+//   bash  → `program[ subcommand]:*` (subcommand dropped when it's a flag)
+//   file  → directory glob (`src/cli.ts` → `src/**`)
+//   other → tool name only
 export function suggestScope(toolName: string, input: Record<string, unknown>): Scope {
 	const lower = toolName.toLowerCase()
 
@@ -80,20 +72,14 @@ function bashPrefixScope(command: string): string | null {
 
 	const { program, subcommand } = extractBashProgram(trimmed)
 	if (!program) return null
-
-	// If the second token is a flag or missing, prefix is just the program.
-	if (!subcommand || subcommand.startsWith("-")) {
-		return program
-	}
-
-	// Two-token scope (e.g. `git status`, `npm test`).
+	if (!subcommand || subcommand.startsWith("-")) return program
 	return `${program} ${subcommand}`
 }
 
 function dirGlob(path: string): string | null {
 	if (!path) return null
 	const idx = path.lastIndexOf("/")
-	if (idx <= 0) return path // bare filename or root
+	if (idx <= 0) return path
 	return `${path.slice(0, idx)}/**`
 }
 

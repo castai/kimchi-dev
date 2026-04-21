@@ -1,18 +1,22 @@
 import type { ExtensionAPI, ExtensionContext, ToolCallEvent } from "@mariozechner/pi-coding-agent"
 import { classifyToolCall } from "./classifier.js"
 import { registerCommands } from "./commands.js"
-import { type LoadedConfig, ensureUserConfig, loadConfig } from "./config.js"
-import { parseModeString, resolveMode } from "./mode.js"
+import { type LoadedConfig, loadConfig } from "./config.js"
+import { resolveMode } from "./mode.js"
 import { promptForApproval } from "./prompts.js"
+import planModeSupplement from "./prompts/plan-mode-supplement.js"
 import { evaluateRules, parseRules } from "./rules.js"
 import { SessionMemory } from "./session-memory.js"
-import { classifyTool, isReadOnlyBashCommand, isReadOnlyTool } from "./taxonomy.js"
-import type { PermissionMode, Rule } from "./types.js"
+import { isReadOnlyBashCommand, isReadOnlyTool } from "./taxonomy.js"
+import { BUILTIN_DENY, type PermissionMode, type Rule } from "./types.js"
 
-const READ_ONLY_TOOL_NAMES = ["read", "grep", "find", "ls", "web_search", "web_fetch", "questionnaire"]
+// Tools allowed in plan mode. bash is gated at the command level by
+// isReadOnlyBashCommand.
+const PLAN_MODE_TOOLS = ["read", "grep", "find", "ls", "web_search", "web_fetch", "questionnaire", "bash"]
 
-// Built-in tools that are always allowed in default/auto modes regardless of config.
-const BUILTIN_ALLOW_TOOL_NAMES = ["subagent", "set_phase"]
+// Orchestration-internal tool that delegates to sub-sessions; each subagent
+// enforces permissions on its own tool calls.
+const BUILTIN_ALLOW_TOOL_NAMES = ["subagent"]
 
 const MODE_LABELS: Record<PermissionMode, string> = {
 	default: "default",
@@ -27,20 +31,7 @@ const MODE_COLORS: Record<PermissionMode, "success" | "warning" | "error"> = {
 	auto: "error",
 }
 
-interface PlanModeSupplement {
-	systemPrompt: string
-}
-
-const PLAN_MODE_SYSTEM_PROMPT_SUPPLEMENT =
-	"Plan mode is active. You have read-only access to this codebase: you can read files, search, list directories, and run read-only shell commands. You cannot edit, write, or run any command that changes state. Use this mode to investigate and propose a plan. The user will switch off plan mode before you execute it."
-
 export default function permissionsExtension(pi: ExtensionAPI): void {
-	// Ensure user config file exists on first run (best-effort).
-	ensureUserConfig()
-
-	// -----------------------------------------------------------------------
-	// Flags
-	// -----------------------------------------------------------------------
 	pi.registerFlag("plan", {
 		description: "Start in plan mode (read-only exploration).",
 		type: "boolean",
@@ -64,18 +55,17 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		type: "string",
 	})
 
-	// -----------------------------------------------------------------------
-	// Shortcuts
-	// -----------------------------------------------------------------------
 	pi.registerShortcut("shift+tab", {
 		description: "Cycle permission mode (default → plan → yolo)",
 		handler: (ctx) => cycleMode(ctx),
 	})
 
-	// -----------------------------------------------------------------------
-	// State
-	// -----------------------------------------------------------------------
 	const session = new SessionMemory()
+	const builtinRules: Rule[] = parseRules(BUILTIN_DENY, "deny", "builtin")
+	// Snapshot the env-based mode hint before we overwrite process.env for
+	// subagent propagation; otherwise currentMode() would read back whatever
+	// we last wrote and ignore flag/runtime precedence.
+	const envBaseline = process.env.KIMCHI_PERMISSIONS
 	let loaded: LoadedConfig
 	let configRules: Rule[] = []
 	let runtimeMode: PermissionMode | undefined
@@ -84,60 +74,58 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	let planModeApplied = false
 
 	function rebuildConfigRules(): void {
-		const allowRules: Rule[] = [
+		configRules = [
 			...parseRules(loaded.allowBySource.cli, "allow", "cli"),
 			...parseRules(loaded.allowBySource.local, "allow", "local"),
 			...parseRules(loaded.allowBySource.project, "allow", "project"),
 			...parseRules(loaded.allowBySource.user, "allow", "user"),
-		]
-		const denyRules: Rule[] = [
 			...parseRules(loaded.denyBySource.cli, "deny", "cli"),
 			...parseRules(loaded.denyBySource.local, "deny", "local"),
 			...parseRules(loaded.denyBySource.project, "deny", "project"),
 			...parseRules(loaded.denyBySource.user, "deny", "user"),
 		]
-		configRules = [...allowRules, ...denyRules]
 	}
 
 	function currentMode(): PermissionMode {
 		return resolveMode({
 			runtime: runtimeMode,
 			flag: cliMode,
-			env: process.env.KIMCHI_PERMISSIONS,
+			env: envBaseline,
 			config: loaded.config.defaultMode,
 		}).mode
 	}
 
-	function allRules(): Rule[] {
-		return [...session.all(), ...configRules]
+	// Export effective mode so spawned subagents inherit it via process.env.
+	function propagateModeToEnv(): void {
+		process.env.KIMCHI_PERMISSIONS = currentMode()
 	}
 
-	function applyPlanModeTools(ctx: ExtensionContext): void {
+	function allRules(): Rule[] {
+		return [...session.all(), ...configRules, ...builtinRules]
+	}
+
+	function applyPlanModeTools(): void {
 		if (planModeApplied) return
 		try {
 			if (originalActiveTools === null) {
 				originalActiveTools = pi.getActiveTools()
 			}
 			const available = new Set(pi.getAllTools().map((t) => t.name))
-			const planTools = READ_ONLY_TOOL_NAMES.filter((n) => available.has(n))
-			// Include any already-active read-only custom tools we classified as read-only.
+			const planTools = PLAN_MODE_TOOLS.filter((n) => available.has(n))
 			for (const tool of pi.getAllTools()) {
 				if (!planTools.includes(tool.name) && isReadOnlyTool(tool.name)) {
 					planTools.push(tool.name)
 				}
 			}
-			// bash is included as a read-only tool — the tool_call handler gates
-			// individual commands to the read-only program allowlist.
-			if (available.has("bash") && !planTools.includes("bash")) planTools.push("bash")
 			pi.setActiveTools(planTools)
 			planModeApplied = true
 		} catch {
-			// setActiveTools may be unavailable in some modes (RPC/print); fall
-			// through — the tool_call handler still enforces the policy.
+			// setActiveTools may be unavailable in non-interactive modes; the
+			// tool_call handler still enforces the policy.
 		}
 	}
 
-	function restoreToolsFromPlanMode(ctx: ExtensionContext): void {
+	function restoreToolsFromPlanMode(): void {
 		if (!planModeApplied) return
 		if (originalActiveTools) {
 			try {
@@ -150,39 +138,25 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	}
 
 	function updateStatus(ctx: ExtensionContext): void {
-		if (ctx.hasUI) {
-			updateBelowWidget(ctx)
-		}
-	}
-
-	function updateBelowWidget(ctx: ExtensionContext): void {
 		if (!ctx.hasUI) return
 		const mode = currentMode()
 		const theme = ctx.ui.theme
-
-		// Three-dot indicator: the active mode is filled in its risk-color,
-		// the others are muted empty circles.
 		const dots = MODE_ORDER.map((m) => (m === mode ? theme.fg(MODE_COLORS[m], "●") : theme.fg("muted", "○"))).join(" ")
 		const name = theme.fg(MODE_COLORS[mode], MODE_LABELS[mode])
 		const hint = theme.fg("dim", "→ shift+tab")
-		const line = `${dots}  ${name}  ${hint}`
-		ctx.ui.setWidget("permissions-mode-widget", [line], { placement: "belowEditor" })
+		ctx.ui.setWidget("permissions-mode-widget", [`${dots}  ${name}  ${hint}`], { placement: "belowEditor" })
 	}
 
 	function cycleMode(ctx: ExtensionContext): void {
 		const current = currentMode()
-		const idx = MODE_ORDER.indexOf(current)
-		const next = MODE_ORDER[(idx + 1) % MODE_ORDER.length]
-		const wasPlan = current === "plan"
+		const next = MODE_ORDER[(MODE_ORDER.indexOf(current) + 1) % MODE_ORDER.length]
 		runtimeMode = next
-		if (wasPlan && next !== "plan") restoreToolsFromPlanMode(ctx)
-		if (next === "plan") applyPlanModeTools(ctx)
+		if (current === "plan" && next !== "plan") restoreToolsFromPlanMode()
+		if (next === "plan") applyPlanModeTools()
+		propagateModeToEnv()
 		updateStatus(ctx)
 	}
 
-	// -----------------------------------------------------------------------
-	// Session start — compute initial state once pi's flag system has resolved.
-	// -----------------------------------------------------------------------
 	pi.on("session_start", async (_event, ctx) => {
 		const { loaded: lc, errors } = loadConfig({
 			cwd: ctx.cwd,
@@ -198,43 +172,28 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 			else console.error(`permissions: ${err}`)
 		}
 
-		// Add CLI-flag session rules (these live in session memory so /permissions list shows them).
+		// CLI-flag rules live in session memory so /permissions list shows them.
 		session.addMany(parseRules(loaded.allowBySource.cli, "allow", "cli"))
 		session.addMany(parseRules(loaded.denyBySource.cli, "deny", "cli"))
 
 		if (pi.getFlag("plan")) cliMode = "plan"
 		else if (pi.getFlag("auto")) cliMode = "auto"
 
-		const resolved = resolveMode({
-			runtime: runtimeMode,
-			flag: cliMode,
-			env: process.env.KIMCHI_PERMISSIONS,
-			config: loaded.config.defaultMode,
-		})
-
-		if (resolved.mode === "plan") applyPlanModeTools(ctx)
+		if (currentMode() === "plan") applyPlanModeTools()
+		propagateModeToEnv()
 		updateStatus(ctx)
 	})
 
-	// -----------------------------------------------------------------------
-	// Before agent start — inject plan-mode supplement to system prompt.
-	// -----------------------------------------------------------------------
 	pi.on("before_agent_start", async (event): Promise<{ systemPrompt?: string }> => {
 		if (currentMode() !== "plan") return {}
-		return {
-			systemPrompt: `${event.systemPrompt}\n\n${PLAN_MODE_SYSTEM_PROMPT_SUPPLEMENT}`,
-		} satisfies PlanModeSupplement
+		return { systemPrompt: `${event.systemPrompt}\n\n${planModeSupplement.trim()}` }
 	})
 
-	// -----------------------------------------------------------------------
-	// Tool call gate — the core permission check.
-	// -----------------------------------------------------------------------
 	pi.on("tool_call", async (event, ctx) => {
 		const mode = currentMode()
 		const toolName = event.toolName.toLowerCase()
 		const input = event.input as Record<string, unknown>
 
-		// ----- Plan mode: hard-restrict to read-only tools. -----
 		if (mode === "plan") {
 			if (toolName === "bash") {
 				const command = typeof input.command === "string" ? input.command : ""
@@ -246,7 +205,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 				}
 				return undefined
 			}
-			if (!isReadOnlyTool(toolName) && !READ_ONLY_TOOL_NAMES.includes(toolName)) {
+			if (!isReadOnlyTool(toolName) && !PLAN_MODE_TOOLS.includes(toolName)) {
 				return {
 					block: true,
 					reason: `Plan mode: tool ${toolName} is not available. Use /permissions mode default to enable writes.`,
@@ -255,22 +214,18 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 			return undefined
 		}
 
-		// ----- Rule-set evaluation (shared by default and auto modes). -----
 		const match = evaluateRules(allRules(), toolName, input)
 		if (match.decision === "deny") {
 			return { block: true, reason: `Denied by rule ${formatRule(match.rule)}` }
 		}
-		if (match.decision === "allow") {
-			return undefined
-		}
+		if (match.decision === "allow") return undefined
 
-		// Built-in always-allowed tools (after deny check so user deny still wins).
-		if (BUILTIN_ALLOW_TOOL_NAMES.includes(toolName)) {
-			return undefined
-		}
+		if (BUILTIN_ALLOW_TOOL_NAMES.includes(toolName)) return undefined
 
-		// ----- Auto mode: skip classifier for read-only tools. -----
-		if (mode === "auto") {
+		// Auto mode, and default mode without a UI (subagents): classifier-gated.
+		// Mirrors Claude Code's async-agent pattern: automated checks resolve
+		// what they can, unresolved prompts fail closed.
+		if (mode === "auto" || !ctx.hasUI) {
 			if (isReadOnlyTool(toolName)) return undefined
 			if (toolName === "bash") {
 				const command = typeof input.command === "string" ? input.command : ""
@@ -287,32 +242,25 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 			if (verdict.verdict === "blocked") {
 				return { block: true, reason: `Classifier blocked: ${verdict.reason}` }
 			}
-			// requires-confirmation → prompt if UI available, else block (Q3-C).
 			if (!ctx.hasUI) {
 				return { block: true, reason: `Classifier: ${verdict.reason} (no UI to confirm)` }
 			}
 			return handleConfirm(event, { ctx, subtitle: `Classifier: ${verdict.reason}`, session })
 		}
 
-		// ----- Default mode: always prompt. -----
-		if (!ctx.hasUI) {
-			return { block: true, reason: "Permission required but no UI available to prompt." }
-		}
 		return handleConfirm(event, { ctx, session })
 	})
 
-	// -----------------------------------------------------------------------
-	// Commands (/permissions ...)
-	// -----------------------------------------------------------------------
 	registerCommands(pi, {
 		getSession: () => session,
 		getLoaded: () => loaded,
 		getMode: () => currentMode(),
 		setRuntimeMode: (m) => {
 			runtimeMode = m
+			propagateModeToEnv()
 		},
-		applyPlanMode: (ctx) => applyPlanModeTools(ctx),
-		restorePlanMode: (ctx) => restoreToolsFromPlanMode(ctx),
+		applyPlanMode: () => applyPlanModeTools(),
+		restorePlanMode: () => restoreToolsFromPlanMode(),
 		rebuildConfigRules,
 		reloadConfig: (ctx) => {
 			const { loaded: lc, errors } = loadConfig({
