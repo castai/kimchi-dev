@@ -83,36 +83,51 @@ describe("interactive multi-line paste (LLM-1358)", () => {
 		}
 	})
 
-	// Reproduces the failure mode behind LLM-1358. If the colleague's terminal (or an intermediate layer — tmux, ssh wrapper, a remote-dev terminal) doesn't honor pi-tui's bracketed-paste enable sequence `\x1b[?2004h`, the paste arrives as raw keystrokes. The Editor's `tui.input.submit` keybinding matches bare `\r` (Enter), so the first `\r` submits the first line as a chat message and the remaining lines get typed into a now-empty editor, which in turn submits them one by one. The user sees their paste split across messages with nothing resembling a single multi-line prompt — colloquially, "multi-line paste doesn't work."
-	it(
-		"raw paste without bracketed-paste markers submits after the first newline (failure repro)",
-		{ timeout: 60_000 },
-		async () => {
-			const session = spawnInteractive()
-			try {
-				await waitForPrompt(session)
+	// LLM-1358 fix verification. When the terminal (or tmux/SSH layer) doesn't honor pi-tui's bracketed-paste enable sequence, a multi-line paste arrives as raw `\r`-separated keystrokes, which would normally submit each line as its own message. The paste interceptor in src/paste-interceptor.ts detects such bursts and re-emits them wrapped in ESC[200~...ESC[201~ so pi-tui's existing bracketed-paste pipeline handles them correctly. This test confirms the fallback path produces the same result as the bracketed-paste path.
+	it("paste without bracketed-paste markers is recovered by the interceptor", { timeout: 60_000 }, async () => {
+		const session = spawnInteractive()
+		try {
+			await waitForPrompt(session)
 
-				// Terminals send Enter as `\r`, not `\n`. Replace accordingly so this really simulates "bracketed paste is disabled and the paste came in as keystrokes."
-				session.pty.write(PASTED.replace(/\n/g, "\r"))
+			// Terminals send Enter as `\r`, not `\n`. Writing `\r`-separated content simulates "bracketed paste is disabled and the paste arrived as keystrokes."
+			session.pty.write(PASTED.replace(/\n/g, "\r"))
 
-				// Wait for evidence that a submission occurred. The agent will try to process the first submitted line and either render a spinner ("Working...") or an auth error — both are unambiguous signals that the Editor treated the pasted content as "type this then press Enter" rather than a single paste.
-				await session.waitFor((out) => {
-					const plain = stripAnsi(out)
-					return /Working\.\.\./.test(plain) || /Error:/.test(plain)
-				}, 10_000)
+			await session.waitFor((out) => allFourLinesVisible(stripAnsi(out)), 5_000)
 
-				const plain = stripAnsi(session.output())
-
-				// Primary symptom: the 4 lines do NOT all appear as standalone editor rows — they got split across submitted messages instead. Specifically, the intermediate lines ("two" and "three") don't survive anywhere as distinct editor rows.
-				expect(allFourLinesVisible(plain)).toBe(false)
-				expect(plain).not.toMatch(/(^|\n)\s*two\s+\n/)
-				expect(plain).not.toMatch(/(^|\n)\s*three\s+\n/)
-
-				// Evidence that kimchi treated the paste as "submit the first line as a message" — either the agent is processing, or the dummy API key produced an auth error.
-				expect(plain).toMatch(/Working\.\.\.|Error:/)
-			} finally {
-				await session.kill()
+			const plain = stripAnsi(session.output())
+			for (const re of FOUR_LINE_ROW_REGEXES) {
+				expect(plain).toMatch(re)
 			}
-		},
-	)
+			expect(plain).not.toMatch(/onetwothree/)
+			expect(plain).not.toMatch(/threehow many/)
+		} finally {
+			await session.kill()
+		}
+	})
+
+	// False-positive guard for the paste interceptor. Pressing Enter rapidly (or a keyboard macro firing `\r`s) must NOT be misidentified as a paste. Two risks:
+	//   1) looksLikeRawPaste fires on a single `\r` — impossible by design (length < 4 and cr-count < 2), covered by the unit test.
+	//   2) The kernel / PTY layer coalesces multiple `\r` writes into one large chunk — the heuristic would then see ≥2 `\r`s and wrap. This test verifies small gaps between writes are enough to prevent that coalescing.
+	// Signal: if the interceptor misfires, the ten `\r`s get wrapped as a single paste, normalized to ten `\n`s, and the Editor renders a tall block of empty rows inside the prompt border. We assert the stripped output does not contain that tall empty block.
+	it("individually-typed \\r bytes are not treated as a paste", { timeout: 60_000 }, async () => {
+		const session = spawnInteractive()
+		try {
+			await waitForPrompt(session)
+
+			// Write `\r` ten times with small gaps so each lands as its own stdin chunk (not kernel-coalesced into one large burst the heuristic would misread).
+			for (let i = 0; i < 10; i++) {
+				session.pty.write("\r")
+				await new Promise((r) => setTimeout(r, 30))
+			}
+			// Let the TUI fully render whatever state the writes produced.
+			await new Promise((r) => setTimeout(r, 500))
+
+			const plain = stripAnsi(session.output())
+
+			// A misfire would wrap `\r\r\r\r\r\r\r\r\r\r` into a single bracketed paste and push ten `\n`-separated empty rows into the editor buffer — showing up as a long run of blank rows between the editor border dividers. Six or more consecutive empty/whitespace-only lines is well beyond anything the idle TUI renders.
+			expect(plain).not.toMatch(/(\n\s*){6,}\n/)
+		} finally {
+			await session.kill()
+		}
+	})
 })
