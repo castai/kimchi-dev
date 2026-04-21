@@ -11,6 +11,9 @@ import type { PermissionMode, Rule } from "./types.js"
 
 const READ_ONLY_TOOL_NAMES = ["read", "grep", "find", "ls", "web_search", "web_fetch", "questionnaire"]
 
+// Built-in tools that are always allowed in default/auto modes regardless of config.
+const BUILTIN_ALLOW_TOOL_NAMES = ["subagent", "set_phase"]
+
 const MODE_LABELS: Record<PermissionMode, string> = {
 	default: "default",
 	plan: "plan",
@@ -65,7 +68,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	// Shortcuts
 	// -----------------------------------------------------------------------
 	pi.registerShortcut("shift+tab", {
-		description: "Cycle permission mode (default → plan → auto)",
+		description: "Cycle permission mode (default → plan → yolo)",
 		handler: (ctx) => cycleMode(ctx),
 	})
 
@@ -147,12 +150,9 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	}
 
 	function updateStatus(ctx: ExtensionContext): void {
-		if (!ctx.hasUI) return
-		const mode = currentMode()
-		const theme = ctx.ui.theme
-		// Header status: compact dot + name for the active mode only.
-		ctx.ui.setStatus("permissions-mode", theme.fg(MODE_COLORS[mode], `● ${MODE_LABELS[mode]}`))
-		updateBelowWidget(ctx)
+		if (ctx.hasUI) {
+			updateBelowWidget(ctx)
+		}
 	}
 
 	function updateBelowWidget(ctx: ExtensionContext): void {
@@ -164,7 +164,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		// the others are muted empty circles.
 		const dots = MODE_ORDER.map((m) => (m === mode ? theme.fg(MODE_COLORS[m], "●") : theme.fg("muted", "○"))).join(" ")
 		const name = theme.fg(MODE_COLORS[mode], MODE_LABELS[mode])
-		const hint = theme.fg("muted", "→ shift+tab")
+		const hint = theme.fg("dim", "→ shift+tab")
 		const line = `${dots}  ${name}  ${hint}`
 		ctx.ui.setWidget("permissions-mode-widget", [line], { placement: "belowEditor" })
 	}
@@ -178,7 +178,6 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		if (wasPlan && next !== "plan") restoreToolsFromPlanMode(ctx)
 		if (next === "plan") applyPlanModeTools(ctx)
 		updateStatus(ctx)
-		if (ctx.hasUI) ctx.ui.notify(`permissions: ${MODE_LABELS[next]}`, "info")
 	}
 
 	// -----------------------------------------------------------------------
@@ -262,6 +261,11 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 			return { block: true, reason: `Denied by rule ${formatRule(match.rule)}` }
 		}
 		if (match.decision === "allow") {
+			return undefined
+		}
+
+		// Built-in always-allowed tools (after deny check so user deny still wins).
+		if (BUILTIN_ALLOW_TOOL_NAMES.includes(toolName)) {
 			return undefined
 		}
 

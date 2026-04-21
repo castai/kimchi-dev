@@ -26,6 +26,7 @@ import webSearchExtension from "./extensions/web-search/index.js"
 import { updateModelsConfig } from "./models.js"
 import { runSetupWizard } from "./setup-wizard.js"
 import { setAvailableModelIds } from "./startup-context.js"
+import { seedDefaultSettings } from "./startup-settings.js"
 
 const telemetryConfig = readTelemetryConfig()
 
@@ -113,6 +114,11 @@ try {
 	// thinking-level cycle). Must run before main() so the keybindings file
 	// is loaded with the override in place.
 	reserveShiftTabForPermissions(agentDir)
+
+	// Seed quietStartup=true so the built-in [Extensions] / [Skills] banners
+	// don't clutter the TUI. The 11 inline extensions kimchi registers show up
+	// as <inline:1>..<inline:N>. Users can flip this back in /settings.
+	seedDefaultSettings(agentDir)
 
 	// Share the discovered model IDs with extensions before main() runs.
 	// prompt-enrichment reads this to build ModelRegistry with live model IDs.
