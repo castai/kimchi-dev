@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
-import { dirname, resolve } from "node:path"
+import { dirname, isAbsolute, resolve } from "node:path"
 import type { AssistantMessage, ToolCall } from "@mariozechner/pi-ai"
 import type { ExtensionAPI, SessionEntry, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
-import { attachmentExists } from "../attachment-path.js"
 import { isBunBinary, isRunningUnderBun } from "../env.js"
+import { findExistingFile, stripAtPrefix } from "../fs-paths.js"
 import { formatCount } from "./format.js"
 import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./spinner.js"
 
@@ -130,33 +130,43 @@ function collectExtensionArgs(): string[] {
 	return result
 }
 
-export type BuildSubagentArgsResult = { kind: "missing"; missing: string[] } | { kind: "ok"; args: string[] }
+export type ValidateAttachmentsResult = { kind: "ok"; resolved: string[] } | { kind: "missing"; missing: string[] }
+
+export function validateAttachments(
+	attachments: string[] | undefined,
+	cwd: string,
+	findExisting: (filePath: string, cwd: string) => string | null = findExistingFile,
+): ValidateAttachmentsResult {
+	if (!attachments || attachments.length === 0) return { kind: "ok", resolved: [] }
+	const missing: string[] = []
+	const resolved: string[] = []
+	for (const raw of attachments) {
+		const abs = findExisting(raw, cwd)
+		if (abs !== null) resolved.push(abs)
+		else missing.push(raw)
+	}
+	if (missing.length > 0) return { kind: "missing", missing }
+	return { kind: "ok", resolved }
+}
 
 export function buildSubagentArgs(
-	params: { provider: string; model: string; prompt: string; attachments?: string[] },
-	cwd: string,
+	params: { provider: string; model: string; prompt: string },
+	resolvedAttachments: string[],
 	extensionArgs: string[],
-	fileExists: (p: string, cwd: string) => boolean = attachmentExists,
-): BuildSubagentArgsResult {
-	const attachments = params.attachments ?? []
-	const missing = attachments.filter((p) => !fileExists(p, cwd))
-	if (missing.length > 0) return { kind: "missing", missing }
-	return {
-		kind: "ok",
-		args: [
-			"--mode",
-			"json",
-			"-p",
-			"--no-session",
-			"--provider",
-			params.provider,
-			"--model",
-			params.model,
-			...extensionArgs,
-			...attachments.map((p) => `@${p}`),
-			params.prompt,
-		],
-	}
+): string[] {
+	return [
+		"--mode",
+		"json",
+		"-p",
+		"--no-session",
+		"--provider",
+		params.provider,
+		"--model",
+		params.model,
+		...extensionArgs,
+		...resolvedAttachments.map((p) => `@${p}`),
+		params.prompt,
+	]
 }
 
 function getSubagentInvocation(args: string[]): { command: string; args: string[] } {
@@ -399,9 +409,10 @@ const SubagentParams = Type.Object({
 	model: Type.String({ description: "Model ID to use for the subagent (e.g. glm-5-fp8, kimi-k2.5)" }),
 	prompt: Type.String({ description: "Prompt to send to the subagent" }),
 	attachments: Type.Optional(
-		Type.Array(Type.String({ description: "File path (without @ prefix) to load at subagent startup." }), {
+		Type.Array(Type.String({ description: "File path to load at subagent startup." }), {
 			description:
-				"File paths the subagent needs available at startup. Any file type pi's CLI loads via @file works (images, text files, etc.). Paths must be provided without the @ prefix — the runtime adds it. Images require a vision-capable model.",
+				"File paths the subagent needs available at startup. Any file type pi's CLI loads via @file works (images, text files, etc.). Do not include the @ prefix — the runtime adds it. Images require a vision-capable model.",
+			maxItems: 10,
 		}),
 	),
 	tokenBudget: Type.Optional(
@@ -465,20 +476,23 @@ export default function (pi: ExtensionAPI) {
 		parameters: SubagentParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			const built = buildSubagentArgs(params, ctx.cwd, collectExtensionArgs())
-			if (built.kind === "missing") {
+			const validated = validateAttachments(params.attachments, ctx.cwd)
+			if (validated.kind === "missing") {
+				const anyRelative = validated.missing.some((p) => !isAbsolute(stripAtPrefix(p)) && !p.startsWith("~"))
+				const cwdHint = anyRelative ? ` (relative to ${ctx.cwd})` : ""
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Attachment files not found (relative to ${ctx.cwd}): ${built.missing.join(", ")}. Check the paths and retry.`,
+							text: `Attachment files not found${cwdHint}: ${validated.missing.join(", ")}. Check the paths and retry.`,
 						},
 					],
 					details: undefined,
 					isError: true,
 				}
 			}
-			const invocation = getSubagentInvocation(built.args)
+			const args = buildSubagentArgs(params, validated.resolved, collectExtensionArgs())
+			const invocation = getSubagentInvocation(args)
 
 			let lastToolCall: string | undefined
 			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(

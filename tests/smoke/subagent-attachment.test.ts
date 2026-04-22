@@ -7,10 +7,14 @@ import { runBinary } from "./harness.js"
 const SENTINEL = "PURPLE_RHINO_8891"
 const FIXTURE_PATH = resolve("tests/smoke/fixtures/subagent-attachment.txt")
 
+if (!process.env.KIMCHI_API_KEY) {
+	console.warn("[smoke] KIMCHI_API_KEY not set — subagent-attachment smoke test will be skipped.")
+}
+
 describe("subagent attachment smoke tests", () => {
 	it.skipIf(!process.env.KIMCHI_API_KEY)(
 		"subagent receives file attachment and can read its contents",
-		{ timeout: 180_000, retry: 2 },
+		{ timeout: 180_000, retry: 1 },
 		() => {
 			const prompt = [
 				"Use the `subagent` tool exactly once with these arguments:",
