@@ -29,10 +29,10 @@ describe("parseRule", () => {
 		expect(parseRule("Bash(unterminated", "allow", "user")).toBeNull()
 	})
 
-	it("stringifies round-trip", () => {
+	it("stringifies to lowercase internal name", () => {
 		const r = parseRule("Bash(git status)", "allow", "user")
 		expect(r).not.toBeNull()
-		expect(stringifyRule(r as Rule)).toBe("Bash(git status)")
+		expect(stringifyRule(r as Rule)).toBe("bash(git status)")
 	})
 })
 

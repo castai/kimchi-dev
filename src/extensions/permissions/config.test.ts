@@ -21,16 +21,16 @@ describe("loadConfig merging", () => {
 			join(tmpCwd, ".kimchi", "permissions.json"),
 			JSON.stringify({
 				defaultMode: "plan",
-				allow: ["Bash(git:*)"],
-				deny: ["Write(.env)"],
+				allow: ["bash(git:*)"],
+				deny: ["write(.env)"],
 			}),
 		)
 
 		const { loaded, errors } = loadConfig({ cwd: tmpCwd })
 		expect(errors).toEqual([])
 		expect(loaded.config.defaultMode).toBe("plan")
-		expect(loaded.allowBySource.project).toContain("Bash(git:*)")
-		expect(loaded.denyBySource.project).toContain("Write(.env)")
+		expect(loaded.allowBySource.project).toContain("bash(git:*)")
+		expect(loaded.denyBySource.project).toContain("write(.env)")
 		expect(loaded.paths.project).toBeDefined()
 	})
 
@@ -38,40 +38,40 @@ describe("loadConfig merging", () => {
 		mkdirSync(join(tmpCwd, ".kimchi"), { recursive: true })
 		writeFileSync(
 			join(tmpCwd, ".kimchi", "permissions.json"),
-			JSON.stringify({ defaultMode: "default", allow: ["Bash(git:*)"] }),
+			JSON.stringify({ defaultMode: "default", allow: ["bash(git:*)"] }),
 		)
 		writeFileSync(
 			join(tmpCwd, ".kimchi", "permissions.local.json"),
-			JSON.stringify({ defaultMode: "auto", allow: ["Read(/etc/**)"] }),
+			JSON.stringify({ defaultMode: "auto", allow: ["read(/etc/**)"] }),
 		)
 
 		const { loaded } = loadConfig({ cwd: tmpCwd })
 		// local overrides defaultMode
 		expect(loaded.config.defaultMode).toBe("auto")
 		// allow is additive
-		expect(loaded.config.allow).toContain("Bash(git:*)")
-		expect(loaded.config.allow).toContain("Read(/etc/**)")
+		expect(loaded.config.allow).toContain("bash(git:*)")
+		expect(loaded.config.allow).toContain("read(/etc/**)")
 	})
 
 	it("cli override replaces merged config entirely", () => {
 		mkdirSync(join(tmpCwd, ".kimchi"), { recursive: true })
-		writeFileSync(join(tmpCwd, ".kimchi", "permissions.json"), JSON.stringify({ allow: ["Bash(git:*)"] }))
+		writeFileSync(join(tmpCwd, ".kimchi", "permissions.json"), JSON.stringify({ allow: ["bash(git:*)"] }))
 
 		const overridePath = join(tmpCwd, "override.json")
-		writeFileSync(overridePath, JSON.stringify({ defaultMode: "auto", deny: ["Bash"] }))
+		writeFileSync(overridePath, JSON.stringify({ defaultMode: "auto", deny: ["bash"] }))
 
 		const { loaded } = loadConfig({ cwd: tmpCwd, cliConfigPath: overridePath })
 		expect(loaded.config.defaultMode).toBe("auto")
 		// project allow is NOT included because cli-override replaces.
-		expect(loaded.config.allow).not.toContain("Bash(git:*)")
-		expect(loaded.config.deny).toContain("Bash")
+		expect(loaded.config.allow).not.toContain("bash(git:*)")
+		expect(loaded.config.deny).toContain("bash")
 	})
 
 	it("reports schema validation errors but doesn't throw", () => {
 		mkdirSync(join(tmpCwd, ".kimchi"), { recursive: true })
 		writeFileSync(
 			join(tmpCwd, ".kimchi", "permissions.json"),
-			JSON.stringify({ defaultMode: "invalid", allow: ["Bash"] }),
+			JSON.stringify({ defaultMode: "invalid", allow: ["bash"] }),
 		)
 
 		const { loaded, errors } = loadConfig({ cwd: tmpCwd })
@@ -83,10 +83,10 @@ describe("loadConfig merging", () => {
 	it("passes CLI flag rules through as cli source", () => {
 		const { loaded } = loadConfig({
 			cwd: tmpCwd,
-			cliAllow: ["Bash(npm test)"],
-			cliDeny: ["Write(.env)"],
+			cliAllow: ["bash(npm test)"],
+			cliDeny: ["write(.env)"],
 		})
-		expect(loaded.allowBySource.cli).toEqual(["Bash(npm test)"])
-		expect(loaded.denyBySource.cli).toEqual(["Write(.env)"])
+		expect(loaded.allowBySource.cli).toEqual(["bash(npm test)"])
+		expect(loaded.denyBySource.cli).toEqual(["write(.env)"])
 	})
 })

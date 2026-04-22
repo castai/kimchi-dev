@@ -88,31 +88,15 @@ function normalizeVerdict(v: unknown): ClassifierVerdict | undefined {
 
 function extractJsonObject(raw: string): Record<string, unknown> | null {
 	const trimmed = raw.trim()
-	try {
-		const parsed = JSON.parse(trimmed)
-		if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>
-	} catch {
-		// fall through to balanced-brace extraction
-	}
 	const start = trimmed.indexOf("{")
-	if (start < 0) return null
-	let depth = 0
-	for (let i = start; i < trimmed.length; i++) {
-		const ch = trimmed[i]
-		if (ch === "{") depth++
-		else if (ch === "}") {
-			depth--
-			if (depth === 0) {
-				try {
-					const parsed = JSON.parse(trimmed.slice(start, i + 1))
-					if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>
-				} catch {
-					return null
-				}
-			}
-		}
+	const end = trimmed.lastIndexOf("}")
+	if (start < 0 || end <= start) return null
+	try {
+		const parsed = JSON.parse(trimmed.slice(start, end + 1))
+		return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null
+	} catch {
+		return null
 	}
-	return null
 }
 
 function safeStringify(value: unknown): string {

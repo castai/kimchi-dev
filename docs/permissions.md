@@ -1,119 +1,112 @@
 # Permissions
 
-kimchi-code ships a three-mode permission system that gates every tool call
-the assistant wants to make. This replaces the previous "run everything, no
-approval" behavior with explicit consent or configurable policy.
+kimchi-code gates every tool call through a three-mode permission system.
+Switch modes at any time with **`shift+tab`** or `/permissions mode <name>`.
 
 ## Modes
 
-| Mode | How to select | What happens on tool call |
-|------|---------------|---------------------------|
-| `default` | *(default)* | Prompt the user for each call. Remember approvals per-scope for the session. |
-| `plan` | `--plan` flag, `KIMCHI_PERMISSIONS=plan`, or `/permissions mode plan` | Read-only tools only; writes/executes blocked with a clear error. |
-| `auto` | `--auto` flag, `KIMCHI_PERMISSIONS=auto`, or `/permissions mode auto` | Allow/deny rules short-circuit. Otherwise an LLM classifier (on the same model the harness is using) decides safe / requires-confirmation / blocked. |
+| Mode | UI label | Behavior |
+|------|----------|----------|
+| `default` | default | Prompt on each call that isn't covered by a rule. Approvals can be remembered for the session. |
+| `plan` | plan | Read-only exploration. Non-read tools are hidden; `bash` is restricted to read-only commands. |
+| `auto` | yolo | Allow/deny rules short-circuit. Otherwise a classifier (same model as the session) decides `safe` / `requires-confirmation` / `blocked`. |
 
 ### Default mode
 
-For each tool call that isn't already allowed by a rule, you get three options:
+On each unmatched call the user picks from:
 
-- **Yes — just this call.** Allow this call only.
-- **Yes — don't ask again for `<scope>` this session.** Allow and append an
-  in-memory rule for the session. Scope is tool-specific — for `bash` it's a
-  prefix like `Bash(git:*)`, for file tools it's a directory glob like
-  `Write(src/**)`.
-- **No — tell the assistant what to do differently.** Block the call and
-  forward your explanation to the assistant as the tool-result error, so it
-  can course-correct.
+- **Yes — just this call.**
+- **Yes — don't ask again for `<scope>` this session.** Adds an in-memory rule. Scope is tool-specific: `bash(git status:*)` (program + subcommand), `write(src/**)` (directory glob), or just the tool name.
+- **No — tell the assistant what to do differently.** Blocks the call and forwards your message as the tool error.
+
+Headless sessions (no UI) in `default` mode route through the classifier instead; `requires-confirmation` verdicts fail closed.
 
 ### Plan mode
 
-Intended for read-only exploration. The assistant sees only read-only tools
-(`read`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, `questionnaire`, plus
-any custom tools with read-oriented names like `list_*`/`get_*`/`search_*`).
-The `bash` tool is available but restricted to an allowlist of read-only
-programs (`cat`, `ls`, `git status|log|diff`, `npm list`, etc.). The system
-prompt is supplemented with instructions explaining the mode.
+Exposes only read-oriented tools: `read`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, `questionnaire`, plus any tool whose name matches read-only patterns (`read*`, `get*`, `list*`, `search*`, `query*`, `describe*`, `view*`, `show*`, `loki_*`). `bash` is available but restricted to read-only commands (`cat`, `ls`, `git status|log|diff|show|…`, `kubectl get|describe|…`, etc. — see `src/extensions/permissions/taxonomy.ts`). The system prompt is supplemented to explain the restriction.
 
 ### Auto mode
 
-For each tool call:
+Per call:
 
-1. Read-only tools and read-only bash commands are allowed immediately.
-2. Deny rules short-circuit to `block`.
-3. Allow rules short-circuit to `allow`.
-4. Otherwise the same model the harness is using is called with a
-   safety-gate prompt. It returns `safe` / `requires-confirmation` /
-   `blocked` with a one-sentence reason.
-5. `requires-confirmation` prompts the user (falls through to block if no UI).
-6. On classifier error or timeout (8 s default), the user is prompted, or
-   the call is blocked if no UI is available.
+1. Read-only tools and read-only bash commands → allow.
+2. Deny rule matches → block.
+3. Allow rule matches → allow.
+4. `subagent` and `set_phase` (built-in trusted tools) → allow.
+5. Otherwise invoke the classifier (8s default timeout):
+   - `safe` → allow
+   - `blocked` → block with reason
+   - `requires-confirmation` → prompt user (block if no UI)
+   - error/timeout → prompt user (block if no UI)
+
+## Built-in denylist
+
+Applied at the lowest precedence so users can override by adding higher-precedence allow rules:
+
+```
+bash(rm -rf /*)
+bash(sudo *)
+write(.env)    write(.env.*)
+edit(.env)     edit(.env.*)
+```
+
+`bash` also hard-blocks `sudo`, `rm -rf /`, `shutdown`, `reboot`, `mkfs`, `dd of=/dev/*`, and fork bombs — these cannot be allowlisted.
 
 ## Configuration
 
-Config files are JSON at the following paths, merged in order (later layers
-override earlier ones for `defaultMode`; `allow`/`deny` are additive):
+JSON files, merged in this order (later layers override `defaultMode`; `allow`/`deny` are additive):
 
 1. `~/.config/kimchi/harness/permissions.json` (user)
 2. `<cwd>/.kimchi/permissions.json` (project)
-3. `<cwd>/.kimchi/permissions.local.json` (local, typically gitignored)
-4. `--permissions-config <path>` on the CLI, which **replaces** the merged
-   config entirely.
+3. `<cwd>/.kimchi/permissions.local.json` (local, usually gitignored)
+4. `--permissions-config <path>` **replaces** the merged config entirely.
 
 Schema:
 
 ```json
 {
   "defaultMode": "default",
-  "allow": ["Bash(git status)", "Bash(npm test *)", "Read(**)"],
-  "deny": ["Bash(rm -rf /*)", "Bash(sudo *)", "Write(.env)"],
+  "allow": ["bash(git status)", "bash(npm test *)", "read(**)"],
+  "deny": ["bash(rm -rf /*)", "write(.env)"],
   "classifierTimeoutMs": 8000
 }
 ```
 
 ### Rule syntax
 
-Rules are strings of the form `ToolName` or `ToolName(content)`. Tool names
-are case-insensitive (`Bash` == `bash`). Content semantics depend on the tool:
+`toolname` or `toolname(content)`. Use the lowercase internal tool name (`bash`, `read`, `write`, `edit`, `ls`, `grep`, `find`, …). Input is case-insensitive (`Bash` is accepted and normalized to `bash`), but examples and saved rules use lowercase for consistency. MCP names (`mcp__server__tool`) keep their underscores verbatim.
 
 | Tool | Content semantics |
 |------|-------------------|
-| `bash` | `prefix:*` → prefix match; `*` → wildcard (trailing ` *` is optional so `git *` matches bare `git`); `\*` → literal star; otherwise exact. |
-| `read`, `write`, `edit`, `ls`, `grep`, `find` | glob matched by [micromatch](https://github.com/micromatch/micromatch) against the `path` argument. |
-| other (including MCP `mcp__*__*`) | exact-match against a stable JSON serialization of the input. |
+| `bash` | `prefix:*` → prefix match; `*` → wildcard (trailing ` *` is optional, so `git *` also matches bare `git`); `\*` → literal star; otherwise exact match. |
+| `read`, `write`, `edit`, `ls`, `grep`, `find` | [micromatch](https://github.com/micromatch/micromatch) glob against the `path` argument. |
+| other (incl. `mcp__server__tool`) | exact match against a stable JSON serialization of the input. |
 
 ### Precedence
 
-Rules are evaluated in source order (highest first): **session** > **cli** >
-**local** > **project** > **user**. Within a single source, `deny` rules beat
-`allow` rules. First match wins. If no rule matches, mode behavior takes
-over (prompt in default, block in plan, classifier in auto).
+Evaluated in source order (highest first): **session > cli > local > project > user > builtin**. Within a source, `deny` beats `allow`. First match wins. No match → mode behavior (prompt / block / classify).
 
 ## Slash commands
 
-- `/permissions` — show current mode, config paths, and rules.
-- `/permissions mode <default|plan|auto>` — switch mode at runtime.
-- `/permissions allow <rule>` — add a session allow rule.
-- `/permissions deny <rule>` — add a session deny rule.
-- `/permissions save user|project` — persist session rules to user or project
-  config.
+- `/permissions` — open an interactive selector (change mode, add/save rules, reload).
+- `/permissions list` (or `status`) — print current mode, config paths, and all rules.
+- `/permissions mode [default|plan|auto]` — switch mode (no arg opens a picker).
+- `/permissions allow <rule>` / `deny <rule>` — add a session rule.
+- `/permissions save user|project` — persist session rules to a config file.
 - `/permissions reload` — re-read config files.
-- `/permissions help` — show help.
+- `/permissions help` — show usage.
 
 ## CLI flags
 
-- `--plan` / `--auto` — start in plan or auto mode.
+- `--plan` / `--auto` — start in that mode.
 - `--permissions-config <path>` — override all config files.
-- `--allow-tool "<rule>,<rule>,..."` — add session allow rules.
-- `--deny-tool "<rule>,<rule>,..."` — add session deny rules.
+- `--allow-tool "<rule>,<rule>,..."` — session allow rules.
+- `--deny-tool "<rule>,<rule>,..."` — session deny rules.
 
 ## Env vars
 
-- `KIMCHI_PERMISSIONS=default|plan|auto` — set the mode (overridden by CLI
-  flags and runtime `/permissions mode`).
+- `KIMCHI_PERMISSIONS=default|plan|auto` — initial mode (overridden by CLI flags and runtime changes). Propagated to spawned subagents.
 
-## Behavior change notice
+## Keybindings
 
-This is a behavior change from older kimchi-code versions, which ran every
-tool call with no approval. To restore the previous behavior, set
-`defaultMode: "auto"` in `~/.config/kimchi/harness/permissions.json` (and be
-aware that the classifier still runs).
+- `shift+tab` — cycle `default → plan → yolo → default`.

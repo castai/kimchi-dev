@@ -2,8 +2,9 @@ import micromatch from "micromatch"
 import { FILE_TOOLS } from "./taxonomy.js"
 import type { Rule, RuleBehavior, RuleSource } from "./types.js"
 
-// Rule syntax: `ToolName` or `ToolName(content)`. Tool names are case-
-// insensitive; MCP names containing `__` are preserved verbatim.
+// Rule syntax: `toolname` or `toolname(content)`. Tool names are case-
+// insensitive on input and normalized to the lowercase internal name;
+// MCP names containing `__` are preserved verbatim.
 export function parseRule(raw: string, behavior: RuleBehavior, source: RuleSource): Rule | null {
 	const trimmed = raw.trim()
 	if (!trimmed) return null
@@ -19,14 +20,7 @@ export function parseRules(strings: string[], behavior: RuleBehavior, source: Ru
 }
 
 export function stringifyRule(rule: Rule): string {
-	const name = titleCase(rule.toolName)
-	return rule.content === undefined ? name : `${name}(${rule.content})`
-}
-
-export function titleCase(name: string): string {
-	if (name.startsWith("mcp__")) return name
-	if (name.length === 0) return name
-	return name[0].toUpperCase() + name.slice(1)
+	return rule.content === undefined ? rule.toolName : `${rule.toolName}(${rule.content})`
 }
 
 const BASH_TOOL = "bash"
@@ -63,65 +57,37 @@ export function matchBashRule(pattern: string, command: string): boolean {
 		return cmd.startsWith(`${prefix} `) || cmd.startsWith(`${prefix}\t`)
 	}
 
-	if (!hasUnescapedStar(pat) && !hasEscapedSpecial(pat)) {
-		return cmd === pat
-	}
-
 	return regexFromWildcard(pat).test(cmd)
 }
 
-function hasEscapedSpecial(pattern: string): boolean {
-	return /\\[*\\]/.test(pattern)
-}
+const REGEX_META = /[.+?^${}()|[\]\\'"]/g
+const PATTERN_TOKEN = /\\\\|\\\*|\*|[^\\*]+|\\/g
 
-function hasUnescapedStar(pattern: string): boolean {
-	for (let i = 0; i < pattern.length; i++) {
-		if (pattern[i] !== "*") continue
-		let backslashes = 0
-		let j = i - 1
-		while (j >= 0 && pattern[j] === "\\") {
-			backslashes++
-			j--
-		}
-		if (backslashes % 2 === 0) return true
-	}
-	return false
-}
-
-const ESC_STAR = "\u0000ESC_STAR\u0000"
-const ESC_BACKSLASH = "\u0000ESC_BS\u0000"
-
+// Compile a wildcard pattern to an anchored regex. `*` matches anything,
+// `\*` / `\\` are literal `*` / `\`, other chars match literally. As a
+// convenience, a lone trailing ` *` is optional so `cmd *` also matches `cmd`.
+//
+//   pattern        regex             matches
+//   -------------  ----------------  ------------------------------
+//   git status     ^git status$      git status
+//   npm test *     ^npm test( .*)?$  npm test, npm test foo
+//   foo * bar      ^foo .* bar$      foo anything bar
+//   echo \*        ^echo \*$         echo * (literal)
+//   a.b*           ^a\.b.*$          a.b, a.bxyz
 function regexFromWildcard(pattern: string): RegExp {
-	let processed = ""
-	let i = 0
-	while (i < pattern.length) {
-		const ch = pattern[i]
-		if (ch === "\\" && i + 1 < pattern.length) {
-			const next = pattern[i + 1]
-			if (next === "*") {
-				processed += ESC_STAR
-				i += 2
-				continue
-			}
-			if (next === "\\") {
-				processed += ESC_BACKSLASH
-				i += 2
-				continue
-			}
+	let stars = 0
+	const body = Array.from(pattern.matchAll(PATTERN_TOKEN), (m) => {
+		const t = m[0]
+		if (t === "*") {
+			stars++
+			return ".*"
 		}
-		processed += ch
-		i++
-	}
+		if (t === "\\*" || t === "\\\\") return t // already a valid regex escape
+		return t.replace(REGEX_META, "\\$&")
+	}).join("")
 
-	let regex = processed.replace(/[.+?^${}()|[\]\\'"]/g, "\\$&").replace(/\*/g, ".*")
-	regex = regex.split(ESC_STAR).join("\\*").split(ESC_BACKSLASH).join("\\\\")
-
-	const unescapedStarCount = (processed.match(/\*/g) ?? []).length
-	if (regex.endsWith(" .*") && unescapedStarCount === 1) {
-		regex = `${regex.slice(0, -3)}( .*)?`
-	}
-
-	return new RegExp(`^${regex}$`, "s")
+	const adjusted = stars === 1 && body.endsWith(" .*") ? `${body.slice(0, -3)}( .*)?` : body
+	return new RegExp(`^${adjusted}$`, "s")
 }
 
 export function matchPathRule(pattern: string, path: string): boolean {

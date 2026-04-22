@@ -37,10 +37,10 @@ export const DEFAULT_CONFIG: PermissionsConfig = {
 // Denylist applied as the lowest-precedence rule source. Users can override by
 // adding matching allow rules at a higher-precedence source.
 export const BUILTIN_DENY: string[] = [
-	"Bash(rm -rf /*)",
-	"Bash(sudo *)",
-	"Write(.env)",
-	"Write(.env.*)",
-	"Edit(.env)",
-	"Edit(.env.*)",
+	"bash(rm -rf /*)",
+	"bash(sudo *)",
+	"write(.env)",
+	"write(.env.*)",
+	"edit(.env)",
+	"edit(.env.*)",
 ]

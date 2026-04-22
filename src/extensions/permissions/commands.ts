@@ -134,7 +134,7 @@ async function openModePicker(ctx: ExtensionContext, deps: CommandDeps): Promise
 }
 
 async function promptForRule(ctx: ExtensionContext, deps: CommandDeps, behavior: "allow" | "deny"): Promise<void> {
-	const input = await ctx.ui.input(`Add ${behavior} rule`, "e.g. Bash(git:*) or Write(src/**)")
+	const input = await ctx.ui.input(`Add ${behavior} rule`, "e.g. bash(git:*) or write(src/**)")
 	const text = input?.trim()
 	if (!text) return
 	addSessionRule(ctx, deps, text, behavior)

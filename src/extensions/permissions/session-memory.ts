@@ -1,4 +1,3 @@
-import { titleCase } from "./rules.js"
 import { FILE_TOOLS, extractBashProgram } from "./taxonomy.js"
 import type { Rule } from "./types.js"
 
@@ -39,21 +38,21 @@ export function suggestScope(toolName: string, input: Record<string, unknown>): 
 		const command = typeof input.command === "string" ? input.command : ""
 		const prefix = bashPrefixScope(command)
 		if (prefix) {
-			return { toolName: lower, content: `${prefix}:*`, label: `Bash(${prefix}:*)` }
+			return { toolName: lower, content: `${prefix}:*`, label: `bash(${prefix}:*)` }
 		}
-		return { toolName: lower, content: undefined, label: "Bash" }
+		return { toolName: lower, content: undefined, label: "bash" }
 	}
 
 	if (FILE_TOOLS.has(lower)) {
 		const path = typeof input.path === "string" ? input.path : ""
 		const glob = dirGlob(path)
 		if (glob) {
-			return { toolName: lower, content: glob, label: `${titleCase(lower)}(${glob})` }
+			return { toolName: lower, content: glob, label: `${lower}(${glob})` }
 		}
-		return { toolName: lower, content: undefined, label: titleCase(lower) }
+		return { toolName: lower, content: undefined, label: lower }
 	}
 
-	return { toolName: lower, content: undefined, label: titleCase(lower) }
+	return { toolName: lower, content: undefined, label: lower }
 }
 
 function bashPrefixScope(command: string): string | null {

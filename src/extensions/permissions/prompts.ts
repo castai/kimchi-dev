@@ -1,5 +1,4 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent"
-import { titleCase } from "./rules.js"
 import { suggestScope } from "./session-memory.js"
 import type { Rule } from "./types.js"
 
@@ -56,17 +55,18 @@ export async function promptForApproval(opts: PromptOptions): Promise<ApprovalOu
 }
 
 function describeCall(toolName: string, input: Record<string, unknown>): string {
-	if (toolName === "bash" && typeof input.command === "string") {
-		return `Bash(${truncate(input.command, 200)})`
+	const lower = toolName.toLowerCase()
+	if (lower === "bash" && typeof input.command === "string") {
+		return `bash(${truncate(input.command, 200)})`
 	}
 	if (typeof input.path === "string") {
-		return `${titleCase(toolName)}(${truncate(input.path, 200)})`
+		return `${lower}(${truncate(input.path, 200)})`
 	}
 	try {
 		const preview = truncate(JSON.stringify(input), 120)
-		return `${titleCase(toolName)}(${preview})`
+		return `${lower}(${preview})`
 	} catch {
-		return titleCase(toolName)
+		return lower
 	}
 }
 

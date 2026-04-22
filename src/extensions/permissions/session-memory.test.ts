@@ -5,13 +5,13 @@ describe("suggestScope", () => {
 	it("bash: program + subcommand when second token isn't a flag", () => {
 		const s = suggestScope("bash", { command: "git status --short" })
 		expect(s.content).toBe("git status:*")
-		expect(s.label).toBe("Bash(git status:*)")
+		expect(s.label).toBe("bash(git status:*)")
 	})
 
 	it("bash: program-only when second token is a flag", () => {
 		const s = suggestScope("bash", { command: "git -c foo" })
 		expect(s.content).toBe("git:*")
-		expect(s.label).toBe("Bash(git:*)")
+		expect(s.label).toBe("bash(git:*)")
 	})
 
 	it("bash: single-token command", () => {
@@ -22,7 +22,7 @@ describe("suggestScope", () => {
 	it("file tool: directory glob", () => {
 		const s = suggestScope("write", { path: "src/cli.ts" })
 		expect(s.content).toBe("src/**")
-		expect(s.label).toBe("Write(src/**)")
+		expect(s.label).toBe("write(src/**)")
 	})
 
 	it("file tool: bare filename", () => {
@@ -33,7 +33,7 @@ describe("suggestScope", () => {
 	it("other tool: just the name", () => {
 		const s = suggestScope("web_search", { query: "foo" })
 		expect(s.content).toBeUndefined()
-		expect(s.label).toBe("Web_search")
+		expect(s.label).toBe("web_search")
 	})
 })
 
