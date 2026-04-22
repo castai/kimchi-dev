@@ -6,7 +6,7 @@ import type { ExtensionAPI, SessionEntry, Theme } from "@mariozechner/pi-coding-
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
 import { attachmentExists } from "../attachment-path.js"
-import { isRunningUnderBun } from "../env.js"
+import { isBunBinary, isRunningUnderBun } from "../env.js"
 import { formatCount } from "./format.js"
 import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./spinner.js"
 
@@ -130,9 +130,41 @@ function collectExtensionArgs(): string[] {
 	return result
 }
 
+export type BuildSubagentArgsResult = { kind: "missing"; missing: string[] } | { kind: "ok"; args: string[] }
+
+export function buildSubagentArgs(
+	params: { provider: string; model: string; prompt: string; attachments?: string[] },
+	cwd: string,
+	extensionArgs: string[],
+	fileExists: (p: string, cwd: string) => boolean = attachmentExists,
+): BuildSubagentArgsResult {
+	const attachments = params.attachments ?? []
+	const missing = attachments.filter((p) => !fileExists(p, cwd))
+	if (missing.length > 0) return { kind: "missing", missing }
+	return {
+		kind: "ok",
+		args: [
+			"--mode",
+			"json",
+			"-p",
+			"--no-session",
+			"--provider",
+			params.provider,
+			"--model",
+			params.model,
+			...extensionArgs,
+			...attachments.map((p) => `@${p}`),
+			params.prompt,
+		],
+	}
+}
+
 function getSubagentInvocation(args: string[]): { command: string; args: string[] } {
-	// When running under Bun (dev or compiled binary), reuse the same Bun executable.
-	// This ensures .md.template imports (Bun-native) work in the subagent process.
+	// Bun single-file binary: process.execPath IS the self-contained binary and the entry script is baked in, so we spawn with just the CLI args. Do NOT prepend process.argv[1] — it's a virtual /$bunfs/... path that only exists inside this process's embedded filesystem, and the child would either error or misread it as a positional arg.
+	if (isBunBinary) {
+		return { command: process.execPath, args }
+	}
+	// Dev under Bun (`bun run src/entry.ts`): process.execPath is the `bun` interpreter, so we must prepend the on-disk entry script as argv[1] for Bun to know what to run. Reusing the same interpreter keeps .md.template imports (Bun-native) working in the child.
 	if (isRunningUnderBun) {
 		return { command: process.execPath, args: [process.argv[1], ...args] }
 	}
@@ -433,36 +465,20 @@ export default function (pi: ExtensionAPI) {
 		parameters: SubagentParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			const extensionArgs = collectExtensionArgs()
-			const attachments = params.attachments ?? []
-			const missingAttachments = attachments.filter((p) => !attachmentExists(p, ctx.cwd))
-			if (missingAttachments.length > 0) {
+			const built = buildSubagentArgs(params, ctx.cwd, collectExtensionArgs())
+			if (built.kind === "missing") {
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Attachment files not found (relative to ${ctx.cwd}): ${missingAttachments.join(", ")}. Check the paths and retry.`,
+							text: `Attachment files not found (relative to ${ctx.cwd}): ${built.missing.join(", ")}. Check the paths and retry.`,
 						},
 					],
 					details: undefined,
 					isError: true,
 				}
 			}
-			const attachmentArgs = attachments.map((p) => `@${p}`)
-			const args = [
-				"--mode",
-				"json",
-				"-p",
-				"--no-session",
-				"--provider",
-				params.provider,
-				"--model",
-				params.model,
-				...extensionArgs,
-				...attachmentArgs,
-				params.prompt,
-			]
-			const invocation = getSubagentInvocation(args)
+			const invocation = getSubagentInvocation(built.args)
 
 			let lastToolCall: string | undefined
 			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(

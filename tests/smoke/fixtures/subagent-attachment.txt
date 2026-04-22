@@ -1,0 +1,7 @@
+This fixture is used by the subagent attachment smoke test.
+
+Its sole purpose is to carry a unique sentinel string that a vision-less
+subagent can echo back, proving the attachment was passed through via the
+kimchi-code `@file` mechanism and read by the child process.
+
+SENTINEL: PURPLE_RHINO_8891

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseSubagentEvent } from "./subagent.js"
+import { buildSubagentArgs, parseSubagentEvent } from "./subagent.js"
 
 describe("parseSubagentEvent", () => {
 	const cases: Record<
@@ -158,4 +158,71 @@ describe("parseSubagentEvent", () => {
 			expect(parseSubagentEvent(input)).toEqual(expected)
 		})
 	}
+})
+
+describe("buildSubagentArgs", () => {
+	const base = { provider: "kimchi-dev", model: "kimi-k2.5", prompt: "go" }
+	const allExist = () => true
+	const noneExist = () => false
+
+	it("returns missing when a file does not exist", () => {
+		const r = buildSubagentArgs({ ...base, attachments: ["nope.png"] }, "/w", [], noneExist)
+		expect(r).toEqual({ kind: "missing", missing: ["nope.png"] })
+	})
+
+	it("lists only the missing files on partial miss", () => {
+		const fake = (p: string) => p === "here.png"
+		const r = buildSubagentArgs({ ...base, attachments: ["here.png", "gone.png"] }, "/w", [], fake)
+		expect(r).toEqual({ kind: "missing", missing: ["gone.png"] })
+	})
+
+	it("omits @ tokens when attachments is undefined", () => {
+		const r = buildSubagentArgs(base, "/w", [], allExist)
+		expect(r.kind).toBe("ok")
+		if (r.kind !== "ok") return
+		expect(r.args.some((a) => a.startsWith("@"))).toBe(false)
+	})
+
+	it("omits @ tokens when attachments is empty", () => {
+		const r = buildSubagentArgs({ ...base, attachments: [] }, "/w", [], allExist)
+		expect(r.kind).toBe("ok")
+		if (r.kind !== "ok") return
+		expect(r.args.some((a) => a.startsWith("@"))).toBe(false)
+	})
+
+	it("places attachments after extensionArgs and before prompt", () => {
+		const r = buildSubagentArgs({ ...base, attachments: ["a.png", "b.txt"] }, "/w", ["-e", "ext-one"], allExist)
+		expect(r.kind).toBe("ok")
+		if (r.kind !== "ok") return
+		expect(r.args).toEqual([
+			"--mode",
+			"json",
+			"-p",
+			"--no-session",
+			"--provider",
+			"kimchi-dev",
+			"--model",
+			"kimi-k2.5",
+			"-e",
+			"ext-one",
+			"@a.png",
+			"@b.txt",
+			"go",
+		])
+	})
+
+	it("applies @ exactly once even if the caller already prefixed it", () => {
+		// Pins current behavior. Update this assertion if we decide to strip a leading @.
+		const r = buildSubagentArgs({ ...base, attachments: ["@foo.png"] }, "/w", [], allExist)
+		expect(r.kind).toBe("ok")
+		if (r.kind !== "ok") return
+		expect(r.args).toContain("@@foo.png")
+	})
+
+	it("forwards the raw path verbatim (no tilde expansion in argv)", () => {
+		const r = buildSubagentArgs({ ...base, attachments: ["~/img.png"] }, "/w", [], allExist)
+		expect(r.kind).toBe("ok")
+		if (r.kind !== "ok") return
+		expect(r.args).toContain("@~/img.png")
+	})
 })
