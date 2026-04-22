@@ -17,4 +17,5 @@ export const ANSI = {
 	brandGreen: tc("187;227;59", "148"),
 	placeholder: tc("71;71;71", "239"),
 	border: tc("41;41;41", "236"),
+	branch: tc("127;119;221", "104"),
 }
