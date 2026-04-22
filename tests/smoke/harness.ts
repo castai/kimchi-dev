@@ -8,7 +8,7 @@
  */
 
 import { type SpawnSyncReturns, spawnSync } from "node:child_process"
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs"
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
@@ -24,6 +24,13 @@ let tempHome: string | undefined
 
 beforeAll(() => {
 	tempHome = mkdtempSync(join(tmpdir(), "kimchi-smoke-home-"))
+	const configDir = join(tempHome, ".config", "kimchi")
+	mkdirSync(configDir, { recursive: true })
+	writeFileSync(
+		join(configDir, "config.json"),
+		JSON.stringify({ skillPaths: [], migrationState: "done" }, null, 2),
+		"utf-8",
+	)
 })
 
 afterAll(() => {
