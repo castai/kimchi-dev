@@ -10,6 +10,7 @@ import { homedir } from "node:os"
 import { resolve } from "node:path"
 import { resolveAuxiliaryFilesDir } from "./auxiliary-files/resolver.js"
 import { validateAuxiliaryFiles } from "./auxiliary-files/validator.js"
+import { installPasteInterceptor } from "./paste-interceptor.js"
 
 const preSet = !!process.env.PI_PACKAGE_DIR
 const auxiliaryDir = resolveAuxiliaryFilesDir(process.env, homedir(), process.execPath)
@@ -28,5 +29,8 @@ process.env.KIMCHI_CODING_AGENT_DIR = agentDir
 
 process.title = "kimchi"
 process.env.PI_SKIP_VERSION_CHECK = "1"
+
+// Install before the dynamic cli.js import - the interceptor must wrap process.stdin.emit before any pi-* listener attaches. See src/paste-interceptor.ts for the rationale (LLM-1358).
+installPasteInterceptor()
 
 await import("./cli.js")
