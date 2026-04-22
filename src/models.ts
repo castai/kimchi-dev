@@ -116,25 +116,45 @@ export type ModelsConfigResult =
  * fails. Always overwrites any existing file so the model list stays current
  * on every startup.
  */
+function readExistingProviders(modelsJsonPath: string): Record<string, unknown> {
+	if (!existsSync(modelsJsonPath)) return {}
+	try {
+		const raw = readFileSync(modelsJsonPath, "utf-8")
+		const config = JSON.parse(raw)
+		const providers = config?.providers ?? {}
+		const { "kimchi-dev": _kimchi, ...rest } = providers as Record<string, unknown>
+		return rest
+	} catch {
+		return {}
+	}
+}
+
 export async function updateModelsConfig(modelsJsonPath: string, apiKey: string): Promise<ModelsConfigResult> {
 	const dir = dirname(modelsJsonPath)
 	mkdirSync(dir, { recursive: true })
+
+	const otherProviders = readExistingProviders(modelsJsonPath)
+
+	function mergeAndWrite(kimchiConfig: ReturnType<typeof buildModelsConfig> | typeof DEFAULT_MODELS_CONFIG): void {
+		const merged = { providers: { ...otherProviders, ...kimchiConfig.providers } }
+		writeFileSync(modelsJsonPath, JSON.stringify(merged, null, "\t"), "utf-8")
+	}
 
 	try {
 		const fetched = await fetchAvailableModels(apiKey)
 		const models = filterAndSortModels(fetched)
 		if (models.length > 0) {
-			writeFileSync(modelsJsonPath, JSON.stringify(buildModelsConfig(models), null, "\t"), "utf-8")
+			mergeAndWrite(buildModelsConfig(models))
 			return { source: "discovered", models }
 		}
-		writeFileSync(modelsJsonPath, JSON.stringify(DEFAULT_MODELS_CONFIG, null, "\t"), "utf-8")
+		mergeAndWrite(DEFAULT_MODELS_CONFIG)
 		return {
 			source: "default",
 			models: DEFAULT_MODELS_CONFIG.providers["kimchi-dev"].models.map((m) => m.id),
 			error: fetched.length === 0 ? "API returned empty model list" : "API returned no usable models after filtering",
 		}
 	} catch (err) {
-		writeFileSync(modelsJsonPath, JSON.stringify(DEFAULT_MODELS_CONFIG, null, "\t"), "utf-8")
+		mergeAndWrite(DEFAULT_MODELS_CONFIG)
 		return {
 			source: "default",
 			models: DEFAULT_MODELS_CONFIG.providers["kimchi-dev"].models.map((m) => m.id),
