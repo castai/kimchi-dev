@@ -116,16 +116,23 @@ export type ModelsConfigResult =
  * fails. Always overwrites any existing file so the model list stays current
  * on every startup.
  */
-function readExistingProviders(modelsJsonPath: string): Record<string, unknown> {
-	if (!existsSync(modelsJsonPath)) return {}
+interface ExistingState {
+	otherProviders: Record<string, unknown>
+	userModels: Array<{ id: string; [key: string]: unknown }>
+}
+
+function readExistingState(modelsJsonPath: string): ExistingState {
+	if (!existsSync(modelsJsonPath)) return { otherProviders: {}, userModels: [] }
 	try {
 		const raw = readFileSync(modelsJsonPath, "utf-8")
 		const config = JSON.parse(raw)
 		const providers = config?.providers ?? {}
-		const { "kimchi-dev": _kimchi, ...rest } = providers as Record<string, unknown>
-		return rest
+		const { "kimchi-dev": kimchi, ...otherProviders } = providers as Record<string, unknown>
+		const rawModels = (kimchi as { models?: unknown })?.models
+		const existingModels: Array<{ id: string; [key: string]: unknown }> = Array.isArray(rawModels) ? rawModels : []
+		return { otherProviders, userModels: existingModels }
 	} catch {
-		return {}
+		return { otherProviders: {}, userModels: [] }
 	}
 }
 
@@ -133,10 +140,22 @@ export async function updateModelsConfig(modelsJsonPath: string, apiKey: string)
 	const dir = dirname(modelsJsonPath)
 	mkdirSync(dir, { recursive: true })
 
-	const otherProviders = readExistingProviders(modelsJsonPath)
+	const { otherProviders, userModels } = readExistingState(modelsJsonPath)
 
 	function mergeAndWrite(kimchiConfig: ReturnType<typeof buildModelsConfig> | typeof DEFAULT_MODELS_CONFIG): void {
-		const merged = { providers: { ...otherProviders, ...kimchiConfig.providers } }
+		const kimchiModels = kimchiConfig.providers["kimchi-dev"].models
+		const kimchiIds = new Set(kimchiModels.map((m) => m.id))
+		const extraModels = userModels.filter((m) => !kimchiIds.has(m.id))
+		const merged = {
+			providers: {
+				...otherProviders,
+				...kimchiConfig.providers,
+				"kimchi-dev": {
+					...kimchiConfig.providers["kimchi-dev"],
+					models: [...kimchiModels, ...extraModels],
+				},
+			},
+		}
 		writeFileSync(modelsJsonPath, JSON.stringify(merged, null, "\t"), "utf-8")
 	}
 
