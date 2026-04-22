@@ -1,7 +1,7 @@
 import type { AgentSideConnection, SessionNotification } from "@agentclientprotocol/sdk"
 import type { AgentSession, AgentSessionEvent, AgentSessionEventListener } from "@mariozechner/pi-coding-agent"
 import { beforeEach, describe, expect, it } from "vitest"
-import { type AcpSessionFactory, KimchiAcpAgent } from "./server.js"
+import { type AcpSessionFactory, KimchiAcpAgent, describeToolCall } from "./server.js"
 
 // Minimal fake of AgentSession surface used by KimchiAcpAgent. The factory seam
 // means we only need to stand in for the methods the ACP server actually calls:
@@ -123,6 +123,44 @@ describe("KimchiAcpAgent turn lifecycle", () => {
 		expect(outerResolvedAt - start).toBeGreaterThanOrEqual(40)
 	})
 
+	// CANARY: documents the load-bearing assumption in prompt() that agent_start
+	// is delivered to the subscriber before session.prompt() resolves (because
+	// pi-mono's agent.prompt awaits the LLM call, draining the microtask queue
+	// and ensuring _processAgentEvent ran for agent_start at least once). If
+	// pi-mono changes its delivery contract so agent_start arrives AFTER
+	// session.prompt() resolves, real turns will hit the !agentStarted branch
+	// and synthesize end_turn prematurely — late agent_end/tool events will be
+	// silently dropped. This test locks in the current behavior; if a future
+	// pi-mono update breaks the contract, switch the short-circuit detector
+	// to a "no events observed at all" heuristic or use tool_execution_start
+	// as a secondary signal.
+	it("CANARY: synthesizes end_turn when agent_start is delivered after session.prompt resolves", async () => {
+		let lateEventsFired = false
+		fake.promptImpl = async () => {
+			await delay(5)
+			// Schedule agent_start + agent_end AFTER session.prompt resolves.
+			setTimeout(() => {
+				fake.emit({ type: "agent_start" })
+				fake.emit({ type: "agent_end", messages: [] })
+				lateEventsFired = true
+			}, 30)
+		}
+
+		const result = await agent.prompt({
+			sessionId,
+			prompt: [{ type: "text", text: "hi" }],
+		})
+		// Current behavior: end_turn synthesized immediately after session.prompt
+		// resolves — before late events arrive. If this changes to "cancelled" or
+		// "end_turn from late agent_end", the short-circuit detector was updated.
+		expect(result.stopReason).toBe("end_turn")
+		expect(lateEventsFired).toBe(false)
+
+		// Let late events fire and confirm they are dropped (turn already cleared).
+		await delay(40)
+		expect(lateEventsFired).toBe(true)
+	})
+
 	// Extension-command / input-handler / no-op path: session.prompt returns
 	// without emitting any agent events. The ACP handler must synthesize
 	// end_turn itself — no agent_end is ever coming.
@@ -207,6 +245,81 @@ describe("KimchiAcpAgent turn lifecycle", () => {
 		await expect(agent.prompt({ sessionId, prompt: [{ type: "text", text: "x" }] })).rejects.toThrow(
 			/no model configured/,
 		)
+	})
+
+	// shutdown() must not leave pending PromptResponse promises dangling.
+	// When the caller awaits shutdown (e.g. runAcpMode's finally after
+	// conn.closed resolves) an in-flight turn must be rejected so the prompt
+	// caller's await settles rather than hanging until process exit.
+	it("rejects in-flight turns when shutdown() is called", async () => {
+		let resumePrompt!: () => void
+		const pending = new Promise<void>((resolve) => {
+			resumePrompt = resolve
+		})
+		fake.promptImpl = async () => {
+			fake.emit({ type: "agent_start" })
+			await pending // never resolves on its own in this test
+		}
+
+		const promptP = agent.prompt({
+			sessionId,
+			prompt: [{ type: "text", text: "hang forever" }],
+		})
+		// Pre-attach catch handler so the rejection fires synchronously during
+		// shutdown without landing as an unhandled rejection.
+		const caught = promptP.catch((err) => err)
+		// Arm the turn.
+		await delay(10)
+
+		await agent.shutdown()
+		const err = await caught
+		expect(err).toBeInstanceOf(Error)
+		expect((err as Error).message).toMatch(/shutting down/)
+		// Cleanup the dangling promptImpl.
+		resumePrompt()
+		expect(fake.disposed).toBe(true)
+	})
+
+	// Misbehaving client sends a block type our capabilities declared as
+	// unsupported (image/audio/embeddedContext). The server drops it silently
+	// from the text payload but must warn on stderr so a dev debugging the
+	// resulting empty-turn sees what happened. Warn exactly once per type.
+	it("warns once on stderr for unsupported prompt block types", async () => {
+		const writes: string[] = []
+		const origWrite = process.stderr.write.bind(process.stderr)
+		// biome-ignore lint/suspicious/noExplicitAny: test-only stderr capture
+		;(process.stderr.write as any) = (chunk: string | Uint8Array) => {
+			writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"))
+			return true
+		}
+		try {
+			const r1 = await agent.prompt({
+				sessionId,
+				// biome-ignore lint/suspicious/noExplicitAny: unsupported block on purpose
+				prompt: [{ type: "image" as any, data: "x" } as any],
+			})
+			expect(r1.stopReason).toBe("end_turn")
+			// Second call with same unsupported type: no new warning (deduped).
+			const r2 = await agent.prompt({
+				sessionId,
+				// biome-ignore lint/suspicious/noExplicitAny: unsupported block on purpose
+				prompt: [{ type: "image" as any, data: "y" } as any],
+			})
+			expect(r2.stopReason).toBe("end_turn")
+			// New unsupported type: warns again.
+			const r3 = await agent.prompt({
+				sessionId,
+				// biome-ignore lint/suspicious/noExplicitAny: unsupported block on purpose
+				prompt: [{ type: "audio" as any, data: "z" } as any],
+			})
+			expect(r3.stopReason).toBe("end_turn")
+		} finally {
+			process.stderr.write = origWrite
+		}
+		const matches = writes.filter((w) => w.includes("acp prompt: dropping unsupported block type"))
+		expect(matches).toHaveLength(2)
+		expect(matches.some((w) => w.includes('"image"'))).toBe(true)
+		expect(matches.some((w) => w.includes('"audio"'))).toBe(true)
 	})
 
 	// Defensive: a late agent_end arriving after the short-circuit path has
@@ -425,4 +538,134 @@ describe("KimchiAcpAgent tool execution stream", () => {
 		const terminal = toolCallUpdates.find((u) => (u.update as { status?: string }).status === "completed")
 		expect(terminal).toBeDefined()
 	})
+})
+
+// Direct coverage for describeToolCall. The function drives the tool_call
+// notification's title, kind, and locations — ACP clients key UI affordances
+// off these. Two recent fixes (064ff92, 00f58f3) landed on it; table-driven
+// cases here keep the title/kind matrix from silently drifting.
+describe("describeToolCall", () => {
+	const longCommand = "a".repeat(120)
+	const longPath = `/tmp/${"x".repeat(120)}`
+	const longPattern = "p".repeat(120)
+	const cases: Array<{
+		name: string
+		toolName: string
+		args: unknown
+		expect: { title: string; kind: string; locations: Array<{ path: string }> }
+	}> = [
+		{
+			name: "bash with command uses command as title and execute kind",
+			toolName: "bash",
+			args: { command: "ls -la" },
+			expect: { title: "ls -la", kind: "execute", locations: [] },
+		},
+		{
+			name: "bash without command falls back to tool name",
+			toolName: "bash",
+			args: {},
+			expect: { title: "bash", kind: "execute", locations: [] },
+		},
+		{
+			name: "bash command is truncated at TITLE_MAX",
+			toolName: "bash",
+			args: { command: longCommand },
+			expect: { title: `${"a".repeat(80)}…`, kind: "execute", locations: [] },
+		},
+		{
+			name: "read with file_path uses path and populates locations",
+			toolName: "read",
+			args: { file_path: "/etc/hosts" },
+			expect: { title: "/etc/hosts", kind: "read", locations: [{ path: "/etc/hosts" }] },
+		},
+		{
+			name: "edit with file_path uses path and edit kind",
+			toolName: "edit",
+			args: { file_path: "/tmp/a.ts" },
+			expect: { title: "/tmp/a.ts", kind: "edit", locations: [{ path: "/tmp/a.ts" }] },
+		},
+		{
+			name: "write with path (not file_path) still populates locations",
+			toolName: "write",
+			args: { path: "/tmp/b.ts" },
+			expect: { title: "/tmp/b.ts", kind: "edit", locations: [{ path: "/tmp/b.ts" }] },
+		},
+		{
+			name: "grep with pattern uses pattern as title and search kind",
+			toolName: "grep",
+			args: { pattern: "foo.*bar" },
+			expect: { title: "foo.*bar", kind: "search", locations: [] },
+		},
+		{
+			name: "ls maps to read kind",
+			toolName: "ls",
+			args: { path: "/tmp" },
+			expect: { title: "/tmp", kind: "read", locations: [{ path: "/tmp" }] },
+		},
+		{
+			name: "find maps to search kind",
+			toolName: "find",
+			args: { pattern: "*.ts" },
+			expect: { title: "*.ts", kind: "search", locations: [] },
+		},
+		{
+			name: "web_fetch maps to fetch kind",
+			toolName: "web_fetch",
+			args: { url: "https://example.com" },
+			expect: { title: "web_fetch", kind: "fetch", locations: [] },
+		},
+		{
+			name: "web_search maps to search kind",
+			toolName: "web_search",
+			args: { query: "kimchi" },
+			expect: { title: "web_search", kind: "search", locations: [] },
+		},
+		{
+			name: "subagent maps to think kind",
+			toolName: "subagent",
+			args: { prompt: "go" },
+			expect: { title: "subagent", kind: "think", locations: [] },
+		},
+		{
+			name: "unknown tool falls back to other kind",
+			toolName: "mcp__foo__bar",
+			args: { arg: 1 },
+			expect: { title: "mcp__foo__bar", kind: "other", locations: [] },
+		},
+		{
+			name: "null args is tolerated",
+			toolName: "bash",
+			args: null,
+			expect: { title: "bash", kind: "execute", locations: [] },
+		},
+		{
+			name: "long path title is truncated (locations keep full path)",
+			toolName: "read",
+			args: { file_path: longPath },
+			expect: {
+				title: `${longPath.slice(0, 80)}…`,
+				kind: "read",
+				locations: [{ path: longPath }],
+			},
+		},
+		{
+			name: "long pattern title is truncated",
+			toolName: "grep",
+			args: { pattern: longPattern },
+			expect: {
+				title: `${longPattern.slice(0, 80)}…`,
+				kind: "search",
+				locations: [],
+			},
+		},
+	]
+
+	for (const c of cases) {
+		it(c.name, () => {
+			const result = describeToolCall(c.toolName, c.args)
+			expect(result.title).toBe(c.expect.title)
+			expect(result.kind).toBe(c.expect.kind)
+			expect(result.locations).toEqual(c.expect.locations)
+		})
+	}
 })

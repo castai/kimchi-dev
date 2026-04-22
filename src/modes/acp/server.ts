@@ -61,6 +61,9 @@ type SessionEntry = {
 export class KimchiAcpAgent implements Agent {
 	private sessions = new Map<string, SessionEntry>()
 	private readonly sessionFactory: AcpSessionFactory
+	// Track non-text prompt block types we've already warned about so a
+	// misbehaving client that sends 1000 image blocks doesn't flood stderr.
+	private warnedBlockTypes = new Set<string>()
 
 	constructor(
 		private readonly conn: AgentSideConnection,
@@ -108,6 +111,16 @@ export class KimchiAcpAgent implements Agent {
 		if (entry.turn) {
 			throw RequestError.invalidRequest(undefined, "a prompt is already in progress for this session")
 		}
+		// Capabilities declare image/audio/embeddedContext: false, so a compliant
+		// client will only send text blocks. A misbehaving client that sends other
+		// block types gets them dropped — warn once per unseen type so the silent
+		// empty-turn isn't confusing to debug.
+		for (const b of params.prompt) {
+			if (b.type !== "text" && !this.warnedBlockTypes.has(b.type)) {
+				this.warnedBlockTypes.add(b.type)
+				process.stderr.write(`acp prompt: dropping unsupported block type "${b.type}"\n`)
+			}
+		}
 		const text = params.prompt
 			.map((b) => (b.type === "text" ? b.text : ""))
 			.join("")
@@ -122,36 +135,46 @@ export class KimchiAcpAgent implements Agent {
 			turnReject = reject
 		})
 		entry.turn = { cancelled: false, agentStarted: false, resolve: turnResolve, reject: turnReject }
-		try {
-			await entry.session.prompt(text, { source: "rpc" })
-			// pi-coding-agent's session.prompt() short-circuits for extension commands,
-			// input-handler intercepts, and no-op paths — in those cases agent.prompt()
-			// never runs and no agent events fire. For real turns it awaits agent.prompt()
-			// which emits agent_start as its first event and agent_end as its last
-			// (pi-agent-core contract: types.d.ts "agent_end is the last event emitted
-			// for a run"). By the time agent.prompt() resolves, our subscriber has been
-			// called with agent_start (agent.prompt awaits the LLM call, so the microtask
-			// queue has drained at least once). agent_end delivery can still race with
-			// session.prompt()'s resolution because _processAgentEvent awaits extension
-			// handlers before calling our listener — so we don't look at isStreaming or
-			// poll the event queue. Instead: if agent_start was observed, trust the
-			// agent_end contract and let the subscriber finalize the turn. If it wasn't,
-			// the turn short-circuited and we synthesize end_turn here.
-			if (entry.turn && !entry.turn.agentStarted) {
-				this.finalizeTurn(entry, "end_turn")
-			}
-		} catch (err) {
-			// If cancel() arrived mid-turn, session.prompt() may reject with an abort
-			// error instead of resolving and letting agent_end drive finalization. The
-			// spec still says the client-initiated cancel should surface as
-			// stopReason: "cancelled", not a JSON-RPC error — so swallow the abort
-			// and resolve with the expected stop reason. Any other error propagates.
-			if (entry.turn?.cancelled) {
-				this.finalizeTurn(entry, "cancelled")
-			} else {
-				this.failTurn(entry, err)
-			}
-		}
+		// Kick off session.prompt but don't await inside the async function body —
+		// shutdown() needs to be able to reject `result` and have the caller's await
+		// on prompt() settle immediately, which can't happen while this body is
+		// paused on `await session.prompt()`. Instead, attach handlers that drive
+		// finalizeTurn/failTurn and return `result` directly; settling `result`
+		// propagates to the caller regardless of whether session.prompt ever resolves.
+		entry.session.prompt(text, { source: "rpc" }).then(
+			() => {
+				// pi-coding-agent's session.prompt() short-circuits for extension commands,
+				// input-handler intercepts, and no-op paths — in those cases agent.prompt()
+				// never runs and no agent events fire. For real turns it awaits agent.prompt()
+				// which emits agent_start as its first event and agent_end as its last
+				// (pi-agent-core contract: types.d.ts "agent_end is the last event emitted
+				// for a run"). By the time agent.prompt() resolves, our subscriber has been
+				// called with agent_start (agent.prompt awaits the LLM call, so the microtask
+				// queue has drained at least once). agent_end delivery can still race with
+				// session.prompt()'s resolution because _processAgentEvent awaits extension
+				// handlers before calling our listener — so we don't look at isStreaming or
+				// poll the event queue. Instead: if agent_start was observed, trust the
+				// agent_end contract and let the subscriber finalize the turn. If it wasn't,
+				// the turn short-circuited and we synthesize end_turn here.
+				if (entry.turn && !entry.turn.agentStarted) {
+					this.finalizeTurn(entry, "end_turn")
+				}
+			},
+			(err) => {
+				// If cancel() arrived mid-turn, session.prompt() may reject with an abort
+				// error instead of resolving and letting agent_end drive finalization. The
+				// spec still says the client-initiated cancel should surface as
+				// stopReason: "cancelled", not a JSON-RPC error — so swallow the abort
+				// and resolve with the expected stop reason. Any other error propagates.
+				// shutdown() may have already failed the turn; failTurn is a no-op in that case.
+				if (!entry.turn) return
+				if (entry.turn.cancelled) {
+					this.finalizeTurn(entry, "cancelled")
+				} else {
+					this.failTurn(entry, err)
+				}
+			},
+		)
 		return result
 	}
 
@@ -163,7 +186,13 @@ export class KimchiAcpAgent implements Agent {
 	}
 
 	async shutdown(): Promise<void> {
+		// Drain any in-flight turn promises before tearing down the session.
+		// On the signal path we process.exit immediately so this is mostly
+		// cosmetic, but runAcpMode's finally also calls shutdown when conn.closed
+		// resolves — in that window a pending PromptResponse would otherwise hang
+		// until process exit. Reject symmetrically so the caller's await settles.
 		for (const entry of this.sessions.values()) {
+			if (entry.turn) this.failTurn(entry, new Error("acp agent shutting down"))
 			entry.unsubscribe()
 			entry.session.dispose()
 		}
@@ -258,6 +287,15 @@ export class KimchiAcpAgent implements Agent {
 	}
 
 	private send(params: SessionNotification): void {
+		// Fire-and-forget is safe here because the ACP SDK chains every outbound
+		// message onto a shared writeQueue Promise (see @agentclientprotocol/sdk
+		// acp.js#sendMessage), so two consecutive sessionUpdate() calls are
+		// written to the stream in the order we invoked them even though we
+		// don't await. Do NOT "fix" this into `await this.conn.sessionUpdate(...)`
+		// in onSessionEvent — the subscriber is called synchronously from the
+		// AgentSession event emitter, and awaiting inside it would back-pressure
+		// every subsequent event through the event loop, which pi-mono's
+		// _processAgentEvent does not expect.
 		this.conn.sessionUpdate(params).catch((err) => {
 			process.stderr.write(`acp sessionUpdate failed: ${String(err)}\n`)
 		})
@@ -343,7 +381,7 @@ const TITLE_MAX = 80
 const asString = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined)
 const truncate = (s: string): string => (s.length > TITLE_MAX ? `${s.slice(0, TITLE_MAX)}…` : s)
 
-function describeToolCall(
+export function describeToolCall(
 	toolName: string,
 	args: unknown,
 ): { title: string; kind: ToolKind; locations: ToolCallLocation[] } {
@@ -354,16 +392,23 @@ function describeToolCall(
 	// title carries the target/argument only; the ACP `kind` field drives the verb
 	// and icon on the client side. Bash puts its command here; file ops put the
 	// path; search ops put the pattern. Falls back to the tool name when we have
-	// no specific argument to show.
-	const title = toolName === "bash" && command ? truncate(command) : (path ?? pattern ?? toolName)
+	// no specific argument to show. Truncate every branch so a long absolute
+	// path or regex doesn't blow up client UIs (locations[].path keeps the full
+	// value for clients that want it).
+	const rawTitle = toolName === "bash" && command ? command : (path ?? pattern ?? toolName)
 	return {
-		title,
+		title: truncate(rawTitle),
 		kind: TOOL_KINDS[toolName] ?? "other",
 		locations: path ? [{ path }] : [],
 	}
 }
 
 function toolResultContent(result: unknown): ToolCallContent[] {
+	// TODO: non-text blocks are silently dropped here. web_fetch can in principle
+	// return image blocks, and MCP tools may return resource blocks — clients
+	// would see a completed tool call with empty content. Safe today because no
+	// registered tool emits non-text blocks in practice, but revisit when
+	// web_fetch or an MCP tool starts returning them.
 	const r = result as { content?: unknown } | null | undefined
 	const content = r?.content
 	if (!Array.isArray(content)) return []

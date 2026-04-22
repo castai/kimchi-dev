@@ -39,6 +39,12 @@ function sessionIdCaptureExtension(pi: ExtensionAPI) {
 	})
 }
 
+// Intentionally minimal pre-dispatch sniff: we need to know whether to enter
+// ACP stdio mode BEFORE pi-mono's main() takes over (which would otherwise
+// print a banner, wire up the TUI, and corrupt the JSON-RPC stream). The
+// canonical --mode parser lives in pi-mono; this only looks for the one value
+// that forces a different entrypoint. Don't extend this sniff for new flags —
+// thread them through pi-mono's parser instead.
 function isAcpMode(args: string[]): boolean {
 	for (let i = 0; i < args.length; i++) {
 		const a = args[i]
