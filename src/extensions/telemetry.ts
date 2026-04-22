@@ -161,7 +161,8 @@ export default function telemetryExtension(config: TelemetryConfig) {
 
 				const model = assistant.model ?? "unknown"
 				const rawProvider = String(assistant.provider ?? "unknown")
-				const provider = rawProvider === "kimchi-dev" ? "ai-enabler" : rawProvider
+				const providerMap: Record<string, string> = { "kimchi-dev": "ai-enabler", "kimchi-anthropic": "anthropic" }
+				const provider = providerMap[rawProvider] ?? rawProvider
 				const { input, output, cacheRead, cacheWrite } = assistant.usage
 				const costTotal = assistant.usage.cost.total
 				const sessionUptimeMs = Date.now() - sessionStartMs
