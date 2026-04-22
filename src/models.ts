@@ -1,18 +1,26 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 
-const CAST_AI_MODELS_API = "https://api.cast.ai/v1/llm/openai/models?providerName=AI%20Enabler"
+const CAST_AI_METADATA_API = "https://llm.cast.ai/v1/models/metadata?include_in_cli=true"
 const CAST_AI_LLM_BASE_URL = "https://llm.kimchi.dev/openai/v1"
 const FETCH_TIMEOUT_MS = 5000
 
-const EXCLUDED_MODEL_PATTERNS = [/^smoll/i, /^qwen/i]
-
-function filterAndSortModels(models: string[]): string[] {
-	return models.filter((id) => !EXCLUDED_MODEL_PATTERNS.some((re) => re.test(id))).sort((a, b) => a.localeCompare(b))
+interface ModelMetadata {
+	slug: string
+	display_name: string
+	provider: string
+	reasoning: boolean
+	supports_images: boolean
+	input_modalities: string[]
+	limits: {
+		context_window: number
+		max_output_tokens: number
+	}
+	deprecated_at?: string
 }
 
-interface CastAIModelsResponse {
-	models: string[]
+interface MetadataResponse {
+	models: ModelMetadata[]
 }
 
 function modelIdToName(id: string): string {
@@ -22,50 +30,54 @@ function modelIdToName(id: string): string {
 		.join(" ")
 }
 
-async function fetchAvailableModels(apiKey: string): Promise<string[]> {
-	const response = await fetch(CAST_AI_MODELS_API, {
+async function fetchModelMetadata(apiKey: string): Promise<ModelMetadata[]> {
+	const response = await fetch(CAST_AI_METADATA_API, {
 		headers: { Authorization: `Bearer ${apiKey}` },
 		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
 	})
 	if (!response.ok) {
-		throw new Error(`Failed to fetch models: ${response.status} ${response.statusText}`)
+		throw new Error(`Failed to fetch model metadata: ${response.status} ${response.statusText}`)
 	}
 	const body = await response.json()
-	if (!body || typeof body !== "object" || !Array.isArray(body.models)) {
-		throw new Error("Unexpected response shape from models API")
+	if (!body || typeof body !== "object" || !Array.isArray((body as MetadataResponse).models)) {
+		throw new Error("Unexpected response shape from metadata API")
 	}
-	return (body as CastAIModelsResponse).models
+	return (body as MetadataResponse).models
 }
 
-function buildModelsConfig(models: string[]) {
-	return {
-		providers: {
-			"kimchi-dev": {
-				baseUrl: CAST_AI_LLM_BASE_URL,
-				apiKey: "KIMCHI_API_KEY",
-				api: "openai-completions",
-				authHeader: true,
-				headers: { "User-Agent": "kimchi/0.0.1" },
-				models: models.map((id) => ({
-					id,
-					name: modelIdToName(id),
-					reasoning: false,
-					input: ["text"],
-					contextWindow: 131072,
-					maxTokens: 16384,
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				})),
-			},
-		},
+function buildModelsConfig(metadata: ModelMetadata[]) {
+	const providerMap = new Map<string, ModelMetadata[]>()
+	for (const m of metadata) {
+		const list = providerMap.get(m.provider) ?? []
+		list.push(m)
+		providerMap.set(m.provider, list)
 	}
+
+	const providerConfig = (models: ModelMetadata[]) => ({
+		baseUrl: CAST_AI_LLM_BASE_URL,
+		apiKey: "KIMCHI_API_KEY",
+		api: "openai-completions",
+		authHeader: true,
+		headers: { "User-Agent": "kimchi/0.0.1" },
+		models: models.map((m) => ({
+			id: m.slug,
+			name: m.display_name || modelIdToName(m.slug),
+			reasoning: m.reasoning,
+			input: m.input_modalities.length > 0 ? m.input_modalities : ["text"],
+			contextWindow: m.limits.context_window,
+			maxTokens: m.limits.max_output_tokens,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		})),
+	})
+
+	const providers: Record<string, ReturnType<typeof providerConfig>> = {}
+	for (const [provider, models] of providerMap.entries()) {
+		const key = provider === "ai-enabler" ? "kimchi-dev" : provider
+		providers[key] = providerConfig(models)
+	}
+	return { providers }
 }
 
-/**
- * The default models.json configuration for the Cast AI provider.
- * Models are registered with the "kimchi-dev" provider name. The apiKey field
- * references the KIMCHI_API_KEY environment variable, which is set by the
- * CLI entry point from the resolved kimchi config before pi-mono imports.
- */
 const DEFAULT_MODELS_CONFIG = {
 	providers: {
 		"kimchi-dev": {
@@ -110,29 +122,24 @@ export type ModelsConfigResult =
 	| { source: "discovered"; models: string[] }
 	| { source: "default"; models: string[]; error?: string }
 
-/**
- * Fetch available models from the Cast AI API and write the configuration to
- * modelsJsonPath. Falls back to the static default configuration if the fetch
- * fails. Always overwrites any existing file so the model list stays current
- * on every startup.
- */
 interface ExistingState {
 	otherProviders: Record<string, unknown>
-	userModels: Array<{ id: string; [key: string]: unknown }>
+	userKimchiModels: Array<{ id: string; [key: string]: unknown }>
 }
 
 function readExistingState(modelsJsonPath: string): ExistingState {
-	if (!existsSync(modelsJsonPath)) return { otherProviders: {}, userModels: [] }
+	if (!existsSync(modelsJsonPath)) return { otherProviders: {}, userKimchiModels: [] }
 	try {
 		const raw = readFileSync(modelsJsonPath, "utf-8")
 		const config = JSON.parse(raw)
 		const providers = config?.providers ?? {}
-		const { "kimchi-dev": kimchi, ...otherProviders } = providers as Record<string, unknown>
+		// Strip all auto-managed providers; preserve everything else
+		const { "kimchi-dev": kimchi, anthropic: _a, ...otherProviders } = providers as Record<string, unknown>
 		const rawModels = (kimchi as { models?: unknown })?.models
-		const existingModels: Array<{ id: string; [key: string]: unknown }> = Array.isArray(rawModels) ? rawModels : []
-		return { otherProviders, userModels: existingModels }
+		const userKimchiModels: Array<{ id: string; [key: string]: unknown }> = Array.isArray(rawModels) ? rawModels : []
+		return { otherProviders, userKimchiModels }
 	} catch {
-		return { otherProviders: {}, userModels: [] }
+		return { otherProviders: {}, userKimchiModels: [] }
 	}
 }
 
@@ -140,18 +147,18 @@ export async function updateModelsConfig(modelsJsonPath: string, apiKey: string)
 	const dir = dirname(modelsJsonPath)
 	mkdirSync(dir, { recursive: true })
 
-	const { otherProviders, userModels } = readExistingState(modelsJsonPath)
+	const { otherProviders, userKimchiModels } = readExistingState(modelsJsonPath)
 
-	function mergeAndWrite(kimchiConfig: ReturnType<typeof buildModelsConfig> | typeof DEFAULT_MODELS_CONFIG): void {
-		const kimchiModels = kimchiConfig.providers["kimchi-dev"].models
+	function mergeAndWrite(config: ReturnType<typeof buildModelsConfig> | typeof DEFAULT_MODELS_CONFIG): void {
+		const kimchiModels = config.providers["kimchi-dev"].models
 		const kimchiIds = new Set(kimchiModels.map((m) => m.id))
-		const extraModels = userModels.filter((m) => !kimchiIds.has(m.id))
+		const extraModels = userKimchiModels.filter((m) => !kimchiIds.has(m.id))
 		const merged = {
 			providers: {
 				...otherProviders,
-				...kimchiConfig.providers,
+				...config.providers,
 				"kimchi-dev": {
-					...kimchiConfig.providers["kimchi-dev"],
+					...config.providers["kimchi-dev"],
 					models: [...kimchiModels, ...extraModels],
 				},
 			},
@@ -160,17 +167,17 @@ export async function updateModelsConfig(modelsJsonPath: string, apiKey: string)
 	}
 
 	try {
-		const fetched = await fetchAvailableModels(apiKey)
-		const models = filterAndSortModels(fetched)
-		if (models.length > 0) {
-			mergeAndWrite(buildModelsConfig(models))
-			return { source: "discovered", models }
+		const metadata = await fetchModelMetadata(apiKey)
+		if (metadata.length > 0) {
+			const config = buildModelsConfig(metadata)
+			mergeAndWrite(config)
+			return { source: "discovered", models: metadata.map((m) => m.slug) }
 		}
 		mergeAndWrite(DEFAULT_MODELS_CONFIG)
 		return {
 			source: "default",
 			models: DEFAULT_MODELS_CONFIG.providers["kimchi-dev"].models.map((m) => m.id),
-			error: fetched.length === 0 ? "API returned empty model list" : "API returned no usable models after filtering",
+			error: "API returned no models",
 		}
 	} catch (err) {
 		mergeAndWrite(DEFAULT_MODELS_CONFIG)
