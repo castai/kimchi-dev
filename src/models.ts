@@ -73,7 +73,7 @@ function buildModelsConfig(metadata: ModelMetadata[]) {
 
 	const providers: Record<string, ReturnType<typeof providerConfig>> = {}
 	for (const [provider, models] of providerMap.entries()) {
-		const key = provider === "ai-enabler" ? "kimchi-dev" : provider
+		const key = provider === "ai-enabler" ? "kimchi-dev" : provider === "anthropic" ? "kimchi-anthropic" : provider
 		providers[key] = providerConfig(models)
 	}
 	return { providers }
@@ -135,7 +135,7 @@ function readExistingState(modelsJsonPath: string): ExistingState {
 		const config = JSON.parse(raw)
 		const providers = config?.providers ?? {}
 		// Strip all auto-managed providers; preserve everything else
-		const { "kimchi-dev": kimchi, anthropic: _a, ...otherProviders } = providers as Record<string, unknown>
+		const { "kimchi-dev": kimchi, anthropic: _a, "kimchi-anthropic": _ka, ...otherProviders } = providers as Record<string, unknown>
 		const rawModels = (kimchi as { models?: unknown })?.models
 		const userKimchiModels: Array<{ id: string; [key: string]: unknown }> = Array.isArray(rawModels) ? rawModels : []
 		return { otherProviders, userKimchiModels }
