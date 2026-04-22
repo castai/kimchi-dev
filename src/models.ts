@@ -48,6 +48,7 @@ async function fetchModelMetadata(apiKey: string): Promise<ModelMetadata[]> {
 function buildModelsConfig(metadata: ModelMetadata[]) {
 	const providerMap = new Map<string, ModelMetadata[]>()
 	for (const m of metadata) {
+		if (m.deprecated_at) continue
 		const list = providerMap.get(m.provider) ?? []
 		list.push(m)
 		providerMap.set(m.provider, list)
