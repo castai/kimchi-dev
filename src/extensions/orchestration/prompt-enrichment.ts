@@ -22,6 +22,8 @@
 
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
+import { homedir } from "os"
+import { join } from "path"
 import { ANSI, fg } from "../../ansi.js"
 import { getAvailableModelIds } from "../../startup-context.js"
 import { ModelRegistry } from "./model-registry/index.js"
@@ -97,7 +99,17 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", async (_event, ctx) => {
 		const tools = pi.getAllTools()
 		cachedContextFiles ??= loadProjectContextFiles(ctx.cwd)
-		cachedSkills ??= loadSkills({ cwd: ctx.cwd }).skills
+		cachedSkills ??= loadSkills({
+			cwd: ctx.cwd,
+			skillPaths: [
+				join(homedir(), ".pi", "agent", "skills"),
+				join(ctx.cwd, ".pi", "agent", "skills"),
+				join(homedir(), ".config", "kimchi", "harness", "skills"),
+				join(ctx.cwd, ".config", "kimchi", "harness", "skills"),
+				join(homedir(), ".claude", "skills"),
+				join(ctx.cwd, ".claude", "skills"),
+			],
+		}).skills
 
 		if (subagentMode) {
 			// Filter the subagent tool out of the active tool set to prevent
