@@ -5,7 +5,8 @@ import type { AssistantMessage, ToolCall } from "@mariozechner/pi-ai"
 import type { ExtensionAPI, SessionEntry, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
-import { isBunBinary } from "../env.js"
+import { attachmentExists } from "../attachment-path.js"
+import { isRunningUnderBun } from "../env.js"
 import { formatCount } from "./format.js"
 import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./spinner.js"
 
@@ -130,8 +131,10 @@ function collectExtensionArgs(): string[] {
 }
 
 function getSubagentInvocation(args: string[]): { command: string; args: string[] } {
-	if (isBunBinary) {
-		return { command: process.execPath, args }
+	// When running under Bun (dev or compiled binary), reuse the same Bun executable.
+	// This ensures .md.template imports (Bun-native) work in the subagent process.
+	if (isRunningUnderBun) {
+		return { command: process.execPath, args: [process.argv[1], ...args] }
 	}
 	if (process.argv[1].endsWith(".ts")) {
 		const tsx = resolveTsx()
@@ -363,6 +366,12 @@ const SubagentParams = Type.Object({
 	}),
 	model: Type.String({ description: "Model ID to use for the subagent (e.g. glm-5-fp8, kimi-k2.5)" }),
 	prompt: Type.String({ description: "Prompt to send to the subagent" }),
+	attachments: Type.Optional(
+		Type.Array(Type.String({ description: "File path (without @ prefix) to load at subagent startup." }), {
+			description:
+				"File paths the subagent needs available at startup. Any file type pi's CLI loads via @file works (images, text files, etc.). Paths must be provided without the @ prefix — the runtime adds it. Images require a vision-capable model.",
+		}),
+	),
 	tokenBudget: Type.Optional(
 		Type.Integer({
 			description:
@@ -425,6 +434,21 @@ export default function (pi: ExtensionAPI) {
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const extensionArgs = collectExtensionArgs()
+			const attachments = params.attachments ?? []
+			const missingAttachments = attachments.filter((p) => !attachmentExists(p, ctx.cwd))
+			if (missingAttachments.length > 0) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Attachment files not found (relative to ${ctx.cwd}): ${missingAttachments.join(", ")}. Check the paths and retry.`,
+						},
+					],
+					details: undefined,
+					isError: true,
+				}
+			}
+			const attachmentArgs = attachments.map((p) => `@${p}`)
 			const args = [
 				"--mode",
 				"json",
@@ -435,6 +459,7 @@ export default function (pi: ExtensionAPI) {
 				"--model",
 				params.model,
 				...extensionArgs,
+				...attachmentArgs,
 				params.prompt,
 			]
 			const invocation = getSubagentInvocation(args)
