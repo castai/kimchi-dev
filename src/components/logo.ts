@@ -1,54 +1,56 @@
+import type { Theme } from "@mariozechner/pi-coding-agent"
 import type { Component } from "@mariozechner/pi-tui"
-import { visibleWidth } from "@mariozechner/pi-tui"
-import { ANSI, RST } from "../ansi.js"
+import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
 import { getFolder, getGitBranch, getVersion } from "../utils.js"
 
-const LOGO_FG = `\x1b[${ANSI.brand}m`
-const LOGO_TOP = `\x1b[${ANSI.brandGreen}m`
-const DIM = `\x1b[${ANSI.dim}m`
-
-const L = LOGO_FG
-const G = LOGO_TOP
-const R = RST
-
-const LOGO_LINES = [
-	`${G}     █▀${R}  ${L}█  █ ▀█▀ █▄ ▄█ ▄▀▀ █  █ ▀█▀${R}`,
-	`${L}    ███  █▀▄   █  █ ▀ █ █   █▀▀█  █${R}`,
-	`${L}▄  ▄███  █  █  █  █   █ █▄▄ █  █  █${R}`,
-	`${L}▀████▀   ▀  ▀ ▀▀▀ ▀   ▀  ▀▀ ▀  ▀ ▀▀▀${R}`,
-]
+const R = "\x1b[39m"
 
 export class LogoHeader implements Component {
 	private readonly branch: string
 	private readonly folder: string
 	private readonly version: string
+	private readonly theme: Theme
+	private readonly logoLines: string[]
 
-	constructor() {
+	constructor(theme: Theme) {
+		this.theme = theme
 		this.branch = getGitBranch()
 		this.folder = getFolder()
 		this.version = getVersion()
+
+		const L = theme.getFgAnsi("accent")
+		const G = theme.getFgAnsi("bashMode")
+		this.logoLines = [
+			`${G}     █▀${R}  ${L}█  █ ▀█▀ █▄ ▄█ ▄▀▀ █  █ ▀█▀${R}`,
+			`${L}    ███  █▀▄   █  █ ▀ █ █   █▀▀█  █${R}`,
+			`${L}▄  ▄███  █  █  █  █   █ █▄▄ █  █  █${R}`,
+			`${L}▀████▀   ▀  ▀ ▀▀▀ ▀   ▀  ▀▀ ▀  ▀ ▀▀▀${R}`,
+		]
 	}
 
 	invalidate(): void {}
 
 	render(width: number): string[] {
-		const branch = this.branch
-		const folder = this.folder
+		const { theme, branch, folder, version } = this
+		const dim = theme.getFgAnsi("dim")
+		const branchColor = theme.getFgAnsi("mdLink")
 
-		const version = this.version
-		const versionPart = `${DIM}v${version}${R}`
-
-		const branchPart = branch ? ` ${DIM}·${R} \x1b[${ANSI.branch}m${branch}${R}` : ""
-		const info = `${versionPart} ${DIM}│${R} ${DIM}${folder}${R}${branchPart}`
-		const infoWidth = visibleWidth(info)
+		const versionPart = `${dim}v${version}${R}`
+		const branchPart = branch ? ` ${dim}·${R} ${branchColor}${branch}${R}` : ""
+		const info = `${versionPart} ${dim}│${R} ${dim}${folder}${R}${branchPart}`
 
 		const result = [""]
-		for (let i = 0; i < LOGO_LINES.length; i++) {
-			const logo = LOGO_LINES[i]
+		for (let i = 0; i < this.logoLines.length; i++) {
+			const logo = this.logoLines[i]
 			if (i === 1) {
 				const logoWidth = visibleWidth(logo)
-				const gap = Math.max(2, width - logoWidth - infoWidth)
-				result.push(logo + " ".repeat(gap) + info)
+				const available = width - logoWidth - 2
+				if (available <= 0) {
+					result.push(logo)
+				} else {
+					const truncatedInfo = truncateToWidth(info, available)
+					result.push(logo + "  " + truncatedInfo)
+				}
 			} else {
 				result.push(logo)
 			}
