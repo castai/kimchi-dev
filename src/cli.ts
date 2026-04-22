@@ -2,6 +2,7 @@
 // All static imports here (extensions, pi-mono) are safe because the env is already configured.
 
 import { resolve } from "node:path"
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
 import { loadConfig, readTelemetryConfig } from "./config.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
@@ -17,6 +18,23 @@ import { updateModelsConfig } from "./models.js"
 import { setAvailableModelIds } from "./startup-context.js"
 
 const telemetryConfig = readTelemetryConfig()
+
+let sessionId: string | undefined
+
+process.on("exit", (code) => {
+	if (code === 0) {
+		const resumeCmd = sessionId
+			? `kimchi-code --session ${sessionId}`
+			: "kimchi-code --continue"
+		console.log(`\nTo resume: ${resumeCmd}`)
+	}
+})
+
+function sessionIdCaptureExtension(pi: ExtensionAPI) {
+	pi.on("session_start", (_event, ctx: ExtensionContext) => {
+		sessionId = ctx.sessionManager.getSessionId()
+	})
+}
 
 try {
 	const config = loadConfig()
@@ -51,6 +69,7 @@ try {
 	const { main } = await import("@mariozechner/pi-coding-agent")
 	await main(process.argv.slice(2), {
 		extensionFactories: [
+			sessionIdCaptureExtension,
 			bashCollapseExtension,
 			loopGuardExtension,
 			mcpAdapterExtension,
