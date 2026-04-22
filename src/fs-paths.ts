@@ -47,6 +47,7 @@ function isFile(p: string): boolean {
 }
 
 // Ordered set of transforms tried against the resolved absolute path. Each row is: "if the literal string didn't match, maybe it was typed one of these ways instead". Order matters: cheaper + more common substitutions first.
+// Single-axis only — variants are applied independently to the base, not cross-producted. Filenames that need multiple substitutions (e.g. NFD + curly apostrophe) must be listed as explicit combined entries (variant 5). This is a deliberate trade-off to keep the fallback ladder bounded.
 //   1. identity — the path as typed
 //   2. " AM." / " PM." → NNBSP variant (macOS screenshot default naming)
 //   3. NFD — macOS HFS+/APFS filesystems return filenames decomposed; an NFC-normalized string from the clipboard won't byte-match

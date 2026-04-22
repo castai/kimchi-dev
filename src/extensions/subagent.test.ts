@@ -188,11 +188,15 @@ describe("validateAttachments", () => {
 	})
 
 	it("reports missing files using the original path the caller supplied", () => {
-		expect(validateAttachments(["gone.png"], tmp)).toEqual({ kind: "missing", missing: ["gone.png"] })
+		expect(validateAttachments(["gone.png"], tmp)).toEqual({ kind: "invalid", missing: ["gone.png"], notFile: [] })
 	})
 
 	it("lists only the missing files on partial miss", () => {
-		expect(validateAttachments(["here.png", "gone.png"], tmp)).toEqual({ kind: "missing", missing: ["gone.png"] })
+		expect(validateAttachments(["here.png", "gone.png"], tmp)).toEqual({
+			kind: "invalid",
+			missing: ["gone.png"],
+			notFile: [],
+		})
 	})
 
 	it("strips a leading @ before resolving", () => {
@@ -200,8 +204,41 @@ describe("validateAttachments", () => {
 		expect(r).toEqual({ kind: "ok", resolved: [join(tmp, "here.png")] })
 	})
 
-	it("rejects a directory as not a file", () => {
-		expect(validateAttachments(["a-directory"], tmp)).toEqual({ kind: "missing", missing: ["a-directory"] })
+	it("reports a directory as not-a-file, not as missing", () => {
+		expect(validateAttachments(["a-directory"], tmp)).toEqual({
+			kind: "invalid",
+			missing: [],
+			notFile: ["a-directory"],
+		})
+	})
+
+	it("buckets missing and not-a-file separately in mixed input", () => {
+		expect(validateAttachments(["gone.png", "a-directory"], tmp)).toEqual({
+			kind: "invalid",
+			missing: ["gone.png"],
+			notFile: ["a-directory"],
+		})
+	})
+
+	it("rejects empty-string attachments with kind: empty", () => {
+		expect(validateAttachments([""], tmp)).toEqual({ kind: "empty" })
+	})
+
+	it("rejects whitespace-only attachments with kind: empty", () => {
+		expect(validateAttachments(["   "], tmp)).toEqual({ kind: "empty" })
+	})
+
+	it("rejects a lone @ (empty after strip) with kind: empty", () => {
+		expect(validateAttachments(["@"], tmp)).toEqual({ kind: "empty" })
+	})
+
+	it("empty-string detection fires even alongside valid paths", () => {
+		expect(validateAttachments(["here.png", ""], tmp)).toEqual({ kind: "empty" })
+	})
+
+	it("dedupes attachments that resolve to the same absolute path", () => {
+		const r = validateAttachments(["here.png", "./here.png", "@here.png"], tmp)
+		expect(r).toEqual({ kind: "ok", resolved: [join(tmp, "here.png")] })
 	})
 
 	it("returns the absolute path from the injected resolver in order", () => {

@@ -6,7 +6,7 @@ import type { ExtensionAPI, SessionEntry, Theme } from "@mariozechner/pi-coding-
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
 import { isBunBinary, isRunningUnderBun } from "../env.js"
-import { findExistingFile, stripAtPrefix } from "../fs-paths.js"
+import { findExistingFile, resolveUserPath, stripAtPrefix } from "../fs-paths.js"
 import { formatCount } from "./format.js"
 import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./spinner.js"
 
@@ -130,22 +130,39 @@ function collectExtensionArgs(): string[] {
 	return result
 }
 
-export type ValidateAttachmentsResult = { kind: "ok"; resolved: string[] } | { kind: "missing"; missing: string[] }
+export type ValidateAttachmentsResult =
+	| { kind: "ok"; resolved: string[] }
+	| { kind: "empty" }
+	| { kind: "invalid"; missing: string[]; notFile: string[] }
 
 export function validateAttachments(
 	attachments: string[] | undefined,
 	cwd: string,
 	findExisting: (filePath: string, cwd: string) => string | null = findExistingFile,
+	pathExists: (absPath: string) => boolean = existsSync,
 ): ValidateAttachmentsResult {
 	if (!attachments || attachments.length === 0) return { kind: "ok", resolved: [] }
+	// Empty / whitespace-only entries are almost certainly an LLM formatting bug (e.g. a trailing comma). Fail loudly rather than bucketing into "missing", where the resulting error message would render as "not found: ," and be unreadable.
+	if (attachments.some((a) => stripAtPrefix(a).trim().length === 0)) return { kind: "empty" }
 	const missing: string[] = []
+	const notFile: string[] = []
 	const resolved: string[] = []
+	const seen = new Set<string>()
 	for (const raw of attachments) {
 		const abs = findExisting(raw, cwd)
-		if (abs !== null) resolved.push(abs)
+		if (abs !== null) {
+			// Dedupe on the resolved absolute so "./foo" and "foo" collapse to a single @-arg.
+			if (!seen.has(abs)) {
+				seen.add(abs)
+				resolved.push(abs)
+			}
+			continue
+		}
+		// findExisting tried every variant and none was a regular file. If the identity-resolved path still exists on disk, it's a non-file (directory, socket, etc.) — distinguish that from "nothing at that path" so the caller gets an actionable error.
+		if (pathExists(resolveUserPath(raw, cwd))) notFile.push(raw)
 		else missing.push(raw)
 	}
-	if (missing.length > 0) return { kind: "missing", missing }
+	if (missing.length > 0 || notFile.length > 0) return { kind: "invalid", missing, notFile }
 	return { kind: "ok", resolved }
 }
 
@@ -477,19 +494,33 @@ export default function (pi: ExtensionAPI) {
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const validated = validateAttachments(params.attachments, ctx.cwd)
-			if (validated.kind === "missing") {
-				const anyRelative = validated.missing.some((p) => {
-					const stripped = stripAtPrefix(p)
-					return !isAbsolute(stripped) && !stripped.startsWith("~")
-				})
-				const cwdHint = anyRelative ? ` (relative to ${ctx.cwd})` : ""
+			if (validated.kind === "empty") {
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Attachment files not found${cwdHint}: ${validated.missing.join(", ")}. Check the paths and retry.`,
+							text: "Attachments must be non-empty file paths. Remove the blank entry and retry.",
 						},
 					],
+					details: undefined,
+					isError: true,
+				}
+			}
+			if (validated.kind === "invalid") {
+				const parts: string[] = []
+				if (validated.missing.length > 0) {
+					const anyRelative = validated.missing.some((p) => {
+						const stripped = stripAtPrefix(p)
+						return !isAbsolute(stripped) && !stripped.startsWith("~")
+					})
+					const cwdHint = anyRelative ? ` (relative to ${ctx.cwd})` : ""
+					parts.push(`Attachment files not found${cwdHint}: ${validated.missing.join(", ")}`)
+				}
+				if (validated.notFile.length > 0) {
+					parts.push(`Attachment paths are not regular files: ${validated.notFile.join(", ")}`)
+				}
+				return {
+					content: [{ type: "text", text: `${parts.join(". ")}. Check the paths and retry.` }],
 					details: undefined,
 					isError: true,
 				}
