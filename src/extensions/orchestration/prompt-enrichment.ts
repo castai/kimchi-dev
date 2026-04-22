@@ -20,10 +20,10 @@
  * returns "continue" so the message passes through unchanged.
  */
 
+import { homedir } from "node:os"
+import { join } from "node:path"
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
-import { homedir } from "os"
-import { join } from "path"
 import { ANSI, fg } from "../../ansi.js"
 import { getAvailableModelIds } from "../../startup-context.js"
 import { ModelRegistry } from "./model-registry/index.js"
