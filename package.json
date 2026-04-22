@@ -27,6 +27,7 @@
 		"configDir": ".config/kimchi/harness"
 	},
 	"dependencies": {
+		"@clack/prompts": "^1.2.0",
 		"@mariozechner/pi-coding-agent": "^0.67.68",
 		"@mariozechner/pi-tui": "^0.67.68",
 		"@modelcontextprotocol/ext-apps": "^1.2.2",
