@@ -30,7 +30,11 @@ process.on("exit", (code) => {
 
 function sessionIdCaptureExtension(pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx: ExtensionContext) => {
-		sessionId = ctx.sessionManager.getSessionId()
+		try {
+			sessionId = ctx.sessionManager.getSessionId()
+		} catch {
+			// ignore — exit handler falls back to --continue
+		}
 	})
 }
 
