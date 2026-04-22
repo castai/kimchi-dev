@@ -6,12 +6,12 @@ import { statSync } from "node:fs"
 import { homedir } from "node:os"
 import { isAbsolute, resolve } from "node:path"
 
-// Non-ASCII whitespace code points the OS / clipboard / browser sometimes substitute for a plain space: NBSP, the U+2000–U+200A span, NNBSP, MMSP, and the ideographic space. We flatten them to " " before comparing against the filesystem. Escapes used deliberately — otherwise formatters see "consecutive whitespace" and collapse the character class.
-const UNICODE_SPACES = /[  -   　]/g
+// Non-ASCII whitespace code points the OS / clipboard / browser sometimes substitute for a plain space: NBSP (U+00A0), the U+2000–U+200A span, NNBSP (U+202F), MMSP (U+205F), and the ideographic space (U+3000). We flatten them to " " before comparing against the filesystem. Escape sequences used deliberately: literal invisibles would get silently rewritten by formatters (biome in particular reads a run of spaces as "consecutive whitespace" and collapses the character class) and tests would pass as tautologies.
+const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g
 // U+202F — the space macOS puts between the time and AM/PM in default screenshot names. Users type a normal space, so we try substituting one for the other.
-const NARROW_NO_BREAK_SPACE = " "
+const NARROW_NO_BREAK_SPACE = "\u202F"
 // U+2019 — the curly apostrophe macOS uses in localized screenshot names like "Capture d'écran". Users type U+0027.
-const CURLY_APOSTROPHE = "’"
+const CURLY_APOSTROPHE = "\u2019"
 
 function normalizeUnicodeSpaces(s: string): string {
 	return s.replace(UNICODE_SPACES, " ")
@@ -60,7 +60,7 @@ const VARIANTS: ReadonlyArray<(p: string) => string> = [
 	(p) => p.normalize("NFD").replace(/'/g, CURLY_APOSTROPHE),
 ]
 
-// Walk the VARIANTS list and return the absolute path of the first existing regular file, or null if none matches. The returned path is the exact form that statSync confirmed — hand this to downstream consumers unchanged so they read the same bytes we validated.
+// Walk the VARIANTS list and return the absolute path of the first existing regular file, or null if none matches. Pi runs its own resolveReadPath on the argv it receives — we return the variant that already exists on disk so pi's identity attempt hits immediately instead of walking its own fallback chain.
 export function findExistingFile(
 	filePath: string,
 	cwd: string,

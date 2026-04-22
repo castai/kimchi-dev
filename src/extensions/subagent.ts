@@ -478,7 +478,10 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const validated = validateAttachments(params.attachments, ctx.cwd)
 			if (validated.kind === "missing") {
-				const anyRelative = validated.missing.some((p) => !isAbsolute(stripAtPrefix(p)) && !p.startsWith("~"))
+				const anyRelative = validated.missing.some((p) => {
+					const stripped = stripAtPrefix(p)
+					return !isAbsolute(stripped) && !stripped.startsWith("~")
+				})
 				const cwdHint = anyRelative ? ` (relative to ${ctx.cwd})` : ""
 				return {
 					content: [

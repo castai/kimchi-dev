@@ -39,7 +39,7 @@ describe("stripAtPrefix / expandUserPath", () => {
 
 	it("expandUserPath normalizes non-ASCII spaces to regular space", () => {
 		// U+00A0 (NBSP) between words should collapse to plain space.
-		expect(expandUserPath("foo bar")).toBe("foo bar")
+		expect(expandUserPath("foo\u00A0bar")).toBe("foo bar")
 	})
 })
 
@@ -71,7 +71,7 @@ describe("findExistingFile", () => {
 	})
 
 	it("finds a file whose stored name uses a narrow no-break space before AM/PM", () => {
-		const storedName = "Screenshot 2025-01-01 at 10.00 AM.png"
+		const storedName = "Screenshot 2025-01-01 at 10.00\u202FAM.png"
 		writeFileSync(join(tmp, storedName), "x")
 		// Caller passes a regular space — the NNBSP variant should match.
 		const queried = findExistingFile("Screenshot 2025-01-01 at 10.00 AM.png", tmp)
@@ -79,9 +79,9 @@ describe("findExistingFile", () => {
 	})
 
 	it("finds a file whose stored name uses a curly apostrophe when queried with a straight one", () => {
-		const storedName = "Capture d’écran.png"
+		const storedName = "Capture d\u2019\u00E9cran.png"
 		writeFileSync(join(tmp, storedName), "x")
-		const queried = findExistingFile("Capture d'écran.png", tmp)
+		const queried = findExistingFile("Capture d'\u00E9cran.png", tmp)
 		expect(queried).toBe(join(tmp, storedName))
 	})
 })
