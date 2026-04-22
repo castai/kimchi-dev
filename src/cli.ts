@@ -2,7 +2,7 @@
 // All static imports here (extensions, pi-mono) are safe because the env is already configured.
 
 import { resolve } from "node:path"
-import { loadConfig, readTelemetryConfig } from "./config.js"
+import { loadConfig, readTelemetryConfig, writeSkillPaths } from "./config.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
@@ -14,12 +14,19 @@ import telemetryExtension from "./extensions/telemetry.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import webSearchExtension from "./extensions/web-search/index.js"
 import { updateModelsConfig } from "./models.js"
+import { runSkillsWizard } from "./skills-wizard.js"
 import { setAvailableModelIds } from "./startup-context.js"
 
 const telemetryConfig = readTelemetryConfig()
 
 try {
 	const config = loadConfig()
+
+	let skillPaths = config.skillPaths
+	if (skillPaths === undefined) {
+		skillPaths = await runSkillsWizard()
+		writeSkillPaths(skillPaths)
+	}
 
 	// Expose the API key as an env var so pi-mono's models.json can resolve it
 	// via the "KIMCHI_API_KEY" apiKey field in the Cast AI provider config.
@@ -54,7 +61,7 @@ try {
 			bashCollapseExtension,
 			loopGuardExtension,
 			mcpAdapterExtension,
-			promptEnrichmentExtension,
+			promptEnrichmentExtension(skillPaths),
 			promptSummaryExtension,
 			subagentExtension,
 			tagsExtension,

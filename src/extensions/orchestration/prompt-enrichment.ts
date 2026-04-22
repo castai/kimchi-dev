@@ -21,7 +21,7 @@
  */
 
 import { homedir } from "node:os"
-import { join } from "node:path"
+import { isAbsolute, join, relative } from "node:path"
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
 import { ANSI, fg } from "../../ansi.js"
@@ -35,93 +35,101 @@ import {
 	transformPrompt,
 } from "./prompt-transformer/prompt-transformer.js"
 
-export default function (pi: ExtensionAPI) {
-	const subagentMode = isSubagent()
+function expandSkillPaths(configuredPaths: string[], cwd: string): string[] {
+	const home = homedir()
+	const expanded: string[] = []
+	for (const p of configuredPaths) {
+		const resolved = p.startsWith("~/") ? join(home, p.slice(2)) : p
+		expanded.push(resolved)
+		if (isAbsolute(resolved) && resolved.startsWith(`${home}/`)) {
+			expanded.push(join(cwd, relative(home, resolved)))
+		}
+	}
+	return expanded
+}
 
-	pi.registerFlag("debug-prompts", {
-		type: "boolean",
-		description: "Print enriched prompts in the UI (default: hidden)",
-		default: false,
-	})
+export default function (skillPaths: string[]) {
+	return (pi: ExtensionAPI) => {
+		const subagentMode = isSubagent()
 
-	// For sub agents we don't want to transform the prompt sent from parent with model capabilities
-	if (!subagentMode) {
-		const registry = new ModelRegistry(getAvailableModelIds())
+		pi.registerFlag("debug-prompts", {
+			type: "boolean",
+			description: "Print enriched prompts in the UI (default: hidden)",
+			default: false,
+		})
 
-		// Announce newly available API models that have no capability entry yet.
-		for (const warning of registry.warnings) {
-			console.log(
-				`${fg(ANSI.accent, ` New model available: "kimchi-dev/${warning.modelId}"`)}\n${fg(ANSI.dim, " Update the app or add the new model to model capabilities config to unlock orchestration support.")}`,
-			)
+		// For sub agents we don't want to transform the prompt sent from parent with model capabilities
+		if (!subagentMode) {
+			const registry = new ModelRegistry(getAvailableModelIds())
+
+			// Announce newly available API models that have no capability entry yet.
+			for (const warning of registry.warnings) {
+				console.log(
+					`${fg(ANSI.accent, ` New model available: "kimchi-dev/${warning.modelId}"`)}\n${fg(ANSI.dim, " Update the app or add the new model to model capabilities config to unlock orchestration support.")}`,
+				)
+			}
+
+			pi.on("input", async (event, ctx) => {
+				if (event.source === "extension") {
+					return { action: "continue" as const }
+				}
+
+				// Steering and follow-up messages arrive while the agent is streaming
+				// (ctx.isIdle() === false, i.e. session.isStreaming === true).
+				// Skip enrichment and let them pass through unchanged
+				if (!ctx.isIdle()) {
+					return { action: "continue" as const }
+				}
+
+				const currentModel = ctx.model ? { id: ctx.model.id, name: ctx.model.id } : undefined
+				const enrichedPrompt = transformPrompt(event.text, registry, currentModel)
+
+				// Non-interactive (--print/--mode rpc) and debug-prompts mode: replace the user
+				// text inline. The "handled" + sendUserMessage path below relies on the TUI event
+				// loop staying alive long enough for the queued message to drain — in --print mode
+				// the loop returns as soon as session.prompt resolves and disposeRuntime cancels
+				// the in-flight LLM call, so nothing is ever sent. Transforming inline lets the
+				// caller's await session.prompt(enrichedPrompt) do the work synchronously.
+				const debugPrompts = pi.getFlag("debug-prompts") === true
+				if (debugPrompts || !ctx.hasUI) {
+					return { action: "transform" as const, text: enrichedPrompt, images: event.images }
+				}
+
+				pi.sendMessage(
+					{ customType: "enriched-prompt", content: [{ type: "text", text: enrichedPrompt }], display: false },
+					{ deliverAs: "nextTurn" },
+				)
+				const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: event.text }]
+				if (event.images) userContent.push(...event.images)
+				pi.sendUserMessage(userContent)
+
+				return { action: "handled" as const }
+			})
 		}
 
-		pi.on("input", async (event, ctx) => {
-			if (event.source === "extension") {
-				return { action: "continue" as const }
+		let cachedContextFiles: ContextFile[] | undefined
+		let cachedSkills: Skill[] | undefined
+
+		pi.on("before_agent_start", async (_event, ctx) => {
+			const tools = pi.getAllTools()
+			cachedContextFiles ??= loadProjectContextFiles(ctx.cwd)
+			cachedSkills ??= loadSkills({
+				cwd: ctx.cwd,
+				skillPaths: expandSkillPaths(skillPaths, ctx.cwd),
+			}).skills
+
+			if (subagentMode) {
+				// Filter the subagent tool out of the active tool set to prevent
+				// the subagent from spawning further subagents.
+				const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
+				pi.setActiveTools(activeTools)
+
+				const systemPrompt = buildSubagentSystemPrompt(tools, cachedContextFiles, cachedSkills)
+				return { systemPrompt }
 			}
 
-			// Steering and follow-up messages arrive while the agent is streaming
-			// (ctx.isIdle() === false, i.e. session.isStreaming === true).
-			// Skip enrichment and let them pass through unchanged
-			if (!ctx.isIdle()) {
-				return { action: "continue" as const }
-			}
-
-			const currentModel = ctx.model ? { id: ctx.model.id, name: ctx.model.id } : undefined
-			const enrichedPrompt = transformPrompt(event.text, registry, currentModel)
-
-			// Non-interactive (--print/--mode rpc) and debug-prompts mode: replace the user
-			// text inline. The "handled" + sendUserMessage path below relies on the TUI event
-			// loop staying alive long enough for the queued message to drain — in --print mode
-			// the loop returns as soon as session.prompt resolves and disposeRuntime cancels
-			// the in-flight LLM call, so nothing is ever sent. Transforming inline lets the
-			// caller's await session.prompt(enrichedPrompt) do the work synchronously.
-			const debugPrompts = pi.getFlag("debug-prompts") === true
-			if (debugPrompts || !ctx.hasUI) {
-				return { action: "transform" as const, text: enrichedPrompt, images: event.images }
-			}
-
-			pi.sendMessage(
-				{ customType: "enriched-prompt", content: [{ type: "text", text: enrichedPrompt }], display: false },
-				{ deliverAs: "nextTurn" },
-			)
-			const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: event.text }]
-			if (event.images) userContent.push(...event.images)
-			pi.sendUserMessage(userContent)
-
-			return { action: "handled" as const }
+			const systemPrompt = buildOrchestratorSystemPrompt(tools, cachedContextFiles, cachedSkills)
+			return { systemPrompt }
 		})
 	}
-
-	let cachedContextFiles: ContextFile[] | undefined
-	let cachedSkills: Skill[] | undefined
-
-	pi.on("before_agent_start", async (_event, ctx) => {
-		const tools = pi.getAllTools()
-		cachedContextFiles ??= loadProjectContextFiles(ctx.cwd)
-		cachedSkills ??= loadSkills({
-			cwd: ctx.cwd,
-			skillPaths: [
-				join(homedir(), ".pi", "agent", "skills"),
-				join(ctx.cwd, ".pi", "agent", "skills"),
-				join(homedir(), ".config", "kimchi", "harness", "skills"),
-				join(ctx.cwd, ".config", "kimchi", "harness", "skills"),
-				join(homedir(), ".claude", "skills"),
-				join(ctx.cwd, ".claude", "skills"),
-			],
-		}).skills
-
-		if (subagentMode) {
-			// Filter the subagent tool out of the active tool set to prevent
-			// the subagent from spawning further subagents.
-			const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
-			pi.setActiveTools(activeTools)
-
-			const systemPrompt = buildSubagentSystemPrompt(tools, cachedContextFiles, cachedSkills)
-			return { systemPrompt }
-		}
-
-		const systemPrompt = buildOrchestratorSystemPrompt(tools, cachedContextFiles, cachedSkills)
-		return { systemPrompt }
-	})
 }
