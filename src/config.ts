@@ -8,9 +8,9 @@ const CAST_AI_LLM_ENDPOINT = "https://llm.cast.ai/openai/v1"
 const DEFAULT_TELEMETRY_ENDPOINT = "https://api.cast.ai/ai-optimizer/v1beta/logs:ingest"
 
 export const DEFAULT_SKILL_PATHS = [
-	join(homedir(), ".pi", "agent", "skills"),
-	join(homedir(), ".config", "kimchi", "harness", "skills"),
-	join(homedir(), ".claude", "skills"),
+	join(".pi", "agent", "skills"),
+	join(".config", "kimchi", "harness", "skills"),
+	join(".claude", "skills"),
 ]
 
 export interface TelemetryConfig {

@@ -21,7 +21,7 @@
  */
 
 import { homedir } from "node:os"
-import { isAbsolute, join, relative } from "node:path"
+import { isAbsolute, join } from "node:path"
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
 import { ANSI, fg } from "../../ansi.js"
@@ -39,10 +39,11 @@ function expandSkillPaths(configuredPaths: string[], cwd: string): string[] {
 	const home = homedir()
 	const expanded: string[] = []
 	for (const p of configuredPaths) {
-		const resolved = p.startsWith("~/") ? join(home, p.slice(2)) : p
-		expanded.push(resolved)
-		if (isAbsolute(resolved) && resolved.startsWith(`${home}/`)) {
-			expanded.push(join(cwd, relative(home, resolved)))
+		if (isAbsolute(p) || p.startsWith("~/")) {
+			expanded.push(p.startsWith("~/") ? join(home, p.slice(2)) : p)
+		} else {
+			expanded.push(join(home, p))
+			expanded.push(join(cwd, p))
 		}
 	}
 	return expanded
