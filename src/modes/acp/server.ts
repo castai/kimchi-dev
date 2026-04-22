@@ -55,26 +55,8 @@ type TurnContext = {
 	// defensive widening so a future pi-mono emit-order change can't make real
 	// turns look like short-circuits.
 	turnActive: boolean
-	// performance.now() timestamp captured when prompt() registered the turn.
-	// Used only by lifecycle traces to log elapsed ms at settle/finalize time.
-	startedAtMs: number
-	// Per-turn dedup set for first-delivery traces — we only log the FIRST
-	// agent_start / message_update / tool_execution_start we see so an LLM
-	// that streams 5000 deltas doesn't flood the log. Rebuilt per turn.
-	firstSeen: Set<string>
 	resolve: (res: PromptResponse) => void
 	reject: (err: unknown) => void
-}
-
-// Lifecycle tracing. Goes to stderr (stdout is reserved for JSON-RPC). Zed
-// surfaces this in its agent log panel; CLI users see it on their terminal.
-// Keep the prefix stable so "grep acp-trace" in user reports just works. Do
-// NOT trace per-chunk / per-delta events — instrument only the points a
-// "prompt hangs" report needs to localize the hang (initialize, newSession
-// enter/exit, prompt enter, session.prompt settle, first turn event per turn,
-// agent_end, finalize/fail, cancel, shutdown).
-function trace(msg: string): void {
-	process.stderr.write(`[acp-trace ${new Date().toISOString()}] ${msg}\n`)
 }
 
 type SessionEntry = {
@@ -97,8 +79,7 @@ export class KimchiAcpAgent implements Agent {
 		this.sessionFactory = options.sessionFactory ?? defaultSessionFactory(options)
 	}
 
-	async initialize(params: InitializeRequest): Promise<InitializeResponse> {
-		trace(`initialize client=${params.clientCapabilities ? "present" : "absent"} proto=${params.protocolVersion}`)
+	async initialize(_: InitializeRequest): Promise<InitializeResponse> {
 		return {
 			protocolVersion: PROTOCOL_VERSION,
 			agentCapabilities: {
@@ -110,31 +91,21 @@ export class KimchiAcpAgent implements Agent {
 	}
 
 	async authenticate(_: AuthenticateRequest): Promise<AuthenticateResponse> {
-		trace("authenticate")
 		return {}
 	}
 
 	async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
-		const startMs = performance.now()
-		trace(`newSession enter cwd=${params.cwd ?? "(process.cwd)"} mcpServers=${params.mcpServers?.length ?? 0}`)
 		// mcpServers isn't plumbed: kimchi loads MCP servers from its own config via
 		// mcpAdapterExtension, so a caller-supplied list would be silently ignored.
 		// Surface that as invalidParams instead of accepting the request and
 		// pretending those servers are live.
 		if (Array.isArray(params.mcpServers) && params.mcpServers.length > 0) {
-			trace("newSession reject mcpServers non-empty")
 			throw RequestError.invalidParams(
 				undefined,
 				"mcpServers is not supported; configure MCP servers via kimchi config",
 			)
 		}
-		let session: AgentSession
-		try {
-			session = await this.sessionFactory(params)
-		} catch (err) {
-			trace(`newSession factory throw elapsedMs=${Math.round(performance.now() - startMs)} err=${String(err)}`)
-			throw err
-		}
+		const session = await this.sessionFactory(params)
 		// Once the factory hands us a live session we own its lifecycle. If subscribe or
 		// the registering Map.set throws before we hand it back to the caller, nothing
 		// else will ever dispose it — so make ownership transfer atomic.
@@ -142,10 +113,8 @@ export class KimchiAcpAgent implements Agent {
 			const sessionId = session.sessionId
 			const unsubscribe = session.subscribe((event) => this.onSessionEvent(sessionId, event))
 			this.sessions.set(sessionId, { session, unsubscribe })
-			trace(`newSession ok sessionId=${sessionId} elapsedMs=${Math.round(performance.now() - startMs)}`)
 			return { sessionId }
 		} catch (err) {
-			trace(`newSession subscribe/register throw err=${String(err)}`)
 			session.dispose()
 			throw err
 		}
@@ -154,11 +123,9 @@ export class KimchiAcpAgent implements Agent {
 	async prompt(params: PromptRequest): Promise<PromptResponse> {
 		const entry = this.sessions.get(params.sessionId)
 		if (!entry) {
-			trace(`prompt reject unknown sessionId=${params.sessionId}`)
 			throw RequestError.invalidParams(undefined, `unknown sessionId ${params.sessionId}`)
 		}
 		if (entry.turn) {
-			trace(`prompt reject sessionId=${params.sessionId} reason=turn-in-progress`)
 			throw RequestError.invalidRequest(undefined, "a prompt is already in progress for this session")
 		}
 		// Capabilities declare image/audio/embeddedContext: false, so a compliant
@@ -176,25 +143,15 @@ export class KimchiAcpAgent implements Agent {
 			.join("")
 			.trim()
 		if (!text) {
-			trace(`prompt short-circuit-empty sessionId=${params.sessionId}`)
 			return { stopReason: "end_turn" }
 		}
-		trace(`prompt enter sessionId=${params.sessionId} textLen=${text.length} blocks=${params.prompt.length}`)
 		let turnResolve!: (r: PromptResponse) => void
 		let turnReject!: (e: unknown) => void
 		const result = new Promise<PromptResponse>((resolve, reject) => {
 			turnResolve = resolve
 			turnReject = reject
 		})
-		const startedAtMs = performance.now()
-		entry.turn = {
-			cancelled: false,
-			turnActive: false,
-			startedAtMs,
-			firstSeen: new Set<string>(),
-			resolve: turnResolve,
-			reject: turnReject,
-		}
+		entry.turn = { cancelled: false, turnActive: false, resolve: turnResolve, reject: turnReject }
 		// Kick off session.prompt but don't await inside the async function body —
 		// shutdown() needs to be able to reject `result` and have the caller's await
 		// on prompt() settle immediately, which can't happen while this body is
@@ -203,10 +160,6 @@ export class KimchiAcpAgent implements Agent {
 		// propagates to the caller regardless of whether session.prompt ever resolves.
 		entry.session.prompt(text, { source: "rpc" }).then(
 			() => {
-				const elapsed = Math.round(performance.now() - startedAtMs)
-				trace(
-					`session.prompt resolve sessionId=${params.sessionId} elapsedMs=${elapsed} turnActive=${entry.turn?.turnActive ?? "none"}`,
-				)
 				// pi-coding-agent's session.prompt() short-circuits for extension commands,
 				// input-handler intercepts, and no-op paths — in those cases agent.prompt()
 				// never runs and no agent events fire. For real turns it awaits agent.prompt()
@@ -224,10 +177,6 @@ export class KimchiAcpAgent implements Agent {
 				}
 			},
 			(err) => {
-				const elapsed = Math.round(performance.now() - startedAtMs)
-				trace(
-					`session.prompt reject sessionId=${params.sessionId} elapsedMs=${elapsed} cancelled=${entry.turn?.cancelled ?? "none"} err=${String(err)}`,
-				)
 				// If cancel() arrived mid-turn, session.prompt() may reject with an abort
 				// error instead of resolving and letting agent_end drive finalization. The
 				// spec still says the client-initiated cancel should surface as
@@ -247,17 +196,12 @@ export class KimchiAcpAgent implements Agent {
 
 	async cancel(params: CancelNotification): Promise<void> {
 		const entry = this.sessions.get(params.sessionId)
-		if (!entry) {
-			trace(`cancel unknown sessionId=${params.sessionId}`)
-			return
-		}
-		trace(`cancel sessionId=${params.sessionId} turn=${entry.turn ? "active" : "none"}`)
+		if (!entry) return
 		if (entry.turn) entry.turn.cancelled = true
 		await entry.session.abort()
 	}
 
 	async shutdown(): Promise<void> {
-		trace(`shutdown sessions=${this.sessions.size}`)
 		// Drain any in-flight turn promises before tearing down the session.
 		// On the signal path we process.exit immediately so this is mostly
 		// cosmetic, but runAcpMode's finally also calls shutdown when conn.closed
@@ -275,14 +219,6 @@ export class KimchiAcpAgent implements Agent {
 		const entry = this.sessions.get(sessionId)
 		if (!entry) return
 		const turn = entry.turn
-		// First-delivery trace per turn. `firstSeen` is rebuilt per turn so each
-		// new prompt gets its own "first agent_start / first tool_execution_start"
-		// marker. Skipped entirely when turn is absent (stray late events).
-		if (turn && !turn.firstSeen.has(event.type)) {
-			turn.firstSeen.add(event.type)
-			const elapsed = Math.round(performance.now() - turn.startedAtMs)
-			trace(`event first sessionId=${sessionId} type=${event.type} elapsedMs=${elapsed}`)
-		}
 		switch (event.type) {
 			case "agent_start": {
 				if (turn) turn.turnActive = true
@@ -395,8 +331,6 @@ export class KimchiAcpAgent implements Agent {
 		const turn = entry.turn
 		if (!turn) return
 		entry.turn = undefined
-		const elapsed = Math.round(performance.now() - turn.startedAtMs)
-		trace(`finalizeTurn sessionId=${entry.session.sessionId} stopReason=${stopReason} elapsedMs=${elapsed}`)
 		turn.resolve({ stopReason })
 	}
 
@@ -404,8 +338,6 @@ export class KimchiAcpAgent implements Agent {
 		const turn = entry.turn
 		if (!turn) return
 		entry.turn = undefined
-		const elapsed = Math.round(performance.now() - turn.startedAtMs)
-		trace(`failTurn sessionId=${entry.session.sessionId} elapsedMs=${elapsed} err=${String(err)}`)
 		turn.reject(err)
 	}
 }
@@ -535,8 +467,6 @@ export async function runAcpMode(options: RunAcpOptions): Promise<void> {
 	console.warn = console.error
 	console.debug = console.error
 
-	trace(`runAcpMode boot pid=${process.pid} node=${process.version} platform=${process.platform}`)
-
 	const writable = Writable.toWeb(process.stdout) as WritableStream<Uint8Array>
 	const readable = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>
 	const stream = ndJsonStream(writable, readable)
@@ -552,7 +482,6 @@ export async function runAcpMode(options: RunAcpOptions): Promise<void> {
 	const onSignal = (sig: NodeJS.Signals) => {
 		if (shuttingDown) return
 		shuttingDown = true
-		trace(`signal received sig=${sig}`)
 		const code = sig === "SIGHUP" ? 129 : 143
 		agentInstance
 			?.shutdown()
@@ -563,7 +492,6 @@ export async function runAcpMode(options: RunAcpOptions): Promise<void> {
 
 	try {
 		await conn.closed
-		trace("conn.closed resolved")
 	} finally {
 		for (const s of signals) process.off(s, onSignal)
 		await agentInstance?.shutdown()
