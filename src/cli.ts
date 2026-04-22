@@ -23,9 +23,7 @@ let sessionId: string | undefined
 
 process.on("exit", (code) => {
 	if (code === 0) {
-		const resumeCmd = sessionId
-			? `kimchi-code --session ${sessionId}`
-			: "kimchi-code --continue"
+		const resumeCmd = sessionId ? `kimchi-code --session ${sessionId}` : "kimchi-code --continue"
 		console.log(`\nTo resume: ${resumeCmd}`)
 	}
 })
