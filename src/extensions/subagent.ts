@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
-import { dirname, resolve } from "node:path"
+import { dirname, isAbsolute, resolve } from "node:path"
 import type { AssistantMessage, ToolCall } from "@mariozechner/pi-ai"
 import type { ExtensionAPI, SessionEntry, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
-import { isBunBinary } from "../env.js"
+import { isBunBinary, isRunningUnderBun } from "../env.js"
+import { findExistingFile, resolveUserPath, stripAtPrefix } from "../fs-paths.js"
 import { formatCount } from "./format.js"
 import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./spinner.js"
 
@@ -129,9 +130,70 @@ function collectExtensionArgs(): string[] {
 	return result
 }
 
+export type ValidateAttachmentsResult =
+	| { kind: "ok"; resolved: string[] }
+	| { kind: "empty" }
+	| { kind: "invalid"; missing: string[]; notFile: string[] }
+
+export function validateAttachments(
+	attachments: string[] | undefined,
+	cwd: string,
+	findExisting: (filePath: string, cwd: string) => string | null = findExistingFile,
+	pathExists: (absPath: string) => boolean = existsSync,
+): ValidateAttachmentsResult {
+	if (!attachments || attachments.length === 0) return { kind: "ok", resolved: [] }
+	// Empty / whitespace-only entries are almost certainly an LLM formatting bug (e.g. a trailing comma). Fail loudly rather than bucketing into "missing", where the resulting error message would render as "not found: ," and be unreadable.
+	if (attachments.some((a) => stripAtPrefix(a).trim().length === 0)) return { kind: "empty" }
+	const missing: string[] = []
+	const notFile: string[] = []
+	const resolved: string[] = []
+	const seen = new Set<string>()
+	for (const raw of attachments) {
+		const abs = findExisting(raw, cwd)
+		if (abs !== null) {
+			// Dedupe on the resolved absolute so "./foo" and "foo" collapse to a single @-arg.
+			if (!seen.has(abs)) {
+				seen.add(abs)
+				resolved.push(abs)
+			}
+			continue
+		}
+		// findExisting tried every variant and none was a regular file. If the identity-resolved path still exists on disk, it's a non-file (directory, socket, etc.) — distinguish that from "nothing at that path" so the caller gets an actionable error.
+		if (pathExists(resolveUserPath(raw, cwd))) notFile.push(raw)
+		else missing.push(raw)
+	}
+	if (missing.length > 0 || notFile.length > 0) return { kind: "invalid", missing, notFile }
+	return { kind: "ok", resolved }
+}
+
+export function buildSubagentArgs(
+	params: { provider: string; model: string; prompt: string },
+	resolvedAttachments: string[],
+	extensionArgs: string[],
+): string[] {
+	return [
+		"--mode",
+		"json",
+		"-p",
+		"--no-session",
+		"--provider",
+		params.provider,
+		"--model",
+		params.model,
+		...extensionArgs,
+		...resolvedAttachments.map((p) => `@${p}`),
+		params.prompt,
+	]
+}
+
 function getSubagentInvocation(args: string[]): { command: string; args: string[] } {
+	// Bun single-file binary: process.execPath IS the self-contained binary and the entry script is baked in, so we spawn with just the CLI args. Do NOT prepend process.argv[1] — it's a virtual /$bunfs/... path that only exists inside this process's embedded filesystem, and the child would either error or misread it as a positional arg.
 	if (isBunBinary) {
 		return { command: process.execPath, args }
+	}
+	// Dev under Bun (`bun run src/entry.ts`): process.execPath is the `bun` interpreter, so we must prepend the on-disk entry script as argv[1] for Bun to know what to run. Reusing the same interpreter keeps .md.template imports (Bun-native) working in the child.
+	if (isRunningUnderBun) {
+		return { command: process.execPath, args: [process.argv[1], ...args] }
 	}
 	if (process.argv[1].endsWith(".ts")) {
 		const tsx = resolveTsx()
@@ -363,6 +425,13 @@ const SubagentParams = Type.Object({
 	}),
 	model: Type.String({ description: "Model ID to use for the subagent (e.g. glm-5-fp8, kimi-k2.5)" }),
 	prompt: Type.String({ description: "Prompt to send to the subagent" }),
+	attachments: Type.Optional(
+		Type.Array(Type.String({ description: "File path to load at subagent startup." }), {
+			description:
+				"File paths the subagent needs available at startup. Any file type pi's CLI loads via @file works (images, text files, etc.). Do not include the @ prefix — the runtime adds it. Images require a vision-capable model.",
+			maxItems: 10,
+		}),
+	),
 	tokenBudget: Type.Optional(
 		Type.Integer({
 			description:
@@ -424,19 +493,39 @@ export default function (pi: ExtensionAPI) {
 		parameters: SubagentParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			const extensionArgs = collectExtensionArgs()
-			const args = [
-				"--mode",
-				"json",
-				"-p",
-				"--no-session",
-				"--provider",
-				params.provider,
-				"--model",
-				params.model,
-				...extensionArgs,
-				params.prompt,
-			]
+			const validated = validateAttachments(params.attachments, ctx.cwd)
+			if (validated.kind === "empty") {
+				return {
+					content: [
+						{
+							type: "text",
+							text: "Attachments must be non-empty file paths. Remove the blank entry and retry.",
+						},
+					],
+					details: undefined,
+					isError: true,
+				}
+			}
+			if (validated.kind === "invalid") {
+				const parts: string[] = []
+				if (validated.missing.length > 0) {
+					const anyRelative = validated.missing.some((p) => {
+						const stripped = stripAtPrefix(p)
+						return !isAbsolute(stripped) && !stripped.startsWith("~")
+					})
+					const cwdHint = anyRelative ? ` (relative to ${ctx.cwd})` : ""
+					parts.push(`Attachment files not found${cwdHint}: ${validated.missing.join(", ")}`)
+				}
+				if (validated.notFile.length > 0) {
+					parts.push(`Attachment paths are not regular files: ${validated.notFile.join(", ")}`)
+				}
+				return {
+					content: [{ type: "text", text: `${parts.join(". ")}. Check the paths and retry.` }],
+					details: undefined,
+					isError: true,
+				}
+			}
+			const args = buildSubagentArgs(params, validated.resolved, collectExtensionArgs())
 			const invocation = getSubagentInvocation(args)
 
 			let lastToolCall: string | undefined

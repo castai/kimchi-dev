@@ -45,6 +45,7 @@ Run the steps in order. For steps you own, use your tools directly. For steps yo
 - Spawn independent subtasks in parallel: do NOT run more than 3 concurrent subagents.
 - After a subagent returns, review the output. If corrections are needed, spawn a follow-up with the correction task.
 - Do NOT spawn a subagent for work you can do in a single tool call.
+- Every file the subagent needs must go in the `attachments` field — never paste file contents or `@path` tokens into the prompt. The subagent sees each attachment as an image or file block before your prompt; refer to them by name.
 
 ## Model selection for delegation
 
@@ -52,7 +53,7 @@ The user message contains an "## Available Models" section. Use it to pick the r
 
 - Match the model's **strengths** to the step type (explore, plan, build, review).
 - Match the model's **tier** to the complexity: light for simple well-scoped work, heavy for ambiguous or multi-step work.
-- Use `Vision: yes` models when the subtask involves images or visual content.
+- If the subtask involves images or visual content, you MUST select a model with `Vision: yes`.
 - Prefer cheaper models for mechanical work once the design is settled.
 
 ## Token budgets

@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest"
-import { parseSubagentEvent } from "./subagent.js"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join, resolve } from "node:path"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { buildSubagentArgs, parseSubagentEvent, validateAttachments } from "./subagent.js"
 
 describe("parseSubagentEvent", () => {
 	const cases: Record<
@@ -158,4 +161,123 @@ describe("parseSubagentEvent", () => {
 			expect(parseSubagentEvent(input)).toEqual(expected)
 		})
 	}
+})
+
+describe("validateAttachments", () => {
+	let tmp: string
+	beforeAll(() => {
+		tmp = mkdtempSync(join(tmpdir(), "subagent-validate-"))
+		writeFileSync(join(tmp, "here.png"), "x")
+		mkdirSync(join(tmp, "a-directory"))
+	})
+	afterAll(() => {
+		rmSync(tmp, { recursive: true, force: true })
+	})
+
+	it("returns empty resolved list when attachments is undefined", () => {
+		expect(validateAttachments(undefined, tmp)).toEqual({ kind: "ok", resolved: [] })
+	})
+
+	it("returns empty resolved list when attachments is empty", () => {
+		expect(validateAttachments([], tmp)).toEqual({ kind: "ok", resolved: [] })
+	})
+
+	it("resolves cwd-relative paths to absolute", () => {
+		const r = validateAttachments(["here.png"], tmp)
+		expect(r).toEqual({ kind: "ok", resolved: [join(tmp, "here.png")] })
+	})
+
+	it("reports missing files using the original path the caller supplied", () => {
+		expect(validateAttachments(["gone.png"], tmp)).toEqual({ kind: "invalid", missing: ["gone.png"], notFile: [] })
+	})
+
+	it("lists only the missing files on partial miss", () => {
+		expect(validateAttachments(["here.png", "gone.png"], tmp)).toEqual({
+			kind: "invalid",
+			missing: ["gone.png"],
+			notFile: [],
+		})
+	})
+
+	it("strips a leading @ before resolving", () => {
+		const r = validateAttachments(["@here.png"], tmp)
+		expect(r).toEqual({ kind: "ok", resolved: [join(tmp, "here.png")] })
+	})
+
+	it("reports a directory as not-a-file, not as missing", () => {
+		expect(validateAttachments(["a-directory"], tmp)).toEqual({
+			kind: "invalid",
+			missing: [],
+			notFile: ["a-directory"],
+		})
+	})
+
+	it("buckets missing and not-a-file separately in mixed input", () => {
+		expect(validateAttachments(["gone.png", "a-directory"], tmp)).toEqual({
+			kind: "invalid",
+			missing: ["gone.png"],
+			notFile: ["a-directory"],
+		})
+	})
+
+	it("rejects empty-string attachments with kind: empty", () => {
+		expect(validateAttachments([""], tmp)).toEqual({ kind: "empty" })
+	})
+
+	it("rejects whitespace-only attachments with kind: empty", () => {
+		expect(validateAttachments(["   "], tmp)).toEqual({ kind: "empty" })
+	})
+
+	it("rejects a lone @ (empty after strip) with kind: empty", () => {
+		expect(validateAttachments(["@"], tmp)).toEqual({ kind: "empty" })
+	})
+
+	it("empty-string detection fires even alongside valid paths", () => {
+		expect(validateAttachments(["here.png", ""], tmp)).toEqual({ kind: "empty" })
+	})
+
+	it("dedupes attachments that resolve to the same absolute path", () => {
+		const r = validateAttachments(["here.png", "./here.png", "@here.png"], tmp)
+		expect(r).toEqual({ kind: "ok", resolved: [join(tmp, "here.png")] })
+	})
+
+	it("returns the absolute path from the injected resolver in order", () => {
+		const r = validateAttachments(["a", "b"], "/cwd", (p, _cwd) => `/abs/${p}`)
+		expect(r).toEqual({ kind: "ok", resolved: ["/abs/a", "/abs/b"] })
+	})
+})
+
+describe("buildSubagentArgs", () => {
+	const base = { provider: "kimchi-dev", model: "kimi-k2.5", prompt: "go" }
+
+	it("omits @ tokens when resolvedAttachments is empty", () => {
+		const args = buildSubagentArgs(base, [], [])
+		expect(args.some((a) => a.startsWith("@"))).toBe(false)
+	})
+
+	it("places attachments after extensionArgs and before prompt", () => {
+		const args = buildSubagentArgs(base, ["/abs/a.png", "/abs/b.txt"], ["-e", "ext-one"])
+		expect(args).toEqual([
+			"--mode",
+			"json",
+			"-p",
+			"--no-session",
+			"--provider",
+			"kimchi-dev",
+			"--model",
+			"kimi-k2.5",
+			"-e",
+			"ext-one",
+			"@/abs/a.png",
+			"@/abs/b.txt",
+			"go",
+		])
+	})
+
+	it("passes absolute paths straight through with a single @ prefix", () => {
+		const abs = resolve("/tmp/img.png")
+		const args = buildSubagentArgs(base, [abs], [])
+		expect(args).toContain(`@${abs}`)
+		expect(args.some((a) => a.startsWith("@@"))).toBe(false)
+	})
 })
