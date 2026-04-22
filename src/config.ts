@@ -1,6 +1,6 @@
-import { readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { join, resolve } from "node:path"
+import { dirname, join, resolve } from "node:path"
 
 const KIMCHI_CONFIG_PATH = resolve(homedir(), ".config", "kimchi", "config.json")
 const AGENT_CONFIG_DIR = resolve(homedir(), ".config", "kimchi", "harness")
@@ -237,26 +237,24 @@ export function getAgentConfigDir(): string {
 	return AGENT_CONFIG_DIR
 }
 
-export function writeMigrationState(state: MigrationState, configPath?: string): void {
-	const resolvedPath = configPath ?? KIMCHI_CONFIG_PATH
+function writeConfigField(key: string, value: unknown, configPath: string): void {
 	let raw: Record<string, unknown> = {}
 	try {
-		raw = JSON.parse(readFileSync(resolvedPath, "utf-8")) as Record<string, unknown>
+		raw = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>
 	} catch {
 		// file missing or invalid — start fresh
 	}
-	raw.migrationState = state
-	writeFileSync(resolvedPath, `${JSON.stringify(raw, null, 2)}\n`, "utf-8")
+	raw[key] = value
+	mkdirSync(dirname(configPath), { recursive: true })
+	const tmp = `${configPath}.${process.pid}.tmp`
+	writeFileSync(tmp, `${JSON.stringify(raw, null, 2)}\n`, "utf-8")
+	renameSync(tmp, configPath)
+}
+
+export function writeMigrationState(state: MigrationState, configPath?: string): void {
+	writeConfigField("migrationState", state, configPath ?? KIMCHI_CONFIG_PATH)
 }
 
 export function writeSkillPaths(paths: string[], configPath?: string): void {
-	const resolvedPath = configPath ?? KIMCHI_CONFIG_PATH
-	let raw: Record<string, unknown> = {}
-	try {
-		raw = JSON.parse(readFileSync(resolvedPath, "utf-8")) as Record<string, unknown>
-	} catch {
-		// file missing or invalid — start fresh
-	}
-	raw.skillPaths = paths
-	writeFileSync(resolvedPath, `${JSON.stringify(raw, null, 2)}\n`, "utf-8")
+	writeConfigField("skillPaths", paths, configPath ?? KIMCHI_CONFIG_PATH)
 }

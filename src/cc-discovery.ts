@@ -52,16 +52,18 @@ export function discoverCcConfig(): CcDiscovery {
 				}
 			}
 		}
-	} catch {
-		// file missing or unreadable
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+			console.warn(`Failed to read Claude Code config: ${err instanceof Error ? err.message : String(err)}`)
+		}
 	}
 
 	let skillCount = 0
 	if (existsSync(CC_SKILLS_DIR)) {
 		try {
 			skillCount = readdirSync(CC_SKILLS_DIR, { withFileTypes: true }).filter((e) => e.isDirectory()).length
-		} catch {
-			// unreadable
+		} catch (err) {
+			console.warn(`Failed to read Claude Code skills directory: ${err instanceof Error ? err.message : String(err)}`)
 		}
 	}
 

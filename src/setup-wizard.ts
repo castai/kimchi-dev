@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import * as clack from "@clack/prompts"
@@ -43,7 +43,8 @@ async function runMigrationPhase(
 		return "skip-once"
 	}
 
-	return action as MigrationAction
+	const validActions: MigrationAction[] = ["migrate", "skip-once", "skip-forever"]
+	return validActions.includes(action as MigrationAction) ? (action as MigrationAction) : "skip-once"
 }
 
 function writeMcpServers(servers: Record<string, ServerEntry>): void {
@@ -63,7 +64,9 @@ function writeMcpServers(servers: Record<string, ServerEntry>): void {
 	const merged: Record<string, ServerEntry> = { ...servers, ...existingServers }
 
 	existing.mcpServers = merged
-	writeFileSync(mcpPath, `${JSON.stringify(existing, null, 2)}\n`, "utf-8")
+	const tmp = `${mcpPath}.${process.pid}.tmp`
+	writeFileSync(tmp, `${JSON.stringify(existing, null, 2)}\n`, "utf-8")
+	renameSync(tmp, mcpPath)
 }
 
 async function runSkillsPhase(): Promise<string[]> {
@@ -73,11 +76,11 @@ async function runSkillsPhase(): Promise<string[]> {
 		required: false,
 	})
 
-	if (clack.isCancel(selected)) {
+	if (clack.isCancel(selected) || !Array.isArray(selected)) {
 		return DEFAULT_SKILL_PATHS
 	}
 
-	const paths = selected as string[]
+	const paths = selected
 
 	const customInput = await clack.text({
 		message: "Add a custom path (leave empty to skip):",

@@ -3,7 +3,7 @@
 
 import { resolve } from "node:path"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
-import { loadConfig, readTelemetryConfig, writeMigrationState, writeSkillPaths } from "./config.js"
+import { DEFAULT_SKILL_PATHS, loadConfig, readTelemetryConfig, writeMigrationState, writeSkillPaths } from "./config.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
@@ -47,13 +47,21 @@ try {
 	let skillPaths = config.skillPaths ?? []
 
 	if (needsSkillsSetup || needsMigrationCheck) {
-		const result = await runSetupWizard({ needsSkillsSetup, needsMigrationCheck })
-		if (needsSkillsSetup) {
-			skillPaths = result.skillPaths
-			writeSkillPaths(skillPaths)
-		}
-		if (result.migrationState !== undefined) {
-			writeMigrationState(result.migrationState)
+		if (!process.stdin.isTTY) {
+			if (needsSkillsSetup) {
+				skillPaths = DEFAULT_SKILL_PATHS
+				writeSkillPaths(skillPaths)
+			}
+			writeMigrationState("done")
+		} else {
+			const result = await runSetupWizard({ needsSkillsSetup, needsMigrationCheck })
+			if (needsSkillsSetup) {
+				skillPaths = result.skillPaths
+				writeSkillPaths(skillPaths)
+			}
+			if (result.migrationState !== undefined) {
+				writeMigrationState(result.migrationState)
+			}
 		}
 	}
 
