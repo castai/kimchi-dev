@@ -134,7 +134,7 @@ export default function (skillPaths: string[]) {
 						...messages,
 						{
 							role: "user" as const,
-							content: [{ type: "text" as const, text: "Please respond to the user now." }],
+							content: [{ type: "text" as const, text: "If you have finished, please summarize the result for the user. Otherwise, continue with the next tool call." }],
 							timestamp: Date.now(),
 						},
 					],
