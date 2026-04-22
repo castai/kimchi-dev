@@ -1,11 +1,17 @@
-import { readFileSync } from "node:fs"
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { resolve } from "node:path"
+import { dirname, join, resolve } from "node:path"
 
 const KIMCHI_CONFIG_PATH = resolve(homedir(), ".config", "kimchi", "config.json")
 const AGENT_CONFIG_DIR = resolve(homedir(), ".config", "kimchi", "harness")
 const CAST_AI_LLM_ENDPOINT = "https://llm.cast.ai/openai/v1"
 const DEFAULT_TELEMETRY_ENDPOINT = "https://api.cast.ai/ai-optimizer/v1beta/logs:ingest"
+
+export const DEFAULT_SKILL_PATHS = [
+	join(".config", "kimchi", "harness", "skills"),
+	join(".pi", "agent", "skills"),
+	join(".claude", "skills"),
+]
 
 export interface TelemetryConfig {
 	enabled: boolean
@@ -27,6 +33,8 @@ export const SEARCH_STRATEGY_DEFAULTS: SearchStrategyConfig = {
 	fieldWeights: { name: 6, description: 2, schemaKey: 1 },
 }
 
+export type MigrationState = "done" | "skip-forever"
+
 export interface KimchiConfig {
 	apiKey: string
 	agentConfigDir: string
@@ -34,6 +42,8 @@ export interface KimchiConfig {
 	maxToolResultChars: number
 	mcpSearchLimit: number
 	mcpSearch: SearchStrategyConfig
+	skillPaths?: string[]
+	migrationState?: MigrationState
 }
 
 /**
@@ -57,6 +67,8 @@ function readConfigExtras(configPath: string): {
 	maxToolResultChars?: number
 	mcpSearchLimit?: number
 	mcpSearch?: Partial<SearchStrategyConfig>
+	skillPaths?: string[]
+	migrationState?: MigrationState
 } {
 	try {
 		const raw = readFileSync(configPath, "utf-8")
@@ -94,7 +106,15 @@ function readConfigExtras(configPath: string): {
 					: {}),
 			}
 		}
-		return { maxToolResultChars, mcpSearchLimit, mcpSearch }
+		const skillPaths =
+			Array.isArray(parsed.skillPaths) && parsed.skillPaths.every((p: unknown) => typeof p === "string")
+				? (parsed.skillPaths as string[])
+				: undefined
+		const migrationState =
+			parsed.migrationState === "done" || parsed.migrationState === "skip-forever"
+				? (parsed.migrationState as MigrationState)
+				: undefined
+		return { maxToolResultChars, mcpSearchLimit, mcpSearch, skillPaths, migrationState }
 	} catch {
 		return {}
 	}
@@ -177,6 +197,9 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 	const mcpSearchLimit = extras.mcpSearchLimit ?? 5
 	const mcpSearch: SearchStrategyConfig = { ...SEARCH_STRATEGY_DEFAULTS, ...extras.mcpSearch }
 
+	const skillPaths = extras.skillPaths
+	const migrationState = extras.migrationState
+
 	const envKey = env.KIMCHI_API_KEY
 	if (typeof envKey === "string" && envKey.length > 0) {
 		return {
@@ -186,6 +209,8 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 			maxToolResultChars,
 			mcpSearchLimit,
 			mcpSearch,
+			skillPaths,
+			migrationState,
 		}
 	}
 
@@ -198,6 +223,8 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 			maxToolResultChars,
 			mcpSearchLimit,
 			mcpSearch,
+			skillPaths,
+			migrationState,
 		}
 	}
 
@@ -208,4 +235,26 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 
 export function getAgentConfigDir(): string {
 	return AGENT_CONFIG_DIR
+}
+
+function writeConfigField(key: string, value: unknown, configPath: string): void {
+	let raw: Record<string, unknown> = {}
+	try {
+		raw = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>
+	} catch {
+		// file missing or invalid — start fresh
+	}
+	raw[key] = value
+	mkdirSync(dirname(configPath), { recursive: true })
+	const tmp = `${configPath}.${process.pid}.tmp`
+	writeFileSync(tmp, `${JSON.stringify(raw, null, 2)}\n`, "utf-8")
+	renameSync(tmp, configPath)
+}
+
+export function writeMigrationState(state: MigrationState, configPath?: string): void {
+	writeConfigField("migrationState", state, configPath ?? KIMCHI_CONFIG_PATH)
+}
+
+export function writeSkillPaths(paths: string[], configPath?: string): void {
+	writeConfigField("skillPaths", paths, configPath ?? KIMCHI_CONFIG_PATH)
 }

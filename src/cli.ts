@@ -3,7 +3,7 @@
 
 import { resolve } from "node:path"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
-import { loadConfig, readTelemetryConfig } from "./config.js"
+import { DEFAULT_SKILL_PATHS, loadConfig, readTelemetryConfig, writeMigrationState, writeSkillPaths } from "./config.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
@@ -15,6 +15,7 @@ import telemetryExtension from "./extensions/telemetry.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import webSearchExtension from "./extensions/web-search/index.js"
 import { updateModelsConfig } from "./models.js"
+import { runSetupWizard } from "./setup-wizard.js"
 import { setAvailableModelIds } from "./startup-context.js"
 
 const telemetryConfig = readTelemetryConfig()
@@ -40,6 +41,29 @@ function sessionIdCaptureExtension(pi: ExtensionAPI) {
 
 try {
 	const config = loadConfig()
+
+	const needsSkillsSetup = config.skillPaths === undefined
+	const needsMigrationCheck = config.migrationState === undefined
+	let skillPaths = config.skillPaths ?? []
+
+	if (needsSkillsSetup || needsMigrationCheck) {
+		if (!process.stdin.isTTY) {
+			if (needsSkillsSetup) {
+				skillPaths = DEFAULT_SKILL_PATHS
+				writeSkillPaths(skillPaths)
+			}
+			writeMigrationState("done")
+		} else {
+			const result = await runSetupWizard({ needsSkillsSetup, needsMigrationCheck })
+			if (needsSkillsSetup) {
+				skillPaths = result.skillPaths
+				writeSkillPaths(skillPaths)
+			}
+			if (result.migrationState !== undefined) {
+				writeMigrationState(result.migrationState)
+			}
+		}
+	}
 
 	// Expose the API key as an env var so pi-mono's models.json can resolve it
 	// via the "KIMCHI_API_KEY" apiKey field in the Cast AI provider config.
@@ -75,7 +99,7 @@ try {
 			bashCollapseExtension,
 			loopGuardExtension,
 			mcpAdapterExtension,
-			promptEnrichmentExtension,
+			promptEnrichmentExtension(skillPaths),
 			promptSummaryExtension,
 			subagentExtension,
 			tagsExtension,
