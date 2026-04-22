@@ -15,6 +15,8 @@ import subagentExtension from "./extensions/subagent.js"
 import tagsExtension from "./extensions/tags.js"
 import telemetryExtension from "./extensions/telemetry.js"
 import terminalColorsExtension from "./extensions/terminal-colors.js"
+import toolRendererExtension from "./extensions/tool-renderer.js"
+import userMessagePatchExtension from "./extensions/user-message-patch.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import webSearchExtension from "./extensions/web-search/index.js"
 import { updateModelsConfig } from "./models.js"
@@ -74,6 +76,7 @@ try {
 	const { main } = await import("@mariozechner/pi-coding-agent")
 	await main(process.argv.slice(2), {
 		extensionFactories: [
+			userMessagePatchExtension,
 			terminalColorsExtension,
 			bashCollapseExtension,
 			loopGuardExtension,
@@ -84,6 +87,7 @@ try {
 			subagentExtension,
 			tagsExtension,
 			telemetryExtension(telemetryConfig),
+			toolRendererExtension,
 			webFetchExtension,
 			webSearchExtension,
 		],
