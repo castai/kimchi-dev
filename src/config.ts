@@ -33,6 +33,8 @@ export const SEARCH_STRATEGY_DEFAULTS: SearchStrategyConfig = {
 	fieldWeights: { name: 6, description: 2, schemaKey: 1 },
 }
 
+export type MigrationState = "done" | "skip-forever"
+
 export interface KimchiConfig {
 	apiKey: string
 	agentConfigDir: string
@@ -41,6 +43,7 @@ export interface KimchiConfig {
 	mcpSearchLimit: number
 	mcpSearch: SearchStrategyConfig
 	skillPaths?: string[]
+	migrationState?: MigrationState
 }
 
 /**
@@ -65,6 +68,7 @@ function readConfigExtras(configPath: string): {
 	mcpSearchLimit?: number
 	mcpSearch?: Partial<SearchStrategyConfig>
 	skillPaths?: string[]
+	migrationState?: MigrationState
 } {
 	try {
 		const raw = readFileSync(configPath, "utf-8")
@@ -106,7 +110,11 @@ function readConfigExtras(configPath: string): {
 			Array.isArray(parsed.skillPaths) && parsed.skillPaths.every((p: unknown) => typeof p === "string")
 				? (parsed.skillPaths as string[])
 				: undefined
-		return { maxToolResultChars, mcpSearchLimit, mcpSearch, skillPaths }
+		const migrationState =
+			parsed.migrationState === "done" || parsed.migrationState === "skip-forever"
+				? (parsed.migrationState as MigrationState)
+				: undefined
+		return { maxToolResultChars, mcpSearchLimit, mcpSearch, skillPaths, migrationState }
 	} catch {
 		return {}
 	}
@@ -190,6 +198,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 	const mcpSearch: SearchStrategyConfig = { ...SEARCH_STRATEGY_DEFAULTS, ...extras.mcpSearch }
 
 	const skillPaths = extras.skillPaths
+	const migrationState = extras.migrationState
 
 	const envKey = env.KIMCHI_API_KEY
 	if (typeof envKey === "string" && envKey.length > 0) {
@@ -201,6 +210,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 			mcpSearchLimit,
 			mcpSearch,
 			skillPaths,
+			migrationState,
 		}
 	}
 
@@ -214,6 +224,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 			mcpSearchLimit,
 			mcpSearch,
 			skillPaths,
+			migrationState,
 		}
 	}
 
@@ -224,6 +235,18 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 
 export function getAgentConfigDir(): string {
 	return AGENT_CONFIG_DIR
+}
+
+export function writeMigrationState(state: MigrationState, configPath?: string): void {
+	const resolvedPath = configPath ?? KIMCHI_CONFIG_PATH
+	let raw: Record<string, unknown> = {}
+	try {
+		raw = JSON.parse(readFileSync(resolvedPath, "utf-8")) as Record<string, unknown>
+	} catch {
+		// file missing or invalid — start fresh
+	}
+	raw.migrationState = state
+	writeFileSync(resolvedPath, `${JSON.stringify(raw, null, 2)}\n`, "utf-8")
 }
 
 export function writeSkillPaths(paths: string[], configPath?: string): void {
