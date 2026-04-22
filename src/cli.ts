@@ -1,10 +1,13 @@
 // CLI logic — imported dynamically by entry.ts after PI_PACKAGE_DIR is set.
 // All static imports here (extensions, pi-mono) are safe because the env is already configured.
 
+import { readFileSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
 import { DEFAULT_SKILL_PATHS, loadConfig, readTelemetryConfig, writeMigrationState, writeSkillPaths } from "./config.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
+import editorExtension from "./extensions/editor.js"
+import layoutExtension from "./extensions/layout.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
@@ -104,6 +107,18 @@ try {
 	// prompt-enrichment reads this to build ModelRegistry with live model IDs.
 	setAvailableModelIds(modelsResult.models)
 
+	// Enable quiet startup to hide [Extensions] listing
+	const settingsPath = resolve(agentDir, "settings.json")
+	try {
+		const settings = JSON.parse(readFileSync(settingsPath, "utf-8"))
+		if (!settings.quietStartup) {
+			settings.quietStartup = true
+			writeFileSync(settingsPath, JSON.stringify(settings, null, "  ") + "\n")
+		}
+	} catch {
+		writeFileSync(settingsPath, JSON.stringify({ quietStartup: true }, null, "  ") + "\n")
+	}
+
 	// Suppress Node.js warnings (same as pi-mono's own cli.js)
 	process.emitWarning = () => {}
 
@@ -114,6 +129,8 @@ try {
 	const extensionFactories = [
 		sessionIdCaptureExtension,
 		bashCollapseExtension,
+		editorExtension,
+		layoutExtension,
 		loopGuardExtension,
 		mcpAdapterExtension,
 		promptEnrichmentExtension(skillPaths),
