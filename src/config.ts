@@ -1,11 +1,17 @@
-import { readFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { resolve } from "node:path"
+import { join, resolve } from "node:path"
 
 const KIMCHI_CONFIG_PATH = resolve(homedir(), ".config", "kimchi", "config.json")
 const AGENT_CONFIG_DIR = resolve(homedir(), ".config", "kimchi", "harness")
 const CAST_AI_LLM_ENDPOINT = "https://llm.cast.ai/openai/v1"
 const DEFAULT_TELEMETRY_ENDPOINT = "https://api.cast.ai/ai-optimizer/v1beta/logs:ingest"
+
+export const DEFAULT_SKILL_PATHS = [
+	join(homedir(), ".pi", "agent", "skills"),
+	join(homedir(), ".config", "kimchi", "harness", "skills"),
+	join(homedir(), ".claude", "skills"),
+]
 
 export interface TelemetryConfig {
 	enabled: boolean
@@ -34,6 +40,7 @@ export interface KimchiConfig {
 	maxToolResultChars: number
 	mcpSearchLimit: number
 	mcpSearch: SearchStrategyConfig
+	skillPaths?: string[]
 }
 
 /**
@@ -57,6 +64,7 @@ function readConfigExtras(configPath: string): {
 	maxToolResultChars?: number
 	mcpSearchLimit?: number
 	mcpSearch?: Partial<SearchStrategyConfig>
+	skillPaths?: string[]
 } {
 	try {
 		const raw = readFileSync(configPath, "utf-8")
@@ -94,7 +102,11 @@ function readConfigExtras(configPath: string): {
 					: {}),
 			}
 		}
-		return { maxToolResultChars, mcpSearchLimit, mcpSearch }
+		const skillPaths =
+			Array.isArray(parsed.skillPaths) && parsed.skillPaths.every((p: unknown) => typeof p === "string")
+				? (parsed.skillPaths as string[])
+				: undefined
+		return { maxToolResultChars, mcpSearchLimit, mcpSearch, skillPaths }
 	} catch {
 		return {}
 	}
@@ -177,6 +189,8 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 	const mcpSearchLimit = extras.mcpSearchLimit ?? 5
 	const mcpSearch: SearchStrategyConfig = { ...SEARCH_STRATEGY_DEFAULTS, ...extras.mcpSearch }
 
+	const skillPaths = extras.skillPaths
+
 	const envKey = env.KIMCHI_API_KEY
 	if (typeof envKey === "string" && envKey.length > 0) {
 		return {
@@ -186,6 +200,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 			maxToolResultChars,
 			mcpSearchLimit,
 			mcpSearch,
+			skillPaths,
 		}
 	}
 
@@ -198,6 +213,7 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 			maxToolResultChars,
 			mcpSearchLimit,
 			mcpSearch,
+			skillPaths,
 		}
 	}
 
@@ -208,4 +224,16 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 
 export function getAgentConfigDir(): string {
 	return AGENT_CONFIG_DIR
+}
+
+export function writeSkillPaths(paths: string[], configPath?: string): void {
+	const resolvedPath = configPath ?? KIMCHI_CONFIG_PATH
+	let raw: Record<string, unknown> = {}
+	try {
+		raw = JSON.parse(readFileSync(resolvedPath, "utf-8")) as Record<string, unknown>
+	} catch {
+		// file missing or invalid — start fresh
+	}
+	raw.skillPaths = paths
+	writeFileSync(resolvedPath, `${JSON.stringify(raw, null, 2)}\n`, "utf-8")
 }
