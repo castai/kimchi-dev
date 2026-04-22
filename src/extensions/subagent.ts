@@ -13,18 +13,9 @@ const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
 const STDERR_MAX = 8192
 const TIMEOUT_MS = 30 * 60 * 1000
-const CHECKPOINT_START_TYPE = "subagent-start"
 const CHECKPOINT_END_TYPE = "subagent-end"
 const RECOVERY_MESSAGE_TYPE = "subagent-recovery"
 const INTERRUPTED_MESSAGE_TYPE = "subagent-interrupted"
-
-interface SubagentStartCheckpoint {
-	toolCallId: string
-	model: string
-	provider: string
-	prompt: string
-	tokenBudget: number | undefined
-}
 
 interface SubagentEndCheckpoint {
 	toolCallId: string
@@ -395,14 +386,8 @@ export default function (pi: ExtensionAPI) {
 		const danglingCalls = findDanglingSubagentCalls(branch)
 		if (danglingCalls.length === 0) return
 		for (const toolCall of danglingCalls) {
-			const startCheckpoint = findCheckpointInBranch<SubagentStartCheckpoint>(
-				branch,
-				CHECKPOINT_START_TYPE,
-				toolCall.id,
-			)
 			const endCheckpoint = findCheckpointInBranch<SubagentEndCheckpoint>(branch, CHECKPOINT_END_TYPE, toolCall.id)
-			const modelName =
-				startCheckpoint?.model ?? ((toolCall.arguments as Record<string, unknown>)?.model as string) ?? "unknown"
+			const modelName = ((toolCall.arguments as Record<string, unknown>)?.model as string) ?? "unknown"
 			if (endCheckpoint) {
 				pi.sendMessage(
 					{
@@ -439,14 +424,6 @@ export default function (pi: ExtensionAPI) {
 		parameters: SubagentParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			pi.appendEntry<SubagentStartCheckpoint>(CHECKPOINT_START_TYPE, {
-				toolCallId: _toolCallId,
-				model: params.model,
-				provider: params.provider,
-				prompt: params.prompt,
-				tokenBudget: params.tokenBudget,
-			})
-
 			const extensionArgs = collectExtensionArgs()
 			const args = [
 				"--mode",
