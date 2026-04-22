@@ -135,11 +135,12 @@ export type ValidateAttachmentsResult =
 	| { kind: "empty" }
 	| { kind: "invalid"; missing: string[]; notFile: string[] }
 
+/** Checks that every attachment path supplied by a subagent call points to an existing regular file, reporting which ones are missing and which exist but aren't files. The `findExistingFileFn` and `pathExistsFn` callbacks are exposed for test injection; production callers rely on the defaults. */
 export function validateAttachments(
 	attachments: string[] | undefined,
 	cwd: string,
-	findExisting: (filePath: string, cwd: string) => string | null = findExistingFile,
-	pathExists: (absPath: string) => boolean = existsSync,
+	findExistingFileFn: (filePath: string, cwd: string) => string | null = findExistingFile,
+	pathExistsFn: (absPath: string) => boolean = existsSync,
 ): ValidateAttachmentsResult {
 	if (!attachments || attachments.length === 0) return { kind: "ok", resolved: [] }
 	// Empty / whitespace-only entries are almost certainly an LLM formatting bug (e.g. a trailing comma). Fail loudly rather than bucketing into "missing", where the resulting error message would render as "not found: ," and be unreadable.
@@ -149,7 +150,7 @@ export function validateAttachments(
 	const resolved: string[] = []
 	const seen = new Set<string>()
 	for (const raw of attachments) {
-		const abs = findExisting(raw, cwd)
+		const abs = findExistingFileFn(raw, cwd)
 		if (abs !== null) {
 			// Dedupe on the resolved absolute so "./foo" and "foo" collapse to a single @-arg.
 			if (!seen.has(abs)) {
@@ -158,8 +159,8 @@ export function validateAttachments(
 			}
 			continue
 		}
-		// findExisting tried every variant and none was a regular file. If the identity-resolved path still exists on disk, it's a non-file (directory, socket, etc.) — distinguish that from "nothing at that path" so the caller gets an actionable error.
-		if (pathExists(resolveUserPath(raw, cwd))) notFile.push(raw)
+		// findExistingFileFn tried every variant and none was a regular file. pathExistsFn has intentionally looser semantics (returns true for directories, sockets, etc.), so we can distinguish "non-file at that path" (e.g. the user passed a directory) from "nothing at that path" and surface an actionable error.
+		if (pathExistsFn(resolveUserPath(raw, cwd))) notFile.push(raw)
 		else missing.push(raw)
 	}
 	if (missing.length > 0 || notFile.length > 0) return { kind: "invalid", missing, notFile }
