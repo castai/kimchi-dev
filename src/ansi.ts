@@ -13,9 +13,4 @@ export function fg(code: string, text: string): string {
 export const ANSI = {
 	accent: "38;2;138;190;183",
 	dim: tc("102;102;102", "242"),
-	brand: tc("244;87;46", "202"),
-	brandGreen: tc("187;227;59", "148"),
-	placeholder: tc("71;71;71", "239"),
-	border: tc("41;41;41", "236"),
-	branch: tc("127;119;221", "104"),
 }
