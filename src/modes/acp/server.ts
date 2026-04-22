@@ -47,7 +47,14 @@ export interface RunAcpOptions {
 
 type TurnContext = {
 	cancelled: boolean
-	agentStarted: boolean
+	// True once ANY turn-lifecycle event has been delivered to our subscriber
+	// (agent_start, message_update, tool_execution_start, tool_execution_update).
+	// Used by prompt()'s short-circuit detector to tell "session.prompt() ran
+	// agent.prompt and events are flowing" from "session.prompt() short-circuited
+	// before agent events ever fired". Originally this tracked only agent_start —
+	// defensive widening so a future pi-mono emit-order change can't make real
+	// turns look like short-circuits.
+	turnActive: boolean
 	resolve: (res: PromptResponse) => void
 	reject: (err: unknown) => void
 }
@@ -88,6 +95,16 @@ export class KimchiAcpAgent implements Agent {
 	}
 
 	async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
+		// mcpServers isn't plumbed: kimchi loads MCP servers from its own config via
+		// mcpAdapterExtension, so a caller-supplied list would be silently ignored.
+		// Surface that as invalidParams instead of accepting the request and
+		// pretending those servers are live.
+		if (Array.isArray(params.mcpServers) && params.mcpServers.length > 0) {
+			throw RequestError.invalidParams(
+				undefined,
+				"mcpServers is not supported; configure MCP servers via kimchi config",
+			)
+		}
 		const session = await this.sessionFactory(params)
 		// Once the factory hands us a live session we own its lifecycle. If subscribe or
 		// the registering Map.set throws before we hand it back to the caller, nothing
@@ -134,7 +151,7 @@ export class KimchiAcpAgent implements Agent {
 			turnResolve = resolve
 			turnReject = reject
 		})
-		entry.turn = { cancelled: false, agentStarted: false, resolve: turnResolve, reject: turnReject }
+		entry.turn = { cancelled: false, turnActive: false, resolve: turnResolve, reject: turnReject }
 		// Kick off session.prompt but don't await inside the async function body —
 		// shutdown() needs to be able to reject `result` and have the caller's await
 		// on prompt() settle immediately, which can't happen while this body is
@@ -146,17 +163,16 @@ export class KimchiAcpAgent implements Agent {
 				// pi-coding-agent's session.prompt() short-circuits for extension commands,
 				// input-handler intercepts, and no-op paths — in those cases agent.prompt()
 				// never runs and no agent events fire. For real turns it awaits agent.prompt()
-				// which emits agent_start as its first event and agent_end as its last
-				// (pi-agent-core contract: types.d.ts "agent_end is the last event emitted
-				// for a run"). By the time agent.prompt() resolves, our subscriber has been
-				// called with agent_start (agent.prompt awaits the LLM call, so the microtask
-				// queue has drained at least once). agent_end delivery can still race with
-				// session.prompt()'s resolution because _processAgentEvent awaits extension
-				// handlers before calling our listener — so we don't look at isStreaming or
-				// poll the event queue. Instead: if agent_start was observed, trust the
-				// agent_end contract and let the subscriber finalize the turn. If it wasn't,
+				// which emits agent_start first and agent_end last (pi-agent-core contract:
+				// types.d.ts "agent_end is the last event emitted for a run"). By the time
+				// agent.prompt() resolves, our subscriber has been called with at least
+				// agent_start — agent.prompt awaits the LLM call, draining the microtask
+				// queue. agent_end delivery can still race with session.prompt()'s resolution
+				// because _processAgentEvent awaits extension handlers before calling our
+				// listener. So: if ANY turn-lifecycle event was observed (turnActive), trust
+				// the agent_end contract and let the subscriber finalize the turn. Otherwise
 				// the turn short-circuited and we synthesize end_turn here.
-				if (entry.turn && !entry.turn.agentStarted) {
+				if (entry.turn && !entry.turn.turnActive) {
 					this.finalizeTurn(entry, "end_turn")
 				}
 			},
@@ -205,11 +221,12 @@ export class KimchiAcpAgent implements Agent {
 		const turn = entry.turn
 		switch (event.type) {
 			case "agent_start": {
-				if (turn) turn.agentStarted = true
+				if (turn) turn.turnActive = true
 				return
 			}
 			case "message_update": {
 				if (!turn) return
+				turn.turnActive = true
 				const ame = event.assistantMessageEvent
 				if (ame.type === "text_delta" && ame.delta) {
 					this.send({
@@ -231,6 +248,12 @@ export class KimchiAcpAgent implements Agent {
 				return
 			}
 			case "tool_execution_start": {
+				// Symmetry with the other turn-lifecycle branches: if the turn was
+				// already finalized (e.g., shutdown cleared it), don't emit stray
+				// tool_call notifications the client would have to reconcile against
+				// a turn it already considers over.
+				if (!turn) return
+				turn.turnActive = true
 				const { title, kind, locations } = describeToolCall(event.toolName, event.args)
 				this.send({
 					sessionId,
@@ -247,6 +270,8 @@ export class KimchiAcpAgent implements Agent {
 				return
 			}
 			case "tool_execution_update": {
+				if (!turn) return
+				turn.turnActive = true
 				const partial = toolResultContent(event.partialResult)
 				if (partial.length === 0) return
 				this.send({
@@ -261,6 +286,7 @@ export class KimchiAcpAgent implements Agent {
 				return
 			}
 			case "tool_execution_end": {
+				if (!turn) return
 				this.send({
 					sessionId,
 					update: {
@@ -316,6 +342,20 @@ export class KimchiAcpAgent implements Agent {
 	}
 }
 
+// Exported for testing. In practice the only way model is missing here is a
+// missing / unusable credential: loadConfig() already threw on an absent
+// KIMCHI_API_KEY before we ever spawned the ACP loop, and updateModelsConfig
+// falls back to defaults rather than failing. authRequired (-32000) nudges
+// Zed toward an auth prompt instead of showing a generic "internal error".
+export function assertSessionHasModel(session: Pick<AgentSession, "model">): void {
+	if (!session.model) {
+		throw RequestError.authRequired(
+			undefined,
+			"No model available for ACP session. Configure an API key or models.json first.",
+		)
+	}
+}
+
 function defaultSessionFactory(options: RunAcpOptions): AcpSessionFactory {
 	return async (params: NewSessionRequest): Promise<AgentSession> => {
 		const cwd = params.cwd ?? process.cwd()
@@ -338,12 +378,7 @@ function defaultSessionFactory(options: RunAcpOptions): AcpSessionFactory {
 		// must dispose before rethrowing, otherwise we leak on the newSession error
 		// path where the caller never sees a sessionId to clean up.
 		try {
-			if (!session.model) {
-				throw RequestError.internalError(
-					undefined,
-					"No model available for ACP session. Configure an API key or models.json first.",
-				)
-			}
+			assertSessionHasModel(session)
 			await session.bindExtensions({
 				onError: (err) => {
 					process.stderr.write(`acp ext error [${err.extensionPath}] ${err.event}: ${err.error}\n`)

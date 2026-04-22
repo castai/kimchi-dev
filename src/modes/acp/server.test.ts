@@ -1,7 +1,7 @@
 import type { AgentSideConnection, SessionNotification } from "@agentclientprotocol/sdk"
 import type { AgentSession, AgentSessionEvent, AgentSessionEventListener } from "@mariozechner/pi-coding-agent"
 import { beforeEach, describe, expect, it } from "vitest"
-import { type AcpSessionFactory, KimchiAcpAgent, describeToolCall } from "./server.js"
+import { type AcpSessionFactory, KimchiAcpAgent, assertSessionHasModel, describeToolCall } from "./server.js"
 
 // Minimal fake of AgentSession surface used by KimchiAcpAgent. The factory seam
 // means we only need to stand in for the methods the ACP server actually calls:
@@ -123,18 +123,17 @@ describe("KimchiAcpAgent turn lifecycle", () => {
 		expect(outerResolvedAt - start).toBeGreaterThanOrEqual(40)
 	})
 
-	// CANARY: documents the load-bearing assumption in prompt() that agent_start
-	// is delivered to the subscriber before session.prompt() resolves (because
+	// CANARY: documents the load-bearing assumption in prompt() that SOME turn
+	// event (agent_start or later) is delivered before session.prompt() resolves.
 	// pi-mono's agent.prompt awaits the LLM call, draining the microtask queue
-	// and ensuring _processAgentEvent ran for agent_start at least once). If
-	// pi-mono changes its delivery contract so agent_start arrives AFTER
-	// session.prompt() resolves, real turns will hit the !agentStarted branch
-	// and synthesize end_turn prematurely — late agent_end/tool events will be
-	// silently dropped. This test locks in the current behavior; if a future
-	// pi-mono update breaks the contract, switch the short-circuit detector
-	// to a "no events observed at all" heuristic or use tool_execution_start
-	// as a secondary signal.
-	it("CANARY: synthesizes end_turn when agent_start is delivered after session.prompt resolves", async () => {
+	// and ensuring _processAgentEvent ran for at least agent_start. If pi-mono
+	// ever delays ALL turn events until after session.prompt() resolves, real
+	// turns would hit the !turnActive branch and synthesize end_turn prematurely —
+	// late agent_end / tool events would be silently dropped. This test locks in
+	// the current behavior; a future pi-mono update that breaks the contract
+	// should fail this test, at which point swap the detector for something more
+	// robust (e.g. peek at isStreaming on the session).
+	it("CANARY: synthesizes end_turn when no turn events arrive before session.prompt resolves", async () => {
 		let lateEventsFired = false
 		fake.promptImpl = async () => {
 			await delay(5)
@@ -159,6 +158,33 @@ describe("KimchiAcpAgent turn lifecycle", () => {
 		// Let late events fire and confirm they are dropped (turn already cleared).
 		await delay(40)
 		expect(lateEventsFired).toBe(true)
+	})
+
+	// Defensive widening: if the first event we observe from pi-mono is
+	// tool_execution_start (hypothetical future ordering where agent_start
+	// isn't synchronous with agent.prompt), turnActive still flips and the
+	// prompt() resolver waits for agent_end instead of synthesizing end_turn
+	// prematurely. This pins down the widening in TurnContext.turnActive.
+	it("treats tool_execution_start as a turn-active signal (no premature short-circuit)", async () => {
+		fake.promptImpl = async () => {
+			// No agent_start. Emit only tool_execution_start + agent_end.
+			fake.emit({
+				type: "tool_execution_start",
+				toolCallId: "tc-early",
+				toolName: "bash",
+				args: { command: "noop" },
+			})
+			await delay(5)
+			setTimeout(() => fake.emit({ type: "agent_end", messages: [] }), 30)
+		}
+		const result = await agent.prompt({
+			sessionId,
+			prompt: [{ type: "text", text: "x" }],
+		})
+		// end_turn must come from agent_end (post-delay), not from the
+		// !turnActive short-circuit branch firing immediately after
+		// session.prompt() resolves.
+		expect(result.stopReason).toBe("end_turn")
 	})
 
 	// Extension-command / input-handler / no-op path: session.prompt returns
@@ -322,6 +348,48 @@ describe("KimchiAcpAgent turn lifecycle", () => {
 		expect(matches.some((w) => w.includes('"audio"'))).toBe(true)
 	})
 
+	// Defensive: once a turn is finalized (short-circuit, shutdown, cancel),
+	// stray tool_execution_{start,end} must not emit tool_call notifications
+	// to the client. Clients would otherwise see tool activity on a turn they
+	// consider complete. Checked alongside the existing agent_end drop test.
+	it("drops stray tool_execution_start/end after a short-circuited turn", async () => {
+		const localFake = new FakeAgentSession("session-tool-late")
+		const factory: AcpSessionFactory = async () => asSession(localFake)
+		const { conn, updates } = makeRecordingConn()
+		const localAgent = new KimchiAcpAgent(conn, {
+			extensionFactories: [],
+			agentDir: "/tmp/fake-agent-dir",
+			sessionFactory: factory,
+		})
+		const { sessionId: sid } = await localAgent.newSession({ cwd: "/tmp", mcpServers: [] })
+
+		localFake.promptImpl = async () => {
+			// Short-circuit: no events.
+		}
+		const result = await localAgent.prompt({
+			sessionId: sid,
+			prompt: [{ type: "text", text: "/help" }],
+		})
+		expect(result.stopReason).toBe("end_turn")
+		const updatesBefore = updates.length
+
+		// Stray tool events arrive after finalization — must be dropped.
+		localFake.emit({
+			type: "tool_execution_start",
+			toolCallId: "tc-late",
+			toolName: "bash",
+			args: { command: "late" },
+		})
+		localFake.emit({
+			type: "tool_execution_end",
+			toolCallId: "tc-late",
+			toolName: "bash",
+			result: { content: [{ type: "text", text: "late" }] },
+			isError: false,
+		})
+		expect(updates.length).toBe(updatesBefore)
+	})
+
 	// Defensive: a late agent_end arriving after the short-circuit path has
 	// already finalized must be a no-op, not a crash or double-resolve.
 	it("ignores a late agent_end after a short-circuited turn", async () => {
@@ -356,6 +424,44 @@ describe("KimchiAcpAgent turn lifecycle", () => {
 
 		await expect(localAgent.newSession({ cwd: "/tmp", mcpServers: [] })).rejects.toThrow(/subscribe boom/)
 		expect(leaky.disposed).toBe(true)
+	})
+
+	// mcpServers is declared in the ACP request shape but kimchi has no hook to
+	// wire them into a live session — pi-coding-agent loads MCP servers from its
+	// own config. Silently dropping them would leave the client believing those
+	// servers are available; reject up-front with invalidParams instead.
+	it("rejects newSession when mcpServers is non-empty", async () => {
+		const factoryCalled = { count: 0 }
+		const factory: AcpSessionFactory = async () => {
+			factoryCalled.count++
+			return asSession(new FakeAgentSession("unused"))
+		}
+		const localAgent = new KimchiAcpAgent(makeConn(), {
+			extensionFactories: [],
+			agentDir: "/tmp/fake-agent-dir",
+			sessionFactory: factory,
+		})
+		await expect(
+			localAgent.newSession({
+				cwd: "/tmp",
+				// biome-ignore lint/suspicious/noExplicitAny: only the shape we care about
+				mcpServers: [{ name: "x", command: "x", args: [] } as any],
+			}),
+		).rejects.toMatchObject({ code: -32602 })
+		expect(factoryCalled.count).toBe(0)
+	})
+
+	// Empty array is fine — equivalent to "no per-session servers requested".
+	it("accepts newSession with empty mcpServers array", async () => {
+		const localFake = new FakeAgentSession("empty-mcp")
+		const factory: AcpSessionFactory = async () => asSession(localFake)
+		const localAgent = new KimchiAcpAgent(makeConn(), {
+			extensionFactories: [],
+			agentDir: "/tmp/fake-agent-dir",
+			sessionFactory: factory,
+		})
+		const res = await localAgent.newSession({ cwd: "/tmp", mcpServers: [] })
+		expect(res.sessionId).toBe("empty-mcp")
 	})
 
 	// If the factory itself throws (e.g. bindExtensions failure in the default
@@ -537,6 +643,27 @@ describe("KimchiAcpAgent tool execution stream", () => {
 		// Terminal completed update still present.
 		const terminal = toolCallUpdates.find((u) => (u.update as { status?: string }).status === "completed")
 		expect(terminal).toBeDefined()
+	})
+})
+
+// Coverage for assertSessionHasModel: ACP clients (Zed) should see authRequired
+// (-32000), not a generic internal error, when the model is unavailable — that
+// error code routes to the client's auth UI instead of an opaque failure toast.
+describe("assertSessionHasModel", () => {
+	it("throws RequestError with code -32000 when model is missing", () => {
+		try {
+			assertSessionHasModel({ model: undefined } as Parameters<typeof assertSessionHasModel>[0])
+			throw new Error("expected throw")
+		} catch (err) {
+			expect((err as { code?: number }).code).toBe(-32000)
+			expect((err as Error).message).toMatch(/No model available/)
+		}
+	})
+
+	it("is a no-op when model is present", () => {
+		expect(() =>
+			assertSessionHasModel({ model: {} as NonNullable<Parameters<typeof assertSessionHasModel>[0]["model"]> }),
+		).not.toThrow()
 	})
 })
 

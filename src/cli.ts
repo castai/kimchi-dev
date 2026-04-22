@@ -21,9 +21,14 @@ import { setAvailableModelIds } from "./startup-context.js"
 const telemetryConfig = readTelemetryConfig()
 
 let sessionId: string | undefined
+// ACP mode runs JSON-RPC over stdio; the "To resume:" print (even remapped to
+// stderr via console.log = console.error inside runAcpMode) is noise in IDE
+// logs and not actionable — the IDE owns session continuation. Decide once,
+// at module load, before anything else runs.
+const acpMode = isAcpMode(process.argv.slice(2))
 
 process.on("exit", (code) => {
-	if (code === 0) {
+	if (code === 0 && !acpMode) {
 		const resumeCmd = sessionId ? `kimchi-code --session ${sessionId}` : "kimchi-code --continue"
 		console.log(`\nTo resume: ${resumeCmd}`)
 	}
@@ -121,7 +126,7 @@ try {
 	]
 
 	const rawArgs = process.argv.slice(2)
-	if (isAcpMode(rawArgs)) {
+	if (acpMode) {
 		const { runAcpMode } = await import("./modes/acp/server.js")
 		await runAcpMode({ extensionFactories, agentDir })
 	} else {
