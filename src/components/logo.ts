@@ -1,7 +1,7 @@
 import type { Component } from "@mariozechner/pi-tui"
 import { visibleWidth } from "@mariozechner/pi-tui"
 import { ANSI, RST } from "../ansi.js"
-import { getFolder, getGitBranch } from "../utils.js"
+import { getFolder, getGitBranch, getVersion } from "../utils.js"
 
 const LOGO_FG = `\x1b[${ANSI.brand}m`
 const LOGO_TOP = `\x1b[${ANSI.brandGreen}m`
@@ -21,10 +21,12 @@ const LOGO_LINES = [
 export class LogoHeader implements Component {
 	private readonly branch: string
 	private readonly folder: string
+	private readonly version: string
 
 	constructor() {
 		this.branch = getGitBranch()
 		this.folder = getFolder()
+		this.version = getVersion()
 	}
 
 	invalidate(): void {}
@@ -33,8 +35,11 @@ export class LogoHeader implements Component {
 		const branch = this.branch
 		const folder = this.folder
 
-		const branchPart = branch ? ` (${branch})` : ""
-		const info = `${DIM}${folder}${branchPart}${R}`
+		const version = this.version
+		const versionPart = `${DIM}v${version}${R}`
+
+		const branchPart = branch ? ` ${DIM}·${R} \x1b[${ANSI.branch}m${branch}${R}` : ""
+		const info = `${versionPart} ${DIM}│${R} ${DIM}${folder}${R}${branchPart}`
 		const infoWidth = visibleWidth(info)
 
 		const result = [""]
