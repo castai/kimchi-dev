@@ -14,7 +14,7 @@ import { BUILTIN_DENY, type PermissionMode, type Rule } from "./types.js"
 const PLAN_MODE_TOOLS = ["read", "grep", "find", "ls", "web_search", "web_fetch", "questionnaire", "bash"]
 
 // subagent delegates to a sub-session that enforces permissions on its own calls.
-const BUILTIN_ALLOW_TOOL_NAMES = ["subagent"]
+const BUILTIN_ALLOW_TOOL_NAMES = ["subagent", "set_phase"]
 
 const MODES: Array<{ mode: PermissionMode; label: string; color: "success" | "warning" | "error" }> = [
 	{ mode: "default", label: "default", color: "success" },
