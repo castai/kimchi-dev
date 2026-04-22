@@ -39,6 +39,15 @@ function sessionIdCaptureExtension(pi: ExtensionAPI) {
 	})
 }
 
+function isAcpMode(args: string[]): boolean {
+	for (let i = 0; i < args.length; i++) {
+		const a = args[i]
+		if (a === "--mode" && args[i + 1] === "acp") return true
+		if (a === "--mode=acp") return true
+	}
+	return false
+}
+
 try {
 	const config = loadConfig()
 
@@ -91,23 +100,29 @@ try {
 	const { EnvHttpProxyAgent, setGlobalDispatcher } = await import("undici")
 	setGlobalDispatcher(new EnvHttpProxyAgent())
 
-	// Delegate to pi-mono's CLI main function, injecting the kimchi extension
-	const { main } = await import("@mariozechner/pi-coding-agent")
-	await main(process.argv.slice(2), {
-		extensionFactories: [
-			sessionIdCaptureExtension,
-			bashCollapseExtension,
-			loopGuardExtension,
-			mcpAdapterExtension,
-			promptEnrichmentExtension(skillPaths),
-			promptSummaryExtension,
-			subagentExtension,
-			tagsExtension,
-			telemetryExtension(telemetryConfig),
-			webFetchExtension,
-			webSearchExtension,
-		],
-	})
+	const extensionFactories = [
+		sessionIdCaptureExtension,
+		bashCollapseExtension,
+		loopGuardExtension,
+		mcpAdapterExtension,
+		promptEnrichmentExtension(skillPaths),
+		promptSummaryExtension,
+		subagentExtension,
+		tagsExtension,
+		telemetryExtension(telemetryConfig),
+		webFetchExtension,
+		webSearchExtension,
+	]
+
+	const rawArgs = process.argv.slice(2)
+	if (isAcpMode(rawArgs)) {
+		const { runAcpMode } = await import("./modes/acp/server.js")
+		await runAcpMode({ extensionFactories, agentDir })
+	} else {
+		// Delegate to pi-mono's CLI main function, injecting the kimchi extension
+		const { main } = await import("@mariozechner/pi-coding-agent")
+		await main(rawArgs, { extensionFactories })
+	}
 } catch (err) {
 	console.error(err instanceof Error ? err.message : String(err))
 	process.exit(1)
