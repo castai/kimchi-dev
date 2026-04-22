@@ -36,7 +36,8 @@ export function resolveUserPath(filePath: string, cwd: string): string {
 	return isAbsolute(expanded) ? expanded : resolve(cwd, expanded)
 }
 
-// Files only — a directory at the path is NOT a hit. This is the one intentional divergence from pi's resolveReadPath (which uses F_OK and thus accepts directories). We reject dirs so a mistaken `attachments: ["/tmp"]` fails pre-spawn instead of crashing pi's @file loader at read time.
+// Files only — a directory at the path is NOT a hit. This is the one intentional divergence from pi's resolveReadPath (which uses F_OK and thus accepts directories).
+// Verified against pi-coding-agent@0.67.68: passing a directory in @attachments reaches detectSupportedImageMimeTypeFromFile, whose read() throws EISDIR. The rejection is unhandled — Node prints a stacktrace and the subagent exits 1 before any LLM call. Rejecting dirs up front turns that into a clean pre-spawn "file not found" error.
 function isFile(p: string): boolean {
 	try {
 		return statSync(p).isFile()
