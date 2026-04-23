@@ -20,19 +20,21 @@ function stripAnsi(s: string): string {
 		.replace(/\r\n?/g, "\n")
 }
 
-// Wait for the interactive prompt to be fully mounted. The hint "ctrl+c/ctrl+d clear/exit" only appears once the TUI's Editor is accepting input. First-time spawns on a cold sandbox HOME download fd/rg (~30s), so the timeout is generous.
+// Wait for the interactive prompt to be fully mounted. The editor placeholder "ask anything or type / for commands" renders once the Editor is mounted. The startup hint line is suppressed by kimchi's forced `quietStartup: true`, so we can't probe for "clear/exit" text. First-time spawns on a cold sandbox HOME download fd/rg (~30s), so the timeout is generous.
 async function waitForPrompt(session: InteractiveSession): Promise<void> {
-	await session.waitFor((out) => out.includes("ctrl+c/ctrl+d"), 45_000)
-	// Banner can render before the Editor binds its input handler.
+	await session.waitFor((out) => stripAnsi(out).includes("ask anything or type / for commands"), 45_000)
+	// Placeholder can render before the Editor binds its input handler.
 	await new Promise((r) => setTimeout(r, 500))
 }
 
 const PASTED = "one\ntwo\nthree\nhow many lines of text do I have?"
 
+// Each pasted line must appear alone on its own rendered row. The row consists of layout chrome only — left/right border `│`, leading chevron `❯`, and whitespace — surrounding the word. If the paste handler collapses lines, the row would contain other pasted content and these regexes would not match.
+const onOwnRow = (word: string) => new RegExp(`^[│❯ \\t]*${word}[│ \\t]*$`, "m")
 const FOUR_LINE_ROW_REGEXES = [
-	/(^|\n).*one\s+\n/,
-	/(^|\n)\s*two\s+\n/,
-	/(^|\n)\s*three\s+\n/,
+	onOwnRow("one"),
+	onOwnRow("two"),
+	onOwnRow("three"),
 	/how many lines of text do I have\?/,
 ]
 
