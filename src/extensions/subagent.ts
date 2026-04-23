@@ -16,6 +16,7 @@ const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
 const STDERR_MAX = 8192
 const TIMEOUT_MS = 30 * 60 * 1000
+const INACTIVITY_TIMEOUT_MS = 60 * 1000
 const CHECKPOINT_END_TYPE = "subagent-end"
 const RECOVERY_MESSAGE_TYPE = "subagent-recovery"
 const INTERRUPTED_MESSAGE_TYPE = "subagent-interrupted"
@@ -32,7 +33,7 @@ interface SubagentState extends SpinnerState {
 	executionStartedAt?: number
 }
 
-type SubagentFailureReason = "exit_error" | "timeout" | "token_budget_exceeded" | "aborted"
+type SubagentFailureReason = "exit_error" | "timeout" | "token_budget_exceeded" | "aborted" | "output_stalled"
 
 interface SubagentTokenUsage {
 	input: number
@@ -297,8 +298,16 @@ function spawnSubagent(
 		let failureReason: SubagentFailureReason | undefined
 		let closed = false
 
+		let inactivityHandle = setTimeout(() => kill("output_stalled"), INACTIVITY_TIMEOUT_MS)
+		const resetInactivity = () => {
+			if (closed) return
+			clearTimeout(inactivityHandle)
+			inactivityHandle = setTimeout(() => kill("output_stalled"), INACTIVITY_TIMEOUT_MS)
+		}
+
 		const finish = (exitCode: number) => {
 			clearTimeout(timeoutHandle)
+			clearTimeout(inactivityHandle)
 			combinedSignal.removeEventListener("abort", onAbort)
 			resolve({
 				exitCode,
@@ -353,6 +362,7 @@ function spawnSubagent(
 		}
 
 		proc.stdout.on("data", (data: Buffer) => {
+			resetInactivity()
 			buffer += data.toString()
 			const lines = buffer.split("\n")
 			buffer = lines.pop() ?? ""
@@ -360,6 +370,7 @@ function spawnSubagent(
 		})
 
 		proc.stderr.on("data", (data: Buffer) => {
+			resetInactivity()
 			stderr += data.toString()
 			if (stderr.length > STDERR_MAX) {
 				stderr = stderr.slice(0, STDERR_MAX)
@@ -432,10 +443,9 @@ const SubagentParams = Type.Object({
 		}),
 	),
 	tokenBudget: Type.Optional(
-		Type.Integer({
+		Type.Union([Type.Integer({ minimum: 1 }), Type.String({ pattern: "^[1-9][0-9]*$" })], {
 			description:
 				"Maximum total tokens (input + output) the subagent may consume. Subagent is killed when exceeded. Omit unless you have an explicit reason to cap token usage — do not set this speculatively.",
-			minimum: 1,
 		}),
 	),
 })
@@ -528,11 +538,12 @@ export default function (pi: ExtensionAPI) {
 			const invocation = getSubagentInvocation(args)
 
 			let lastToolCall: string | undefined
+			const tokenBudget = params.tokenBudget !== undefined ? Number(params.tokenBudget) : undefined
 			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(
 				invocation,
 				ctx.cwd,
 				signal,
-				params.tokenBudget,
+				tokenBudget,
 				(text) => {
 					lastToolCall = undefined
 					onUpdate?.({ content: [{ type: "text", text }], details: undefined })
