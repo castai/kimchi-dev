@@ -3,7 +3,7 @@ import { Theme, keyHint } from "@mariozechner/pi-coding-agent"
 import { Type } from "@sinclair/typebox"
 import type { DirectToolSpec } from "./types.js"
 import { formatToolName } from "./types.js"
-import { Text } from "@mariozechner/pi-tui"
+import { type Component, Text } from "@mariozechner/pi-tui"
 import { registerToolCall, isToolExpanded } from "../../expand-state.js"
 import { authenticateServer, openMcpPanel, reconnectServers, showStatus, showTools } from "./commands.js"
 import { loadConfig } from "../../config.js"
@@ -415,12 +415,12 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 					details: { error: "missing_action" },
 				}
 			},
-			renderCall(args: { tool?: string; args?: string; connect?: string; describe?: string; search?: string; limit?: number; server?: string; action?: string }, theme: Theme, context: { lastComponent: unknown }) {
+			renderCall(args: { tool?: string; args?: string; connect?: string; describe?: string; search?: string; limit?: number; server?: string; action?: string }, theme: Theme, context: { lastComponent: Component | undefined }) {
 				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0)
 				text.setText(formatMcpCall(args, theme))
 				return text
 			},
-			renderResult(result: unknown, options: ToolRenderResultOptions, theme: Theme, context: any) {
+			renderResult(result: unknown, options: ToolRenderResultOptions, theme: Theme, context: { lastComponent: Component | undefined; toolCallId: string }) {
 				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0)
 				registerToolCall(context.toolCallId)
 				const expanded = isToolExpanded(context.toolCallId)

@@ -13,6 +13,9 @@ export default function terminalColorsExtension(pi: ExtensionAPI) {
 	let savedBg: string | null = null
 
 	pi.on("session_start", () => {
+		savedFg = null
+		savedBg = null
+
 		if (!process.stdin.isTTY) return
 
 		let buffer = ""

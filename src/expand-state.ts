@@ -1,31 +1,41 @@
-const toolCallOrder: string[] = []
-const expandedToolIds = new Set<string>()
+export class ExpandState {
+	private toolCallOrder: string[] = []
+	private expandedToolIds = new Set<string>()
 
-export function registerToolCall(id: string) {
-	if (!toolCallOrder.includes(id)) {
-		toolCallOrder.push(id)
-	}
-}
-
-export function isToolExpanded(id: string): boolean {
-	return expandedToolIds.has(id)
-}
-
-export function expandNext(): boolean {
-	for (let i = toolCallOrder.length - 1; i >= 0; i--) {
-		if (!expandedToolIds.has(toolCallOrder[i])) {
-			expandedToolIds.add(toolCallOrder[i])
-			return true
+	registerToolCall(id: string) {
+		if (!this.toolCallOrder.includes(id)) {
+			this.toolCallOrder.push(id)
 		}
 	}
-	return false
+
+	isToolExpanded(id: string): boolean {
+		return this.expandedToolIds.has(id)
+	}
+
+	expandNext(): boolean {
+		for (let i = this.toolCallOrder.length - 1; i >= 0; i--) {
+			if (!this.expandedToolIds.has(this.toolCallOrder[i])) {
+				this.expandedToolIds.add(this.toolCallOrder[i])
+				return true
+			}
+		}
+		return false
+	}
+
+	collapseAll() {
+		this.expandedToolIds.clear()
+	}
+
+	reset() {
+		this.toolCallOrder.length = 0
+		this.expandedToolIds.clear()
+	}
 }
 
-export function collapseAll() {
-	expandedToolIds.clear()
-}
+const instance = new ExpandState()
 
-export function resetState() {
-	toolCallOrder.length = 0
-	expandedToolIds.clear()
-}
+export const registerToolCall = instance.registerToolCall.bind(instance)
+export const isToolExpanded = instance.isToolExpanded.bind(instance)
+export const expandNext = instance.expandNext.bind(instance)
+export const collapseAll = instance.collapseAll.bind(instance)
+export const resetState = instance.reset.bind(instance)

@@ -119,8 +119,12 @@ try {
 			settings.theme = "kimchi"
 			writeFileSync(settingsPath, `${JSON.stringify(settings, null, "  ")}\n`)
 		}
-	} catch {
-		writeFileSync(settingsPath, `${JSON.stringify({ quietStartup: true, theme: "kimchi" }, null, "  ")}\n`)
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+			writeFileSync(settingsPath, `${JSON.stringify({ quietStartup: true, theme: "kimchi" }, null, "  ")}\n`)
+		} else {
+			console.error(`Warning: could not parse ${settingsPath}, leaving unchanged`)
+		}
 	}
 
 	// Copy kimchi theme into agent dir so initTheme can find it before extensions load

@@ -1,9 +1,4 @@
-import type {
-	ExtensionContext,
-	ReadonlyFooterDataProvider,
-	SessionMessageEntry,
-	Theme,
-} from "@mariozechner/pi-coding-agent"
+import type { ExtensionContext, ReadonlyFooterDataProvider, Theme } from "@mariozechner/pi-coding-agent"
 import type { Component } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
 import { TRUECOLOR } from "../ansi.js"
@@ -34,7 +29,7 @@ export class StatsFooter implements Component {
 		let totalOutput = 0
 		for (const entry of ctx.sessionManager.getEntries()) {
 			if (entry.type === "message") {
-				const msg = (entry as SessionMessageEntry).message
+				const msg = entry.message
 				if (msg?.role === "assistant" && msg.usage) {
 					totalInput += msg.usage.input ?? 0
 					totalOutput += msg.usage.output ?? 0
