@@ -4,6 +4,7 @@ import { Type } from "@sinclair/typebox"
 import type { DirectToolSpec } from "./types.js"
 import { formatToolName } from "./types.js"
 import { Text } from "@mariozechner/pi-tui"
+import { registerToolCall, isToolExpanded } from "../../expand-state.js"
 import { authenticateServer, openMcpPanel, reconnectServers, showStatus, showTools } from "./commands.js"
 import { loadConfig } from "../../config.js"
 import { BM25_DEFAULTS, buildStrategy, buildToolEntries } from "./bm25.js"
@@ -419,9 +420,11 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 				text.setText(formatMcpCall(args, theme))
 				return text
 			},
-			renderResult(result: unknown, options: ToolRenderResultOptions, theme: Theme, context: { lastComponent?: unknown }) {
+			renderResult(result: unknown, options: ToolRenderResultOptions, theme: Theme, context: any) {
 				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0)
-				text.setText(formatMcpResult(result, options, theme))
+				registerToolCall(context.toolCallId)
+				const expanded = isToolExpanded(context.toolCallId)
+				text.setText(formatMcpResult(result, expanded, theme))
 				return text
 			},
 		})
@@ -430,7 +433,7 @@ export default function mcpAdapter(pi: ExtensionAPI) {
 
 const COLLAPSED_LINES = 10
 
-function formatMcpResult(result: unknown, options: ToolRenderResultOptions, theme: Theme): string {
+function formatMcpResult(result: unknown, expanded: boolean, theme: Theme): string {
 	const content = (result as { content?: Array<{ type: string; text?: string }> })?.content ?? []
 	const textParts = content
 		.filter((c): c is { type: "text"; text: string } => c.type === "text" && typeof c.text === "string")
@@ -439,7 +442,7 @@ function formatMcpResult(result: unknown, options: ToolRenderResultOptions, them
 	if (!combined) return ""
 
 	const lines = combined.split("\n")
-	const maxLines = options.expanded ? lines.length : COLLAPSED_LINES
+	const maxLines = expanded ? lines.length : COLLAPSED_LINES
 	const displayLines = lines.slice(0, maxLines)
 	const remaining = lines.length - maxLines
 

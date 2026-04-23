@@ -37,19 +37,21 @@ export class LogoHeader implements Component {
 
 		const versionPart = `${dim}v${version}${R}`
 		const branchPart = branch ? ` ${dim}·${R} ${branchColor}${branch}${R}` : ""
-		const info = `${versionPart} ${dim}│${R} ${dim}${folder}${R}${branchPart}`
+		const info = `${versionPart} ${dim}·${R} ${dim}${folder}${R}${branchPart}`
 
 		const result = [""]
 		for (let i = 0; i < this.logoLines.length; i++) {
 			const logo = this.logoLines[i]
 			if (i === 1) {
 				const logoWidth = visibleWidth(logo)
-				const available = width - logoWidth - 2
-				if (available <= 0) {
-					result.push(logo)
+				const infoWidth = visibleWidth(info)
+				const gap = width - logoWidth - infoWidth
+				if (gap <= 0) {
+					const available = width - logoWidth - 2
+					const truncatedInfo = available > 0 ? truncateToWidth(info, available) : ""
+					result.push(truncatedInfo ? logo + "  " + truncatedInfo : logo)
 				} else {
-					const truncatedInfo = truncateToWidth(info, available)
-					result.push(logo + "  " + truncatedInfo)
+					result.push(logo + " ".repeat(gap) + info)
 				}
 			} else {
 				result.push(logo)

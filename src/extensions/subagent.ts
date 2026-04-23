@@ -5,6 +5,7 @@ import type { AssistantMessage, ToolCall } from "@mariozechner/pi-ai"
 import type { ExtensionAPI, SessionEntry, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { ToolBlockView, getTextContent } from "../components/tool-block.js"
+import { registerToolCall, isToolExpanded } from "../expand-state.js"
 import { Type } from "@sinclair/typebox"
 import { isBunBinary, isRunningUnderBun } from "../env.js"
 import { findExistingFile, resolveUserPath, stripAtPrefix } from "../fs-paths.js"
@@ -673,10 +674,11 @@ export default function (pi: ExtensionAPI) {
 			const nonEmptyLines = text.split("\n").filter((l: string) => l.trim())
 			const lineCount = nonEmptyLines.length
 
+			registerToolCall(context.toolCallId)
 			view.setHeader("", "")
 			view.setDivider((s: string) => theme.fg("borderMuted", s))
 
-			if (options.expanded) {
+			if (isToolExpanded(context.toolCallId)) {
 				const statsLine = stats !== undefined ? formatStats(stats, theme) : ""
 				view.setFooter(theme.fg("toolOutput", text), "")
 				view.setExtra(statsLine ? [statsLine] : [])

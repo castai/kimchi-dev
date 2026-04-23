@@ -2,6 +2,7 @@ import type { AgentToolResult, BashToolDetails, ExtensionAPI, Theme, ToolDefinit
 import { createBashToolDefinition } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text } from "@mariozechner/pi-tui"
 import { ToolBlockView, buildToolCallHeader, getTextContent } from "../components/tool-block.js"
+import { registerToolCall, isToolExpanded } from "../expand-state.js"
 
 export default function (pi: ExtensionAPI) {
 	const baseDef = createBashToolDefinition(process.cwd())
@@ -31,7 +32,9 @@ export default function (pi: ExtensionAPI) {
 				return component
 			}
 
-			if (options.expanded) {
+			registerToolCall(context.toolCallId)
+
+			if (isToolExpanded(context.toolCallId)) {
 				return baseDef.renderResult?.(result, options, theme, context) ?? new Text("", 0, 0)
 			}
 

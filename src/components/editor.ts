@@ -10,10 +10,23 @@ const PLACEHOLDER_TEXT = "ask anything or type / for commands"
 
 export class PromptEditor extends CustomEditor {
 	private readonly appTheme: Theme
+	private expandHandler?: () => void
 
 	constructor(tui: TUI, editorTheme: EditorTheme, keybindings: KeybindingsManager, appTheme: Theme) {
 		super(tui, editorTheme, keybindings)
 		this.appTheme = appTheme
+	}
+
+	setExpandHandler(handler: () => void) {
+		this.expandHandler = handler
+	}
+
+	handleInput(data: string) {
+		if (this.expandHandler && (this as any).keybindings.matches(data, "app.tools.expand")) {
+			this.expandHandler()
+			return
+		}
+		super.handleInput(data)
 	}
 
 	render(width: number): string[] {
@@ -44,15 +57,17 @@ export class PromptEditor extends CustomEditor {
 			const content = lines[i]
 			const truncated = truncateToWidth(content, editorWidth)
 			const contentWidth = visibleWidth(truncated)
-			const chevron = `${chevronColor}❯${RST} `
+			const prefix = i === 1 ? `${chevronColor}❯${RST} ` : "  "
 			const withCursor = truncated.replaceAll("\x1b[7m", `${cursorColor}\x1b[7m`)
 			const coloredContent = `${textColor}${withCursor}${RST}`
-			result.push(borderedLine(chevron + coloredContent, contentWidth + CHEVRON_WIDTH))
+			result.push(borderedLine(prefix + coloredContent, contentWidth + CHEVRON_WIDTH))
 		}
 
 		if (this.getText().length === 0) {
-			const placeholder = `${chevronColor}❯${RST} ${muted}${PLACEHOLDER_TEXT}${RST}`
-			const placeholderWidth = CHEVRON_WIDTH + visibleWidth(PLACEHOLDER_TEXT)
+			const cursorMarker = "\x1b_pi:c\x07"
+			const cursor = `${cursorMarker}${cursorColor}\x1b[7m \x1b[0m`
+			const placeholder = `${chevronColor}❯${RST} ${cursor}${muted}${PLACEHOLDER_TEXT}${RST}`
+			const placeholderWidth = CHEVRON_WIDTH + 1 + visibleWidth(PLACEHOLDER_TEXT)
 			result[2] = borderedLine(placeholder, placeholderWidth)
 		}
 

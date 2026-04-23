@@ -8,6 +8,7 @@ import {
 	writeToolDefinition,
 } from "@mariozechner/pi-coding-agent"
 import { ToolBlockView, buildToolCallHeader, getTextContent } from "../components/tool-block.js"
+import { registerToolCall, isToolExpanded } from "../expand-state.js"
 
 function formatArgs(toolName: string, args: Record<string, any>): string {
 	switch (toolName) {
@@ -73,9 +74,10 @@ export default function toolRendererExtension(pi: ExtensionAPI) {
 				const view = ctx.lastComponent instanceof ToolBlockView ? ctx.lastComponent : new ToolBlockView()
 				const content = getTextContent(result)
 
+				registerToolCall(ctx.toolCallId)
 				view.setDivider((s: string) => theme.fg("borderMuted", s))
 
-				if (options.expanded && content) {
+				if (isToolExpanded(ctx.toolCallId) && content) {
 					view.setFooter(theme.fg("toolOutput", content), "")
 					view.setExtra([])
 				} else {
