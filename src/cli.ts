@@ -21,9 +21,14 @@ import { setAvailableModelIds } from "./startup-context.js"
 const telemetryConfig = readTelemetryConfig()
 
 let sessionId: string | undefined
+// ACP mode runs JSON-RPC over stdio; the "To resume:" print (even remapped to
+// stderr via console.log = console.error inside runAcpMode) is noise in IDE
+// logs and not actionable — the IDE owns session continuation. Decide once,
+// at module load, before anything else runs.
+const acpMode = isAcpMode(process.argv.slice(2))
 
 process.on("exit", (code) => {
-	if (code === 0) {
+	if (code === 0 && !acpMode) {
 		const resumeCmd = sessionId ? `kimchi-code --session ${sessionId}` : "kimchi-code --continue"
 		console.log(`\nTo resume: ${resumeCmd}`)
 	}
@@ -37,6 +42,21 @@ function sessionIdCaptureExtension(pi: ExtensionAPI) {
 			// ignore — exit handler falls back to --continue
 		}
 	})
+}
+
+// Intentionally minimal pre-dispatch sniff: we need to know whether to enter
+// ACP stdio mode BEFORE pi-mono's main() takes over (which would otherwise
+// print a banner, wire up the TUI, and corrupt the JSON-RPC stream). The
+// canonical --mode parser lives in pi-mono; this only looks for the one value
+// that forces a different entrypoint. Don't extend this sniff for new flags —
+// thread them through pi-mono's parser instead.
+function isAcpMode(args: string[]): boolean {
+	for (let i = 0; i < args.length; i++) {
+		const a = args[i]
+		if (a === "--mode" && args[i + 1] === "acp") return true
+		if (a === "--mode=acp") return true
+	}
+	return false
 }
 
 try {
@@ -91,23 +111,29 @@ try {
 	const { EnvHttpProxyAgent, setGlobalDispatcher } = await import("undici")
 	setGlobalDispatcher(new EnvHttpProxyAgent())
 
-	// Delegate to pi-mono's CLI main function, injecting the kimchi extension
-	const { main } = await import("@mariozechner/pi-coding-agent")
-	await main(process.argv.slice(2), {
-		extensionFactories: [
-			sessionIdCaptureExtension,
-			bashCollapseExtension,
-			loopGuardExtension,
-			mcpAdapterExtension,
-			promptEnrichmentExtension(skillPaths),
-			promptSummaryExtension,
-			subagentExtension,
-			tagsExtension,
-			telemetryExtension(telemetryConfig),
-			webFetchExtension,
-			webSearchExtension,
-		],
-	})
+	const extensionFactories = [
+		sessionIdCaptureExtension,
+		bashCollapseExtension,
+		loopGuardExtension,
+		mcpAdapterExtension,
+		promptEnrichmentExtension(skillPaths),
+		promptSummaryExtension,
+		subagentExtension,
+		tagsExtension,
+		telemetryExtension(telemetryConfig),
+		webFetchExtension,
+		webSearchExtension,
+	]
+
+	const rawArgs = process.argv.slice(2)
+	if (acpMode) {
+		const { runAcpMode } = await import("./modes/acp/server.js")
+		await runAcpMode({ extensionFactories, agentDir })
+	} else {
+		// Delegate to pi-mono's CLI main function, injecting the kimchi extension
+		const { main } = await import("@mariozechner/pi-coding-agent")
+		await main(rawArgs, { extensionFactories })
+	}
 } catch (err) {
 	console.error(err instanceof Error ? err.message : String(err))
 	process.exit(1)
