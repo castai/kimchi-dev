@@ -5,9 +5,11 @@ import type { AssistantMessage, ToolCall } from "@mariozechner/pi-ai"
 import type { ExtensionAPI, SessionEntry, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
+import { ToolBlockView, getTextContent } from "../components/tool-block.js"
 import { isBunBinary, isRunningUnderBun } from "../env.js"
+import { isToolExpanded, registerToolCall } from "../expand-state.js"
 import { findExistingFile, resolveUserPath, stripAtPrefix } from "../fs-paths.js"
-import { formatCount } from "./format.js"
+import { formatCount, formatDuration } from "./format.js"
 import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./spinner.js"
 
 const PROMPT_MAX_LENGTH = 60
@@ -27,6 +29,7 @@ interface SubagentEndCheckpoint {
 
 interface SubagentState extends SpinnerState {
 	lastToolCall: string | undefined
+	executionStartedAt?: number
 }
 
 type SubagentFailureReason = "exit_error" | "timeout" | "token_budget_exceeded" | "aborted"
@@ -407,11 +410,6 @@ interface SubagentStats {
 	tokenUsage: SubagentTokenUsage
 }
 
-function formatDuration(ms: number): string {
-	if (ms < 1000) return `${ms}ms`
-	return `${(ms / 1000).toFixed(1)}s`
-}
-
 function formatStats(stats: SubagentStats, theme: Theme): string {
 	const duration = theme.fg("dim", formatDuration(stats.durationMs))
 	const input = theme.fg("dim", `↑${formatCount(stats.tokenUsage.input)}`)
@@ -593,16 +591,37 @@ export default function (pi: ExtensionAPI) {
 				tickSpinner(state, context.invalidate)
 			}
 
-			const spinner = running ? theme.fg("accent", spinnerFrame(state)) : theme.fg("muted", "-")
+			if (context.executionStarted && !state.executionStartedAt) {
+				state.executionStartedAt = Date.now()
+			}
 
-			const header = `${spinner} ${theme.fg("toolTitle", theme.bold("Subagent session"))}`
-			const modelLine = `  ${theme.fg("muted", "model:")}  ${theme.fg("accent", "`")}${theme.fg("accent", `${args.provider ?? ""}/${args.model ?? ""}`)}${theme.fg("accent", "`")}`
-			const promptLine = `  ${theme.fg("muted", "prompt:")} ${theme.fg("dim", "`")}${theme.fg("dim", truncatePrompt(args.prompt ?? ""))}${theme.fg("dim", "`")}`
+			const view = context.lastComponent instanceof ToolBlockView ? context.lastComponent : new ToolBlockView()
 
-			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
-			component.clear()
-			component.addChild(new Text(`${header}\n${modelLine}\n${promptLine}`, 0, 0))
-			return component
+			let icon: string
+			if (running) {
+				icon = theme.fg("accent", spinnerFrame(state))
+			} else if (context.isError) {
+				icon = theme.fg("error", "✗")
+			} else if (!context.isPartial) {
+				icon = theme.fg("success", "✓")
+			} else {
+				icon = theme.fg("accent", "⟳")
+			}
+
+			const name = theme.fg("success", theme.bold("subagent"))
+			const model = theme.fg("dim", `${args.provider ?? ""}/${args.model ?? ""}`)
+			const left = `${icon} ${name}  ${model}`
+
+			let right = ""
+			if (!context.isPartial && state.executionStartedAt) {
+				right = theme.fg("dim", formatDuration(Date.now() - state.executionStartedAt))
+			}
+
+			view.setHeader(left, right)
+			view.hideDivider()
+			view.setFooter("", "")
+			view.setExtra([`  ${theme.fg("muted", "task:")} ${theme.fg("dim", truncatePrompt(args.prompt ?? ""))}`])
+			return view
 		},
 
 		renderResult(result, options, theme, context) {
@@ -615,43 +634,60 @@ export default function (pi: ExtensionAPI) {
 				state.lastToolCall = undefined
 			}
 
-			const textContent = result.content.find((c): c is { type: "text"; text: string } => c.type === "text")
-			if (!textContent?.text) return new Text("", 0, 0)
+			const text = getTextContent(result)
+			if (!text) return new Text("", 0, 0)
 
-			const toolCall = state.lastToolCall
-			const stats = !options.isPartial ? (result.details as SubagentStats | undefined) : undefined
+			if (options.isPartial) {
+				const toolCall = state.lastToolCall
+				let displayText: string
+				let displayStyle: "dim" | "toolOutput"
+				const terminalWidth = process.stdout.columns ?? 80
+				if (toolCall) {
+					const truncated = truncateToWidth(`> ${toolCall}`, terminalWidth * 5)
+					const toolCallVisualLines = wrapTextWithAnsi(truncated, terminalWidth)
+					const paddedLines = [
+						...toolCallVisualLines.slice(0, 5),
+						...Array(5 - Math.min(toolCallVisualLines.length, 5)).fill(""),
+					]
+					displayText = paddedLines.join("\n")
+					displayStyle = "dim"
+				} else {
+					const nonEmptyLines = text.split("\n").filter((l: string) => l.trim())
+					const visualLines = nonEmptyLines.flatMap((l: string) => wrapTextWithAnsi(l, terminalWidth))
+					const last5 = visualLines.slice(-5)
+					const paddedLines = [...Array(5 - last5.length).fill(""), ...last5]
+					displayText = paddedLines.join("\n")
+					displayStyle = "toolOutput"
+				}
 
-			let displayText: string
-			let displayStyle: "dim" | "toolOutput"
-			const terminalWidth = process.stdout.columns ?? 80
-			if (toolCall) {
-				const truncated = truncateToWidth(`> ${toolCall}`, terminalWidth * 5)
-				const toolCallVisualLines = wrapTextWithAnsi(truncated, terminalWidth)
-				const paddedLines = [
-					...toolCallVisualLines.slice(0, 5),
-					...Array(5 - Math.min(toolCallVisualLines.length, 5)).fill(""),
-				]
-				displayText = paddedLines.join("\n")
-				displayStyle = "dim"
-			} else {
-				const nonEmptyLines = textContent.text.split("\n").filter((l) => l.trim())
-				const visualLines = nonEmptyLines.flatMap((l) => wrapTextWithAnsi(l, terminalWidth))
-				const last5 = visualLines.slice(-5)
-				const paddedLines = [...Array(5 - last5.length).fill(""), ...last5]
-				displayText = paddedLines.join("\n")
-				displayStyle = "toolOutput"
+				const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
+				component.clear()
+				component.addChild(new Spacer(1))
+				component.addChild(new Text(theme.fg(displayStyle, displayText), 0, 0))
+				return component
 			}
 
-			const detailText = stats !== undefined ? formatStats(stats, theme) : ""
+			const view = context.lastComponent instanceof ToolBlockView ? context.lastComponent : new ToolBlockView()
+			const stats = result.details as SubagentStats | undefined
+			const nonEmptyLines = text.split("\n").filter((l: string) => l.trim())
+			const lineCount = nonEmptyLines.length
 
-			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
-			component.clear()
-			component.addChild(new Spacer(1))
-			component.addChild(new Text(theme.fg(displayStyle, displayText), 0, 0))
-			component.addChild(new Spacer(1))
-			component.addChild(new Text(detailText, 0, 0))
+			registerToolCall(context.toolCallId)
+			view.setHeader("", "")
+			view.setDivider((s: string) => theme.fg("borderMuted", s))
 
-			return component
+			if (isToolExpanded(context.toolCallId)) {
+				const statsLine = stats !== undefined ? formatStats(stats, theme) : ""
+				view.setFooter(theme.fg("toolOutput", text), "")
+				view.setExtra(statsLine ? [statsLine] : [])
+			} else {
+				const outputSummary = theme.fg("dim", `${lineCount} line${lineCount === 1 ? "" : "s"} written`)
+				const statsStr = stats !== undefined ? `  ${formatStats(stats, theme)}` : ""
+				view.setFooter(`${outputSummary}${statsStr}`, theme.fg("dim", "ctrl+o to expand"))
+				view.setExtra([])
+			}
+
+			return view
 		},
 	})
 }

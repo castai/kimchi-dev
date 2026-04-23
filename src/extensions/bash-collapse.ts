@@ -1,7 +1,8 @@
+import type { BashToolDetails, ExtensionAPI, ToolDefinition } from "@mariozechner/pi-coding-agent"
 import { createBashToolDefinition } from "@mariozechner/pi-coding-agent"
-import type { BashToolDetails } from "@mariozechner/pi-coding-agent"
-import type { ExtensionAPI, ToolDefinition } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text } from "@mariozechner/pi-tui"
+import { ToolBlockView, buildToolCallHeader, getTextContent } from "../components/tool-block.js"
+import { isToolExpanded, registerToolCall } from "../expand-state.js"
 
 export default function (pi: ExtensionAPI) {
 	const baseDef = createBashToolDefinition(process.cwd())
@@ -13,10 +14,15 @@ export default function (pi: ExtensionAPI) {
 			return createBashToolDefinition(ctx.cwd).execute(toolCallId, params, signal, onUpdate, ctx)
 		},
 
+		renderCall(args, theme, ctx) {
+			const view = ctx.lastComponent instanceof ToolBlockView ? ctx.lastComponent : new ToolBlockView()
+			buildToolCallHeader(view, "bash", args.command ?? "", theme, ctx)
+			return view
+		},
+
 		renderResult(result, options, theme, context) {
 			if (options.isPartial) {
-				const textContent = result.content.find((c): c is { type: "text"; text: string } => c.type === "text")
-				const displayText = (textContent?.text ?? "").split("\n").slice(-5).join("\n")
+				const displayText = getTextContent(result).split("\n").slice(-5).join("\n")
 
 				const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
 				component.clear()
@@ -26,20 +32,24 @@ export default function (pi: ExtensionAPI) {
 				return component
 			}
 
-			if (options.expanded) {
+			registerToolCall(context.toolCallId)
+
+			if (isToolExpanded(context.toolCallId)) {
 				return baseDef.renderResult?.(result, options, theme, context) ?? new Text("", 0, 0)
 			}
 
-			const textContent = result.content.find((c): c is { type: "text"; text: string } => c.type === "text")
-			const trimmed = (textContent?.text ?? "").replace(/\n$/, "")
+			const view = context.lastComponent instanceof ToolBlockView ? context.lastComponent : new ToolBlockView()
+			const trimmed = getTextContent(result).replace(/\n$/, "")
 			const lineCount = trimmed ? trimmed.split("\n").length : 0
-			const summary = `${theme.fg("dim", `${lineCount} line${lineCount === 1 ? "" : "s"}`)}  ${theme.fg("muted", "(ctrl+o to expand)")}`
 
-			const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
-			component.clear()
-			component.addChild(new Text(summary, 0, 0))
-			component.invalidate()
-			return component
+			view.setHeader("", "")
+			view.setDivider((s: string) => theme.fg("borderMuted", s))
+			view.setFooter(
+				theme.fg("dim", `${lineCount} line${lineCount === 1 ? "" : "s"} of output`),
+				theme.fg("dim", "ctrl+o to expand"),
+			)
+			view.setExtra([])
+			return view
 		},
 	}
 

@@ -11,6 +11,7 @@
 		"clean": "rm -rf dist",
 		"build": "tsc --noEmit && node scripts/copy-resources.js --dev",
 		"build:binary": "node scripts/build-binary.js",
+		"install:local": "node scripts/install-local.js",
 		"build:binary-linux-arm64": "node scripts/build-binary.js --target linux-arm64",
 		"build:binary-linux-x64": "node scripts/build-binary.js --target linux-x64",
 		"dev": "bun run --preload ./src/set-package-dir.ts src/entry.ts",
