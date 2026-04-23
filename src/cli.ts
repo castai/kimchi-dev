@@ -146,7 +146,7 @@ try {
 	const agent = new EnvHttpProxyAgent()
 	setGlobalDispatcher(
 		agent.compose((dispatch) => (opts, handler) => {
-			const headers = new Headers(opts.headers as HeadersInit)
+			const headers = new Headers((opts.headers ?? undefined) as HeadersInit)
 			headers.set("user-agent", userAgent)
 			return dispatch({ ...opts, headers: Object.fromEntries(headers) }, handler)
 		}),
