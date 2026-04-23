@@ -20,7 +20,7 @@
  * returns "continue" so the message passes through unchanged.
  */
 
-import { homedir } from "node:os"
+import { homedir, type, userInfo } from "node:os"
 import { isAbsolute, join, normalize, resolve } from "node:path"
 import type { AssistantMessage, ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
@@ -29,6 +29,7 @@ import { getAvailableModelIds } from "../../startup-context.js"
 import { ModelRegistry } from "./model-registry/index.js"
 import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/context-files.js"
 import {
+	type EnvironmentInfo,
 	buildOrchestratorSystemPrompt,
 	buildSubagentSystemPrompt,
 	isSubagent,
@@ -158,17 +159,25 @@ export default function (skillPaths: string[]) {
 				skillPaths: expandSkillPaths(skillPaths, ctx.cwd),
 			}).skills
 
+			const env: EnvironmentInfo = {
+				os: type() === "Darwin" ? "macOS" : type(),
+				username: userInfo().username,
+				homeDir: homedir(),
+				cwd: ctx.cwd,
+				currentTime: new Date().toISOString(),
+			}
+
 			if (subagentMode) {
 				// Filter the subagent tool out of the active tool set to prevent
 				// the subagent from spawning further subagents.
 				const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
 				pi.setActiveTools(activeTools)
 
-				const systemPrompt = buildSubagentSystemPrompt(tools, cachedContextFiles, cachedSkills)
+				const systemPrompt = buildSubagentSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
 				return { systemPrompt }
 			}
 
-			const systemPrompt = buildOrchestratorSystemPrompt(tools, cachedContextFiles, cachedSkills)
+			const systemPrompt = buildOrchestratorSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
 			return { systemPrompt }
 		})
 	}

@@ -1,7 +1,20 @@
 import type { Skill } from "@mariozechner/pi-coding-agent"
 import { describe, expect, it } from "vitest"
 import { MODEL_CAPABILITIES, ModelRegistry } from "../model-registry/index.js"
-import { buildOrchestratorSystemPrompt, buildSubagentSystemPrompt, transformPrompt } from "./prompt-transformer.js"
+import {
+	type EnvironmentInfo,
+	buildOrchestratorSystemPrompt,
+	buildSubagentSystemPrompt,
+	transformPrompt,
+} from "./prompt-transformer.js"
+
+const testEnv: EnvironmentInfo = {
+	os: "Linux",
+	username: "testuser",
+	homeDir: "/home/testuser",
+	cwd: "/home/testuser/projects/myapp",
+	currentTime: "2026-01-01T00:00:00.000Z",
+}
 
 const ALL_KNOWN_IDS = [...MODEL_CAPABILITIES.keys()]
 
@@ -87,7 +100,7 @@ describe("buildOrchestratorSystemPrompt", () => {
 	]
 
 	it("includes all tool names and descriptions", () => {
-		const result = buildOrchestratorSystemPrompt(tools)
+		const result = buildOrchestratorSystemPrompt(tools, testEnv)
 		for (const tool of tools) {
 			expect(result).toContain(tool.name)
 			expect(result).toContain(tool.description)
@@ -95,30 +108,30 @@ describe("buildOrchestratorSystemPrompt", () => {
 	})
 
 	it("formats tools as a list", () => {
-		const result = buildOrchestratorSystemPrompt(tools)
+		const result = buildOrchestratorSystemPrompt(tools, testEnv)
 		expect(result).toContain("- read: Read file contents")
 		expect(result).toContain("- subagent: Spawn an isolated subagent process")
 	})
 
 	it("contains self-classification instructions", () => {
-		const result = buildOrchestratorSystemPrompt(tools)
+		const result = buildOrchestratorSystemPrompt(tools, testEnv)
 		expect(result).toContain("subagent")
 		expect(result).toContain("delegate")
 	})
 
 	it("replaces the {{TOOLS}} placeholder", () => {
-		const result = buildOrchestratorSystemPrompt(tools)
+		const result = buildOrchestratorSystemPrompt(tools, testEnv)
 		expect(result).not.toContain("{{TOOLS}}")
 	})
 
 	it("handles empty tools list", () => {
-		const result = buildOrchestratorSystemPrompt([])
+		const result = buildOrchestratorSystemPrompt([], testEnv)
 		expect(result).toContain("(No tools available)")
 		expect(result).not.toContain("{{TOOLS}}")
 	})
 
 	it("replaces the {{PROJECT_CONTEXT}} placeholder when no context files", () => {
-		const result = buildOrchestratorSystemPrompt(tools)
+		const result = buildOrchestratorSystemPrompt(tools, testEnv)
 		expect(result).not.toContain("{{PROJECT_CONTEXT}}")
 	})
 
@@ -127,7 +140,7 @@ describe("buildOrchestratorSystemPrompt", () => {
 			{ path: "/repo/AGENTS.md", content: "Always run tests before committing." },
 			{ path: "/repo/sub/CLAUDE.md", content: "Use pnpm, not npm." },
 		]
-		const result = buildOrchestratorSystemPrompt(tools, contextFiles)
+		const result = buildOrchestratorSystemPrompt(tools, testEnv, contextFiles)
 		expect(result).toContain("# Project Guidelines")
 		expect(result).toContain("Always run tests before committing.")
 		expect(result).toContain("Use pnpm, not npm.")
@@ -138,14 +151,14 @@ describe("buildOrchestratorSystemPrompt", () => {
 
 	it("places project guidelines after the guidelines section", () => {
 		const contextFiles = [{ path: "/repo/AGENTS.md", content: "custom rule" }]
-		const result = buildOrchestratorSystemPrompt(tools, contextFiles)
+		const result = buildOrchestratorSystemPrompt(tools, testEnv, contextFiles)
 		const guidelinesPos = result.indexOf("## Guidelines")
 		const contextPos = result.indexOf("# Project Guidelines")
 		expect(guidelinesPos).toBeLessThan(contextPos)
 	})
 
 	it("replaces the {{SKILLS}} placeholder when no skills", () => {
-		const result = buildOrchestratorSystemPrompt(tools)
+		const result = buildOrchestratorSystemPrompt(tools, testEnv)
 		expect(result).not.toContain("{{SKILLS}}")
 	})
 
@@ -154,7 +167,7 @@ describe("buildOrchestratorSystemPrompt", () => {
 			createSkill({ name: "deploy", description: "Deploy the app to production" }),
 			createSkill({ name: "review", description: "Review a pull request" }),
 		]
-		const result = buildOrchestratorSystemPrompt(tools, undefined, skills)
+		const result = buildOrchestratorSystemPrompt(tools, testEnv, undefined, skills)
 		expect(result).toContain("available_skills")
 		expect(result).toContain("deploy")
 		expect(result).toContain("Deploy the app to production")
@@ -167,9 +180,32 @@ describe("buildOrchestratorSystemPrompt", () => {
 			createSkill({ name: "safe-skill", description: "Visible skill" }),
 			createSkill({ name: "hidden-skill", description: "Hidden skill", disableModelInvocation: true }),
 		]
-		const result = buildOrchestratorSystemPrompt(tools, undefined, skills)
+		const result = buildOrchestratorSystemPrompt(tools, testEnv, undefined, skills)
 		expect(result).toContain("safe-skill")
 		expect(result).not.toContain("hidden-skill")
+	})
+
+	it("injects environment info into the prompt", () => {
+		const result = buildOrchestratorSystemPrompt(tools, testEnv)
+		expect(result).toContain("# Environment")
+		expect(result).toContain(`OS: ${testEnv.os}`)
+		expect(result).toContain(`Username: ${testEnv.username}`)
+		expect(result).toContain(`Home directory: ${testEnv.homeDir}`)
+		expect(result).toContain(`Working directory: ${testEnv.cwd}`)
+		expect(result).toContain(`Current time: ${testEnv.currentTime}`)
+	})
+
+	it("replaces the {{ENVIRONMENT}} placeholder", () => {
+		const result = buildOrchestratorSystemPrompt(tools, testEnv)
+		expect(result).not.toContain("{{ENVIRONMENT}}")
+	})
+
+	it("places environment section before project guidelines", () => {
+		const contextFiles = [{ path: "/repo/AGENTS.md", content: "custom rule" }]
+		const result = buildOrchestratorSystemPrompt(tools, testEnv, contextFiles)
+		const envPos = result.indexOf("# Environment")
+		const contextPos = result.indexOf("# Project Guidelines")
+		expect(envPos).toBeLessThan(contextPos)
 	})
 })
 
@@ -183,12 +219,12 @@ describe("buildSubagentSystemPrompt", () => {
 	]
 
 	it("excludes the subagent tool", () => {
-		const result = buildSubagentSystemPrompt(tools)
+		const result = buildSubagentSystemPrompt(tools, testEnv)
 		expect(result).not.toContain("subagent")
 	})
 
 	it("includes all other tools", () => {
-		const result = buildSubagentSystemPrompt(tools)
+		const result = buildSubagentSystemPrompt(tools, testEnv)
 		expect(result).toContain("- read: Read file contents")
 		expect(result).toContain("- bash: Execute bash commands")
 		expect(result).toContain("- edit: Edit files")
@@ -196,35 +232,35 @@ describe("buildSubagentSystemPrompt", () => {
 	})
 
 	it("replaces the {{TOOLS}} placeholder", () => {
-		const result = buildSubagentSystemPrompt(tools)
+		const result = buildSubagentSystemPrompt(tools, testEnv)
 		expect(result).not.toContain("{{TOOLS}}")
 	})
 
 	it("contains coding assistant instructions", () => {
-		const result = buildSubagentSystemPrompt(tools)
+		const result = buildSubagentSystemPrompt(tools, testEnv)
 		expect(result).toContain("expert coding assistant")
 	})
 
 	it("does not contain orchestration instructions", () => {
-		const result = buildSubagentSystemPrompt(tools)
+		const result = buildSubagentSystemPrompt(tools, testEnv)
 		expect(result).not.toContain("orchestrator")
 		expect(result).not.toContain("EASY")
 		expect(result).not.toContain("HARD")
 	})
 
 	it("handles tools list with only the subagent tool", () => {
-		const result = buildSubagentSystemPrompt([{ name: "subagent", description: "Spawn" }])
+		const result = buildSubagentSystemPrompt([{ name: "subagent", description: "Spawn" }], testEnv)
 		expect(result).toContain("(No tools available)")
 	})
 
 	it("replaces the {{PROJECT_CONTEXT}} placeholder when no context files", () => {
-		const result = buildSubagentSystemPrompt(tools)
+		const result = buildSubagentSystemPrompt(tools, testEnv)
 		expect(result).not.toContain("{{PROJECT_CONTEXT}}")
 	})
 
 	it("injects project guidelines files into the prompt", () => {
 		const contextFiles = [{ path: "/project/AGENTS.md", content: "Use TypeScript strict mode." }]
-		const result = buildSubagentSystemPrompt(tools, contextFiles)
+		const result = buildSubagentSystemPrompt(tools, testEnv, contextFiles)
 		expect(result).toContain("# Project Guidelines")
 		expect(result).toContain("Use TypeScript strict mode.")
 		expect(result).not.toContain("/project/AGENTS.md")
@@ -232,22 +268,37 @@ describe("buildSubagentSystemPrompt", () => {
 
 	it("places project guidelines after the guidelines section", () => {
 		const contextFiles = [{ path: "/repo/AGENTS.md", content: "rule" }]
-		const result = buildSubagentSystemPrompt(tools, contextFiles)
+		const result = buildSubagentSystemPrompt(tools, testEnv, contextFiles)
 		const guidelinesPos = result.indexOf("## Guidelines")
 		const contextPos = result.indexOf("# Project Guidelines")
 		expect(guidelinesPos).toBeLessThan(contextPos)
 	})
 
 	it("replaces the {{SKILLS}} placeholder when no skills", () => {
-		const result = buildSubagentSystemPrompt(tools)
+		const result = buildSubagentSystemPrompt(tools, testEnv)
 		expect(result).not.toContain("{{SKILLS}}")
 	})
 
 	it("injects skills into the prompt", () => {
 		const skills = [createSkill({ name: "deploy", description: "Deploy the app" })]
-		const result = buildSubagentSystemPrompt(tools, undefined, skills)
+		const result = buildSubagentSystemPrompt(tools, testEnv, undefined, skills)
 		expect(result).toContain("available_skills")
 		expect(result).toContain("deploy")
 		expect(result).toContain("Deploy the app")
+	})
+
+	it("injects environment info into the prompt", () => {
+		const result = buildSubagentSystemPrompt(tools, testEnv)
+		expect(result).toContain("# Environment")
+		expect(result).toContain(`OS: ${testEnv.os}`)
+		expect(result).toContain(`Username: ${testEnv.username}`)
+		expect(result).toContain(`Home directory: ${testEnv.homeDir}`)
+		expect(result).toContain(`Working directory: ${testEnv.cwd}`)
+		expect(result).toContain(`Current time: ${testEnv.currentTime}`)
+	})
+
+	it("replaces the {{ENVIRONMENT}} placeholder", () => {
+		const result = buildSubagentSystemPrompt(tools, testEnv)
+		expect(result).not.toContain("{{ENVIRONMENT}}")
 	})
 })
