@@ -54,6 +54,14 @@ function expandSkillPaths(configuredPaths: string[], cwd: string): string[] {
 	return expanded
 }
 
+function safeUsername(): string {
+	try {
+		return userInfo().username
+	} catch {
+		return process.env.USER ?? process.env.USERNAME ?? "unknown"
+	}
+}
+
 export default function (skillPaths: string[]) {
 	return (pi: ExtensionAPI) => {
 		const subagentMode = isSubagent()
@@ -161,7 +169,7 @@ export default function (skillPaths: string[]) {
 
 			const env: EnvironmentInfo = {
 				os: type() === "Darwin" ? "macOS" : type(),
-				username: userInfo().username,
+				username: safeUsername(),
 				homeDir: homedir(),
 				cwd: ctx.cwd,
 				currentTime: new Date().toISOString(),
