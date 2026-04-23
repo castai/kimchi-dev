@@ -12,6 +12,10 @@ export interface EnvironmentInfo {
 	homeDir: string
 	cwd: string
 	currentTime: string
+	localDate: string
+	isGitRepo: boolean
+	gitBranch?: string
+	gitRemote?: string
 }
 
 const SUBAGENT_TOOL_NAME = "subagent"
@@ -115,15 +119,19 @@ function formatToolsSection(tools: readonly ToolInfo[]): string {
 }
 
 function formatEnvironmentSection(env: EnvironmentInfo): string {
-	return [
+	const lines = [
 		"# Environment",
 		"",
 		`- OS: ${env.os}`,
 		`- Username: ${env.username}`,
-		`- Home directory: ${env.homeDir}`,
-		`- Working directory: ${env.cwd}`,
-		`- Current time: ${env.currentTime}`,
-	].join("\n")
+		`- Home directory: "${env.homeDir}"`,
+		`- Working directory: "${env.cwd}"`,
+		`- Current time: ${env.currentTime} (local date: ${env.localDate})`,
+		`- Git repository: ${env.isGitRepo ? "yes" : "no"}`,
+	]
+	if (env.gitBranch !== undefined) lines.push(`- Git branch: ${env.gitBranch}`)
+	if (env.gitRemote !== undefined) lines.push(`- Git remote: ${env.gitRemote}`)
+	return lines.join("\n")
 }
 
 function formatProjectContext(contextFiles?: readonly ContextFile[]): string {

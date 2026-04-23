@@ -20,7 +20,9 @@
  * returns "continue" so the message passes through unchanged.
  */
 
-import { homedir, type, userInfo } from "node:os"
+import { execSync } from "node:child_process"
+import { existsSync, readFileSync } from "node:fs"
+import { homedir, platform, userInfo } from "node:os"
 import { isAbsolute, join, normalize, resolve } from "node:path"
 import type { AssistantMessage, ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
@@ -59,6 +61,26 @@ function safeUsername(): string {
 		return userInfo().username
 	} catch {
 		return process.env.USER ?? process.env.USERNAME ?? "unknown"
+	}
+}
+
+function readGitBranch(cwd: string): string | undefined {
+	try {
+		const head = readFileSync(join(cwd, ".git", "HEAD"), "utf8").trim()
+		return head.startsWith("ref: refs/heads/") ? head.slice("ref: refs/heads/".length) : undefined
+	} catch {
+		return undefined
+	}
+}
+
+function readGitRemote(cwd: string): string | undefined {
+	try {
+		return (
+			execSync("git remote get-url origin", { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() ||
+			undefined
+		)
+	} catch {
+		return undefined
 	}
 }
 
@@ -167,12 +189,19 @@ export default function (skillPaths: string[]) {
 				skillPaths: expandSkillPaths(skillPaths, ctx.cwd),
 			}).skills
 
+			const platformNames: Record<string, string> = { darwin: "macOS", win32: "Windows" }
+			const now = new Date()
+			const isGitRepo = existsSync(join(ctx.cwd, ".git", "HEAD"))
 			const env: EnvironmentInfo = {
-				os: type() === "Darwin" ? "macOS" : type(),
+				os: platformNames[platform()] ?? platform(),
 				username: safeUsername(),
 				homeDir: homedir(),
 				cwd: ctx.cwd,
-				currentTime: new Date().toISOString(),
+				currentTime: now.toISOString(),
+				localDate: now.toLocaleDateString("en-CA"),
+				isGitRepo,
+				gitBranch: isGitRepo ? readGitBranch(ctx.cwd) : undefined,
+				gitRemote: isGitRepo ? readGitRemote(ctx.cwd) : undefined,
 			}
 
 			if (subagentMode) {

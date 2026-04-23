@@ -14,6 +14,8 @@ const testEnv: EnvironmentInfo = {
 	homeDir: "/home/testuser",
 	cwd: "/home/testuser/projects/myapp",
 	currentTime: "2026-01-01T00:00:00.000Z",
+	localDate: "2026-01-01",
+	isGitRepo: false,
 }
 
 const ALL_KNOWN_IDS = [...MODEL_CAPABILITIES.keys()]
@@ -190,9 +192,29 @@ describe("buildOrchestratorSystemPrompt", () => {
 		expect(result).toContain("# Environment")
 		expect(result).toContain(`OS: ${testEnv.os}`)
 		expect(result).toContain(`Username: ${testEnv.username}`)
-		expect(result).toContain(`Home directory: ${testEnv.homeDir}`)
-		expect(result).toContain(`Working directory: ${testEnv.cwd}`)
-		expect(result).toContain(`Current time: ${testEnv.currentTime}`)
+		expect(result).toContain(`Home directory: "${testEnv.homeDir}"`)
+		expect(result).toContain(`Working directory: "${testEnv.cwd}"`)
+		expect(result).toContain(`Current time: ${testEnv.currentTime} (local date: ${testEnv.localDate})`)
+		expect(result).toContain("Git repository: no")
+	})
+
+	it("injects git branch and remote when present", () => {
+		const gitEnv: EnvironmentInfo = {
+			...testEnv,
+			isGitRepo: true,
+			gitBranch: "main",
+			gitRemote: "git@github.com:org/repo.git",
+		}
+		const result = buildOrchestratorSystemPrompt(tools, gitEnv)
+		expect(result).toContain("Git repository: yes")
+		expect(result).toContain("Git branch: main")
+		expect(result).toContain("Git remote: git@github.com:org/repo.git")
+	})
+
+	it("omits git branch and remote lines when not a git repo", () => {
+		const result = buildOrchestratorSystemPrompt(tools, testEnv)
+		expect(result).not.toContain("Git branch:")
+		expect(result).not.toContain("Git remote:")
 	})
 
 	it("replaces the {{ENVIRONMENT}} placeholder", () => {
@@ -292,9 +314,23 @@ describe("buildSubagentSystemPrompt", () => {
 		expect(result).toContain("# Environment")
 		expect(result).toContain(`OS: ${testEnv.os}`)
 		expect(result).toContain(`Username: ${testEnv.username}`)
-		expect(result).toContain(`Home directory: ${testEnv.homeDir}`)
-		expect(result).toContain(`Working directory: ${testEnv.cwd}`)
-		expect(result).toContain(`Current time: ${testEnv.currentTime}`)
+		expect(result).toContain(`Home directory: "${testEnv.homeDir}"`)
+		expect(result).toContain(`Working directory: "${testEnv.cwd}"`)
+		expect(result).toContain(`Current time: ${testEnv.currentTime} (local date: ${testEnv.localDate})`)
+		expect(result).toContain("Git repository: no")
+	})
+
+	it("injects git branch and remote when present", () => {
+		const gitEnv: EnvironmentInfo = {
+			...testEnv,
+			isGitRepo: true,
+			gitBranch: "feature/my-branch",
+			gitRemote: "https://github.com/org/repo.git",
+		}
+		const result = buildSubagentSystemPrompt(tools, gitEnv)
+		expect(result).toContain("Git repository: yes")
+		expect(result).toContain("Git branch: feature/my-branch")
+		expect(result).toContain("Git remote: https://github.com/org/repo.git")
 	})
 
 	it("replaces the {{ENVIRONMENT}} placeholder", () => {
