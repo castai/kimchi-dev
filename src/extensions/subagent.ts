@@ -14,6 +14,7 @@ const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
 const STDERR_MAX = 8192
 const TIMEOUT_MS = 30 * 60 * 1000
+const INACTIVITY_TIMEOUT_MS = 60 * 1000
 const CHECKPOINT_END_TYPE = "subagent-end"
 const RECOVERY_MESSAGE_TYPE = "subagent-recovery"
 const INTERRUPTED_MESSAGE_TYPE = "subagent-interrupted"
@@ -29,7 +30,7 @@ interface SubagentState extends SpinnerState {
 	lastToolCall: string | undefined
 }
 
-type SubagentFailureReason = "exit_error" | "timeout" | "token_budget_exceeded" | "aborted"
+type SubagentFailureReason = "exit_error" | "timeout" | "token_budget_exceeded" | "aborted" | "output_stalled"
 
 interface SubagentTokenUsage {
 	input: number
@@ -294,8 +295,15 @@ function spawnSubagent(
 		let failureReason: SubagentFailureReason | undefined
 		let closed = false
 
+		let inactivityHandle = setTimeout(() => kill("output_stalled"), INACTIVITY_TIMEOUT_MS)
+		const resetInactivity = () => {
+			clearTimeout(inactivityHandle)
+			inactivityHandle = setTimeout(() => kill("output_stalled"), INACTIVITY_TIMEOUT_MS)
+		}
+
 		const finish = (exitCode: number) => {
 			clearTimeout(timeoutHandle)
+			clearTimeout(inactivityHandle)
 			combinedSignal.removeEventListener("abort", onAbort)
 			resolve({
 				exitCode,
@@ -350,6 +358,7 @@ function spawnSubagent(
 		}
 
 		proc.stdout.on("data", (data: Buffer) => {
+			resetInactivity()
 			buffer += data.toString()
 			const lines = buffer.split("\n")
 			buffer = lines.pop() ?? ""
