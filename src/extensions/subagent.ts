@@ -297,6 +297,7 @@ function spawnSubagent(
 
 		let inactivityHandle = setTimeout(() => kill("output_stalled"), INACTIVITY_TIMEOUT_MS)
 		const resetInactivity = () => {
+			if (closed) return
 			clearTimeout(inactivityHandle)
 			inactivityHandle = setTimeout(() => kill("output_stalled"), INACTIVITY_TIMEOUT_MS)
 		}
@@ -366,6 +367,7 @@ function spawnSubagent(
 		})
 
 		proc.stderr.on("data", (data: Buffer) => {
+			resetInactivity()
 			stderr += data.toString()
 			if (stderr.length > STDERR_MAX) {
 				stderr = stderr.slice(0, STDERR_MAX)
