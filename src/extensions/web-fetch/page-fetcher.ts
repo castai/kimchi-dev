@@ -250,7 +250,6 @@ async function fetchWithNative(url: string, options?: FetchOptions): Promise<Fet
 			signal: controller.signal,
 			redirect: "follow",
 			headers: {
-				"User-Agent": "kimchi-web-fetch/0.1",
 				Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 			},
 		})
