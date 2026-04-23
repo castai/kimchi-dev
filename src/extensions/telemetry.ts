@@ -185,16 +185,18 @@ export default function telemetryExtension(config: TelemetryConfig) {
 				const costTotal = assistant.usage.cost.total
 				const sessionUptimeMs = Date.now() - sessionStartMs
 
-				track(sendLog(config, sessionId, "api_request", {
-					model,
-					provider,
-					input_tokens: input,
-					output_tokens: output,
-					cache_read_tokens: cacheRead,
-					cache_creation_tokens: cacheWrite,
-					cost_usd: costTotal,
-					session_uptime_ms: sessionUptimeMs,
-				}))
+				track(
+					sendLog(config, sessionId, "api_request", {
+						model,
+						provider,
+						input_tokens: input,
+						output_tokens: output,
+						cache_read_tokens: cacheRead,
+						cache_creation_tokens: cacheWrite,
+						cost_usd: costTotal,
+						session_uptime_ms: sessionUptimeMs,
+					}),
+				)
 			} catch (err) {
 				console.error("[telemetry] message_end handler error:", err)
 			}
@@ -225,12 +227,14 @@ export default function telemetryExtension(config: TelemetryConfig) {
 				const filePath = String(args?.filePath ?? "")
 				const language = inferLanguage(filePath)
 				const changes = countLineChanges(String(args?.oldString ?? ""), String(args?.newString ?? ""))
-				track(sendLog(config, sessionId, "tool_usage", {
-					tool: "edit",
-					language,
-					lines_added: changes.added,
-					lines_removed: changes.removed,
-				}))
+				track(
+					sendLog(config, sessionId, "tool_usage", {
+						tool: "edit",
+						language,
+						lines_added: changes.added,
+						lines_removed: changes.removed,
+					}),
+				)
 			}
 
 			if (toolName === "write") {
@@ -238,11 +242,13 @@ export default function telemetryExtension(config: TelemetryConfig) {
 				const language = inferLanguage(filePath)
 				const content = String(args?.content ?? "")
 				const lines = content ? content.split("\n").length : 1
-				track(sendLog(config, sessionId, "tool_usage", {
-					tool: "write",
-					language,
-					lines_added: lines,
-				}))
+				track(
+					sendLog(config, sessionId, "tool_usage", {
+						tool: "write",
+						language,
+						lines_added: lines,
+					}),
+				)
 			}
 
 			if (toolName === "multiedit") {
@@ -253,12 +259,14 @@ export default function telemetryExtension(config: TelemetryConfig) {
 					: []
 				for (const edit of edits) {
 					const changes = countLineChanges(String(edit.oldString ?? ""), String(edit.newString ?? ""))
-					track(sendLog(config, sessionId, "tool_usage", {
-						tool: "edit",
-						language,
-						lines_added: changes.added,
-						lines_removed: changes.removed,
-					}))
+					track(
+						sendLog(config, sessionId, "tool_usage", {
+							tool: "edit",
+							language,
+							lines_added: changes.added,
+							lines_removed: changes.removed,
+						}),
+					)
 				}
 			}
 		})
