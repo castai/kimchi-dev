@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
 import { DEFAULT_SKILL_PATHS, loadConfig, readTelemetryConfig, writeMigrationState, writeSkillPaths } from "./config.js"
+import { isBunBinary } from "./env.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
@@ -130,7 +131,9 @@ try {
 	// Copy kimchi theme into agent dir so initTheme can find it before extensions load
 	const themesDir = resolve(agentDir, "themes")
 	mkdirSync(themesDir, { recursive: true })
-	const kimchiThemeSrc = resolve(dirname(fileURLToPath(import.meta.url)), "../themes/kimchi.json")
+	const kimchiThemeSrc = isBunBinary
+		? resolve(process.env.PI_PACKAGE_DIR ?? "", "theme", "kimchi.json")
+		: resolve(dirname(fileURLToPath(import.meta.url)), "../themes/kimchi.json")
 	copyFileSync(kimchiThemeSrc, resolve(themesDir, "kimchi.json"))
 
 	// Suppress Node.js warnings (same as pi-mono's own cli.js)
