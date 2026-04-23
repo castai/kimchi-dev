@@ -111,10 +111,10 @@ export default function (skillPaths: string[]) {
 				return { action: "handled" as const }
 			})
 
-			// Detect when the model made tool calls, received tool results, and is about to be
-			// called again. Some models (e.g. kimi-k2.5, minimax-m2.7) silently return an empty
-			// response in this situation instead of producing a text answer. Injecting a nudge
-			// before the follow-up call reliably prevents the empty turn.
+			// Detect when the model returned only tool calls with no text, received tool results,
+			// and is about to be called again. Some models (e.g. kimi-k2.5) silently return an
+			// empty response in this situation instead of producing a text answer. Injecting a
+			// nudge before the follow-up call reliably prevents the empty turn.
 			pi.on("context", async (event) => {
 				const messages = event.messages
 
@@ -122,7 +122,8 @@ export default function (skillPaths: string[]) {
 				if (!lastAssistant) return
 
 				const hasToolCalls = lastAssistant.content.some((c) => c.type === "toolCall")
-				if (!hasToolCalls) return
+				const hasText = lastAssistant.content.some((c) => c.type === "text")
+				if (!hasToolCalls || hasText) return
 
 				const lastAssistantIndex = messages.lastIndexOf(lastAssistant)
 				const hasToolResultsAfter = messages.slice(lastAssistantIndex + 1).some((m) => m.role === "toolResult")
