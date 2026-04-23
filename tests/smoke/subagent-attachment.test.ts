@@ -26,27 +26,24 @@ describe("subagent attachment smoke tests", () => {
 		rmSync(fixtureDir, { recursive: true, force: true })
 	})
 
-	it.skipIf(!process.env.KIMCHI_API_KEY)(
-		"subagent receives file attachment and can read its contents",
-		{ timeout: 180_000, retry: 1 },
-		() => {
-			const prompt = [
-				"Use the `subagent` tool exactly once with these arguments:",
-				'- provider: "kimchi-dev"',
-				'- model: "kimi-k2.5"',
-				`- attachments: ["${fixturePath}"]`,
-				'- prompt: "The attached file contains a line beginning with `SENTINEL:`. Reply with only the token that follows `SENTINEL: ` and nothing else."',
-				"",
-				"After the subagent returns, print the subagent's answer verbatim as your final reply, with no extra commentary.",
-			].join("\n")
+	// TODO(nojira): re-enable. Flaky on CI — 180s LLM-dependent run retries once and still times out intermittently. Dominates total smoke-test runtime.
+	it.skip("subagent receives file attachment and can read its contents", { timeout: 180_000, retry: 1 }, () => {
+		const prompt = [
+			"Use the `subagent` tool exactly once with these arguments:",
+			'- provider: "kimchi-dev"',
+			'- model: "kimi-k2.5"',
+			`- attachments: ["${fixturePath}"]`,
+			'- prompt: "The attached file contains a line beginning with `SENTINEL:`. Reply with only the token that follows `SENTINEL: ` and nothing else."',
+			"",
+			"After the subagent returns, print the subagent's answer verbatim as your final reply, with no extra commentary.",
+		].join("\n")
 
-			const result = runBinary({
-				args: ["--debug-prompts", "-p", prompt],
-				extraEnv: { KIMCHI_API_KEY: process.env.KIMCHI_API_KEY as string },
-				timeoutMs: 180_000,
-			})
+		const result = runBinary({
+			args: ["--debug-prompts", "-p", prompt],
+			extraEnv: { KIMCHI_API_KEY: process.env.KIMCHI_API_KEY as string },
+			timeoutMs: 180_000,
+		})
 
-			expect(result.stdout).toContain(SENTINEL)
-		},
-	)
+		expect(result.stdout).toContain(SENTINEL)
+	})
 })
