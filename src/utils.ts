@@ -1,10 +1,13 @@
 import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { dirname, resolve } from "node:path"
+import { dirname, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 
 let cachedBranch: string | undefined
+export function resetGitBranch(): void {
+	cachedBranch = undefined
+}
 export function getGitBranch(): string {
 	if (cachedBranch !== undefined) return cachedBranch
 	try {
@@ -21,7 +24,9 @@ export function getGitBranch(): string {
 export function getFolder(): string {
 	const cwd = process.cwd()
 	const home = homedir()
-	return cwd.startsWith(home) ? `~${cwd.slice(home.length)}` : cwd
+	if (cwd === home) return "~"
+	if (cwd.startsWith(home + sep)) return `~${cwd.slice(home.length)}`
+	return cwd
 }
 
 let cachedVersion: string | undefined

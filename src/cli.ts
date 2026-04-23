@@ -1,7 +1,7 @@
 // CLI logic — imported dynamically by entry.ts after PI_PACKAGE_DIR is set.
 // All static imports here (extensions, pi-mono) are safe because the env is already configured.
 
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
@@ -119,30 +119,28 @@ try {
 	// prompt-enrichment reads this to build ModelRegistry with live model IDs.
 	setAvailableModelIds(modelsResult.models)
 
-	// Enable quiet startup to hide [Extensions] listing
+	// Write default settings on first run only — respect user's choices afterward
 	const settingsPath = resolve(agentDir, "settings.json")
 	try {
-		const settings = JSON.parse(readFileSync(settingsPath, "utf-8"))
-		if (!settings.quietStartup || settings.theme !== "kimchi") {
-			settings.quietStartup = true
-			settings.theme = "kimchi"
-			writeFileSync(settingsPath, `${JSON.stringify(settings, null, "  ")}\n`)
-		}
+		readFileSync(settingsPath, "utf-8")
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-			writeFileSync(settingsPath, `${JSON.stringify({ quietStartup: true, theme: "kimchi" }, null, "  ")}\n`)
+			writeFileSync(settingsPath, `${JSON.stringify({ quietStartup: true, theme: "kimchi" }, null, 2)}\n`)
 		} else {
-			console.error(`Warning: could not parse ${settingsPath}, leaving unchanged`)
+			console.error(`Warning: could not read ${settingsPath}: ${(err as Error).message}`)
 		}
 	}
 
 	// Copy kimchi theme into agent dir so initTheme can find it before extensions load
 	const themesDir = resolve(agentDir, "themes")
-	mkdirSync(themesDir, { recursive: true })
-	const kimchiThemeSrc = isBunBinary
-		? resolve(process.env.PI_PACKAGE_DIR ?? "", "theme", "kimchi.json")
-		: resolve(dirname(fileURLToPath(import.meta.url)), "../themes/kimchi.json")
-	copyFileSync(kimchiThemeSrc, resolve(themesDir, "kimchi.json"))
+	const kimchiThemeDest = resolve(themesDir, "kimchi.json")
+	if (!existsSync(kimchiThemeDest)) {
+		mkdirSync(themesDir, { recursive: true })
+		const kimchiThemeSrc = isBunBinary
+			? resolve(process.env.PI_PACKAGE_DIR ?? "", "theme", "kimchi.json")
+			: resolve(dirname(fileURLToPath(import.meta.url)), "../themes/kimchi.json")
+		copyFileSync(kimchiThemeSrc, kimchiThemeDest)
+	}
 
 	// Suppress Node.js warnings (same as pi-mono's own cli.js)
 	process.emitWarning = () => {}

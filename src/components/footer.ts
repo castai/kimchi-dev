@@ -1,28 +1,27 @@
 import type { ExtensionContext, ReadonlyFooterDataProvider, Theme } from "@mariozechner/pi-coding-agent"
 import type { Component } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
-import { TRUECOLOR } from "../ansi.js"
+import { RST_FG, TEAL_FG } from "../ansi.js"
 import { formatCount } from "../extensions/format.js"
+import { getActiveSubagentCount } from "../extensions/subagent.js"
 
 const BAR_WIDTH = 16
-const TEAL_FG = TRUECOLOR ? "\x1b[38;2;93;202;165m" : "\x1b[38;5;79m"
-const RST = "\x1b[39m"
 
 function teal(text: string): string {
-	return `${TEAL_FG}${text}${RST}`
+	return `${TEAL_FG}${text}${RST_FG}`
 }
 
 export class StatsFooter implements Component {
 	constructor(
 		private ctx: ExtensionContext,
 		private theme: Theme,
-		private footerData: ReadonlyFooterDataProvider,
+		private _footerData: ReadonlyFooterDataProvider,
 	) {}
 
 	invalidate(): void {}
 
 	render(width: number): string[] {
-		const { theme, ctx, footerData } = this
+		const { theme, ctx } = this
 		const dim = (s: string) => theme.fg("dim", s)
 
 		let totalInput = 0
@@ -41,21 +40,16 @@ export class StatsFooter implements Component {
 		const contextPercent = contextUsage?.percent ?? 0
 
 		const segments: string[] = []
-		const statuses = footerData.getExtensionStatuses()
-
-		const permissionsMode = footerData.getExtensionStatuses().get("permissions-mode")
-		if (permissionsMode) segments.push(permissionsMode)
 
 		const modelName = ctx.model?.id ?? "no-model"
 		segments.push(teal(modelName))
 
-		const subagentStatus = statuses.get("subagent-sessions")
-		if (subagentStatus) {
-			const match = subagentStatus.match(/\[(\d+)\]/)
-			if (match) segments.push(teal(`${match[1]} subagent${match[1] === "1" ? "" : "s"}`))
+		const subagentCount = getActiveSubagentCount()
+		if (subagentCount > 0) {
+			segments.push(teal(`${subagentCount} subagent${subagentCount === 1 ? "" : "s"}`))
 		}
 
-		const filled = Math.round((contextPercent / 100) * BAR_WIDTH)
+		const filled = Math.max(0, Math.min(BAR_WIDTH, Math.round((contextPercent / 100) * BAR_WIDTH)))
 		const bar = theme.fg("success", "█".repeat(filled)) + dim("░".repeat(BAR_WIDTH - filled))
 		const percentStr =
 			contextPercent > 90

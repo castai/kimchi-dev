@@ -2,9 +2,7 @@ import { CustomEditor, type Theme } from "@mariozechner/pi-coding-agent"
 import type { KeybindingsManager } from "@mariozechner/pi-coding-agent"
 import type { EditorTheme, TUI } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
-import { TRUECOLOR } from "../ansi.js"
-
-const RST = "\x1b[39m"
+import { RST_FG, TEAL_FG } from "../ansi.js"
 const CHEVRON_WIDTH = 2
 const PLACEHOLDER_TEXT = "ask anything or type / for commands"
 
@@ -35,7 +33,7 @@ export class PromptEditor extends CustomEditor {
 		const border = (s: string) => (this.borderColor ? this.borderColor(s) : s)
 		const chevronColor = this.appTheme.getFgAnsi("accent")
 		const textColor = this.appTheme.getFgAnsi("text")
-		const cursorColor = TRUECOLOR ? "\x1b[38;2;93;202;165m" : "\x1b[38;5;79m"
+		const cursorColor = TEAL_FG
 		const muted = this.appTheme.getFgAnsi("muted")
 
 		const inner = width - 2
@@ -59,16 +57,16 @@ export class PromptEditor extends CustomEditor {
 			const content = lines[i]
 			const truncated = truncateToWidth(content, editorWidth)
 			const contentWidth = visibleWidth(truncated)
-			const prefix = i === 1 ? `${chevronColor}❯${RST} ` : "  "
+			const prefix = i === 1 ? `${chevronColor}❯${RST_FG} ` : "  "
 			const withCursor = truncated.replaceAll("\x1b[7m", `${cursorColor}\x1b[7m`)
-			const coloredContent = `${textColor}${withCursor}${RST}`
+			const coloredContent = `${textColor}${withCursor}${RST_FG}`
 			result.push(borderedLine(prefix + coloredContent, contentWidth + CHEVRON_WIDTH))
 		}
 
 		if (this.getText().length === 0) {
 			const cursorMarker = "\x1b_pi:c\x07"
 			const cursor = `${cursorMarker}${cursorColor}\x1b[7m \x1b[0m`
-			const placeholder = `${chevronColor}❯${RST} ${cursor}${muted}${PLACEHOLDER_TEXT}${RST}`
+			const placeholder = `${chevronColor}❯${RST_FG} ${cursor}${muted}${PLACEHOLDER_TEXT}${RST_FG}`
 			const placeholderWidth = CHEVRON_WIDTH + 1 + visibleWidth(PLACEHOLDER_TEXT)
 			result[2] = borderedLine(placeholder, placeholderWidth)
 		}

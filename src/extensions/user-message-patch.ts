@@ -1,9 +1,9 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { UserMessageComponent } from "@mariozechner/pi-coding-agent"
-import { TRUECOLOR } from "../ansi.js"
+import { RST_FG, TEAL_DIM_FG } from "../ansi.js"
 
-const BORDER_FG = TRUECOLOR ? "\x1b[38;2;74;150;125m" : "\x1b[38;5;35m"
-const RESET_FG = "\x1b[39m"
+const BORDER_FG = TEAL_DIM_FG
+const RESET_FG = RST_FG
 const BORDER_CHAR = "▎"
 
 function findFirstVisibleIndex(line: string): number {
