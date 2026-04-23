@@ -211,6 +211,11 @@ export class KimchiAcpAgent implements Agent {
 		for (const entry of this.sessions.values()) {
 			if (entry.turn) this.failTurn(entry, new Error("acp agent shutting down"))
 			entry.unsubscribe()
+			// Emit session_shutdown to extensions and await all handlers before
+			// calling dispose(). dispose() is synchronous and returns void, so
+			// async extension handlers (e.g. telemetry drain, shutdown marker)
+			// would be fire-and-forgotten if we relied on dispose() alone.
+			await entry.session.extensionRunner?.emit({ type: "session_shutdown" })
 			entry.session.dispose()
 		}
 		this.sessions.clear()

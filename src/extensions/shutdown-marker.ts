@@ -16,18 +16,21 @@ type AppendFn = (type: string, data: unknown) => void
 
 export class ShutdownMarker {
 	private agentEndWritten = false
+	private shutdownWritten = false
 
 	onSessionStart(): void {
 		this.agentEndWritten = false
+		this.shutdownWritten = false
 	}
 
 	onAgentEnd(append: AppendFn): void {
-		this.agentEndWritten = true
 		append(AGENT_END_ENTRY_TYPE, { timestamp: Date.now() } satisfies AgentEndData)
+		this.agentEndWritten = true
 	}
 
 	onSessionShutdown(append: AppendFn): void {
-		if (this.agentEndWritten) return
+		if (this.agentEndWritten || this.shutdownWritten) return
+		this.shutdownWritten = true
 		append(AGENT_TERMINATED_ENTRY_TYPE, { reason: "signal", timestamp: Date.now() } satisfies AgentTerminatedData)
 	}
 }

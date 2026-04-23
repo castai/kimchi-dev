@@ -145,8 +145,10 @@ export default function telemetryExtension(config: TelemetryConfig) {
 		const sentMessages = new Set<string>()
 		const pendingArgs = new Map<string, { toolName: string; args: unknown }>()
 		const inFlight = new Set<Promise<void>>()
+		let shuttingDown = false
 
 		function track(p: Promise<void>): void {
+			if (shuttingDown) return
 			inFlight.add(p)
 			p.finally(() => inFlight.delete(p))
 		}
@@ -156,9 +158,11 @@ export default function telemetryExtension(config: TelemetryConfig) {
 			sessionStartMs = Date.now()
 			sentMessages.clear()
 			pendingArgs.clear()
+			shuttingDown = false
 		})
 
 		pi.on("session_shutdown", async () => {
+			shuttingDown = true
 			if (inFlight.size === 0) return
 			const drain = Promise.allSettled([...inFlight])
 			const timeout = new Promise<void>((resolve) => setTimeout(resolve, TELEMETRY_DRAIN_TIMEOUT_MS))

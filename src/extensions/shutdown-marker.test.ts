@@ -79,6 +79,16 @@ describe("ShutdownMarker", () => {
 					},
 				],
 			},
+			{
+				label: "skips second agent_terminated on duplicate session_shutdown call",
+				setup: (marker, append) => marker.onSessionShutdown(append),
+				expectedCalls: [
+					{
+						type: AGENT_TERMINATED_ENTRY_TYPE,
+						data: { reason: "signal", timestamp: FIXED_TIME } satisfies AgentTerminatedData,
+					},
+				],
+			},
 		]
 
 		for (const { label, setup, expectedCalls } of cases) {
@@ -109,6 +119,27 @@ describe("ShutdownMarker", () => {
 				{
 					type: AGENT_END_ENTRY_TYPE,
 					data: { timestamp: FIXED_TIME } satisfies AgentEndData,
+				},
+				{
+					type: AGENT_TERMINATED_ENTRY_TYPE,
+					data: { reason: "signal", timestamp: FIXED_TIME } satisfies AgentTerminatedData,
+				},
+			])
+		})
+
+		it("allows agent_terminated to be written again after session_start clears shutdown flag", () => {
+			const marker = new ShutdownMarker()
+			const calls: Array<{ type: string; data: unknown }> = []
+			const append = (type: string, data: unknown) => calls.push({ type, data })
+
+			marker.onSessionShutdown(append)
+			marker.onSessionStart()
+			marker.onSessionShutdown(append)
+
+			expect(calls).toEqual([
+				{
+					type: AGENT_TERMINATED_ENTRY_TYPE,
+					data: { reason: "signal", timestamp: FIXED_TIME } satisfies AgentTerminatedData,
 				},
 				{
 					type: AGENT_TERMINATED_ENTRY_TYPE,
