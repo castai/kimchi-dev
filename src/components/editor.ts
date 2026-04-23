@@ -1,7 +1,7 @@
 import { CustomEditor, type Theme } from "@mariozechner/pi-coding-agent"
+import type { KeybindingsManager } from "@mariozechner/pi-coding-agent"
 import type { EditorTheme, TUI } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
-import type { KeybindingsManager } from "@mariozechner/pi-coding-agent"
 import { TRUECOLOR } from "../ansi.js"
 
 const RST = "\x1b[39m"
@@ -10,19 +10,21 @@ const PLACEHOLDER_TEXT = "ask anything or type / for commands"
 
 export class PromptEditor extends CustomEditor {
 	private readonly appTheme: Theme
+	private readonly kb: KeybindingsManager
 	private expandHandler?: () => void
 
 	constructor(tui: TUI, editorTheme: EditorTheme, keybindings: KeybindingsManager, appTheme: Theme) {
 		super(tui, editorTheme, keybindings)
 		this.appTheme = appTheme
+		this.kb = keybindings
 	}
 
 	setExpandHandler(handler: () => void) {
 		this.expandHandler = handler
 	}
 
-	handleInput(data: string) {
-		if (this.expandHandler && (this as any).keybindings.matches(data, "app.tools.expand")) {
+	override handleInput(data: string) {
+		if (this.expandHandler && this.kb.matches(data, "app.tools.expand")) {
 			this.expandHandler()
 			return
 		}
@@ -30,7 +32,7 @@ export class PromptEditor extends CustomEditor {
 	}
 
 	render(width: number): string[] {
-		const border = (s: string) => this.borderColor ? this.borderColor(s) : s
+		const border = (s: string) => (this.borderColor ? this.borderColor(s) : s)
 		const chevronColor = this.appTheme.getFgAnsi("accent")
 		const textColor = this.appTheme.getFgAnsi("text")
 		const cursorColor = TRUECOLOR ? "\x1b[38;2;93;202;165m" : "\x1b[38;5;79m"

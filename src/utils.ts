@@ -8,7 +8,10 @@ let cachedBranch: string | undefined
 export function getGitBranch(): string {
 	if (cachedBranch !== undefined) return cachedBranch
 	try {
-		cachedBranch = execSync("git rev-parse --abbrev-ref HEAD", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim()
+		cachedBranch = execSync("git rev-parse --abbrev-ref HEAD", {
+			encoding: "utf-8",
+			stdio: ["pipe", "pipe", "pipe"],
+		}).trim()
 	} catch {
 		cachedBranch = ""
 	}
@@ -31,5 +34,5 @@ export function getVersion(): string {
 	} catch {
 		cachedVersion = "unknown"
 	}
-	return cachedVersion!
+	return cachedVersion ?? "unknown"
 }

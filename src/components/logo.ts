@@ -49,7 +49,7 @@ export class LogoHeader implements Component {
 				if (gap <= 0) {
 					const available = width - logoWidth - 2
 					const truncatedInfo = available > 0 ? truncateToWidth(info, available) : ""
-					result.push(truncatedInfo ? logo + "  " + truncatedInfo : logo)
+					result.push(truncatedInfo ? `${logo}  ${truncatedInfo}` : logo)
 				} else {
 					result.push(logo + " ".repeat(gap) + info)
 				}

@@ -1,13 +1,12 @@
 // CLI logic — imported dynamically by entry.ts after PI_PACKAGE_DIR is set.
 // All static imports here (extensions, pi-mono) are safe because the env is already configured.
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
-import { DEFAULT_SKILL_PATHS, loadConfig, readTelemetryConfig, writeMigrationState, writeSkillPaths } from "./config.js"
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
+import { DEFAULT_SKILL_PATHS, loadConfig, readTelemetryConfig, writeMigrationState, writeSkillPaths } from "./config.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
-import uiExtension from "./extensions/ui.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
@@ -17,6 +16,7 @@ import tagsExtension from "./extensions/tags.js"
 import telemetryExtension from "./extensions/telemetry.js"
 import terminalColorsExtension from "./extensions/terminal-colors.js"
 import toolRendererExtension from "./extensions/tool-renderer.js"
+import uiExtension from "./extensions/ui.js"
 import userMessagePatchExtension from "./extensions/user-message-patch.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import webSearchExtension from "./extensions/web-search/index.js"
@@ -117,10 +117,10 @@ try {
 		if (!settings.quietStartup || settings.theme !== "kimchi") {
 			settings.quietStartup = true
 			settings.theme = "kimchi"
-			writeFileSync(settingsPath, JSON.stringify(settings, null, "  ") + "\n")
+			writeFileSync(settingsPath, `${JSON.stringify(settings, null, "  ")}\n`)
 		}
 	} catch {
-		writeFileSync(settingsPath, JSON.stringify({ quietStartup: true, theme: "kimchi" }, null, "  ") + "\n")
+		writeFileSync(settingsPath, `${JSON.stringify({ quietStartup: true, theme: "kimchi" }, null, "  ")}\n`)
 	}
 
 	// Copy kimchi theme into agent dir so initTheme can find it before extensions load

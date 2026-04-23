@@ -2,7 +2,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { PromptEditor } from "../components/editor.js"
 import { StatsFooter } from "../components/footer.js"
 import { LogoHeader } from "../components/logo.js"
-import { resetState, expandNext, collapseAll } from "../expand-state.js"
+import { collapseAll, expandNext, resetState } from "../expand-state.js"
 
 export default function uiExtension(pi: ExtensionAPI) {
 	pi.on("session_start", (_, ctx) => {

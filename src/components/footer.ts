@@ -1,4 +1,9 @@
-import type { ExtensionContext, ReadonlyFooterDataProvider, Theme } from "@mariozechner/pi-coding-agent"
+import type {
+	ExtensionContext,
+	ReadonlyFooterDataProvider,
+	SessionMessageEntry,
+	Theme,
+} from "@mariozechner/pi-coding-agent"
 import type { Component } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
 import { TRUECOLOR } from "../ansi.js"
@@ -29,7 +34,7 @@ export class StatsFooter implements Component {
 		let totalOutput = 0
 		for (const entry of ctx.sessionManager.getEntries()) {
 			if (entry.type === "message") {
-				const msg = (entry as any).message
+				const msg = (entry as SessionMessageEntry).message
 				if (msg?.role === "assistant" && msg.usage) {
 					totalInput += msg.usage.input ?? 0
 					totalOutput += msg.usage.output ?? 0
@@ -54,18 +59,21 @@ export class StatsFooter implements Component {
 
 		const filled = Math.round((contextPercent / 100) * BAR_WIDTH)
 		const bar = theme.fg("success", "█".repeat(filled)) + dim("░".repeat(BAR_WIDTH - filled))
-		const percentStr = contextPercent > 90
-			? theme.fg("error", `${Math.round(contextPercent)}%`)
-			: contextPercent > 70
-				? theme.fg("warning", `${Math.round(contextPercent)}%`)
-				: teal(`${Math.round(contextPercent)}%`)
+		const percentStr =
+			contextPercent > 90
+				? theme.fg("error", `${Math.round(contextPercent)}%`)
+				: contextPercent > 70
+					? theme.fg("warning", `${Math.round(contextPercent)}%`)
+					: teal(`${Math.round(contextPercent)}%`)
 		segments.push(`${bar} ${percentStr} ${dim("ctx")}`)
 
 		if (totalInput || totalOutput) {
 			const tokens = [
 				totalInput ? `↑${formatCount(totalInput)}` : "",
 				totalOutput ? `↓${formatCount(totalOutput)}` : "",
-			].filter(Boolean).join(" ")
+			]
+				.filter(Boolean)
+				.join(" ")
 			segments.push(dim(tokens))
 		}
 

@@ -1,8 +1,8 @@
-import type { AgentToolResult, BashToolDetails, ExtensionAPI, Theme, ToolDefinition, ToolRenderResultOptions } from "@mariozechner/pi-coding-agent"
+import type { BashToolDetails, ExtensionAPI, ToolDefinition } from "@mariozechner/pi-coding-agent"
 import { createBashToolDefinition } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text } from "@mariozechner/pi-tui"
 import { ToolBlockView, buildToolCallHeader, getTextContent } from "../components/tool-block.js"
-import { registerToolCall, isToolExpanded } from "../expand-state.js"
+import { isToolExpanded, registerToolCall } from "../expand-state.js"
 
 export default function (pi: ExtensionAPI) {
 	const baseDef = createBashToolDefinition(process.cwd())
@@ -14,13 +14,13 @@ export default function (pi: ExtensionAPI) {
 			return createBashToolDefinition(ctx.cwd).execute(toolCallId, params, signal, onUpdate, ctx)
 		},
 
-		renderCall(args: any, theme: Theme, ctx: any) {
+		renderCall(args, theme, ctx) {
 			const view = ctx.lastComponent instanceof ToolBlockView ? ctx.lastComponent : new ToolBlockView()
 			buildToolCallHeader(view, "bash", args.command ?? "", theme, ctx)
 			return view
 		},
 
-		renderResult(result: AgentToolResult<BashToolDetails | undefined>, options: ToolRenderResultOptions, theme: Theme, context: any) {
+		renderResult(result, options, theme, context) {
 			if (options.isPartial) {
 				const displayText = getTextContent(result).split("\n").slice(-5).join("\n")
 

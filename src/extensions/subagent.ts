@@ -4,10 +4,10 @@ import { dirname, isAbsolute, resolve } from "node:path"
 import type { AssistantMessage, ToolCall } from "@mariozechner/pi-ai"
 import type { ExtensionAPI, SessionEntry, Theme } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
-import { ToolBlockView, getTextContent } from "../components/tool-block.js"
-import { registerToolCall, isToolExpanded } from "../expand-state.js"
 import { Type } from "@sinclair/typebox"
+import { ToolBlockView, getTextContent } from "../components/tool-block.js"
 import { isBunBinary, isRunningUnderBun } from "../env.js"
+import { isToolExpanded, registerToolCall } from "../expand-state.js"
 import { findExistingFile, resolveUserPath, stripAtPrefix } from "../fs-paths.js"
 import { formatCount, formatDuration } from "./format.js"
 import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./spinner.js"
@@ -620,9 +620,7 @@ export default function (pi: ExtensionAPI) {
 			view.setHeader(left, right)
 			view.hideDivider()
 			view.setFooter("", "")
-			view.setExtra([
-				`  ${theme.fg("muted", "task:")} ${theme.fg("dim", truncatePrompt(args.prompt ?? ""))}`,
-			])
+			view.setExtra([`  ${theme.fg("muted", "task:")} ${theme.fg("dim", truncatePrompt(args.prompt ?? ""))}`])
 			return view
 		},
 
@@ -685,10 +683,7 @@ export default function (pi: ExtensionAPI) {
 			} else {
 				const outputSummary = theme.fg("dim", `${lineCount} line${lineCount === 1 ? "" : "s"} written`)
 				const statsStr = stats !== undefined ? `  ${formatStats(stats, theme)}` : ""
-				view.setFooter(
-					`${outputSummary}${statsStr}`,
-					theme.fg("dim", "ctrl+o to expand"),
-				)
+				view.setFooter(`${outputSummary}${statsStr}`, theme.fg("dim", "ctrl+o to expand"))
 				view.setExtra([])
 			}
 

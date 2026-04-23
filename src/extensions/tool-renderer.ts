@@ -1,4 +1,4 @@
-import type { AgentToolResult, ExtensionAPI, Theme, ToolRenderResultOptions } from "@mariozechner/pi-coding-agent"
+import type { ExtensionAPI, ToolDefinition } from "@mariozechner/pi-coding-agent"
 import {
 	editToolDefinition,
 	findToolDefinition,
@@ -8,22 +8,19 @@ import {
 	writeToolDefinition,
 } from "@mariozechner/pi-coding-agent"
 import { ToolBlockView, buildToolCallHeader, getTextContent } from "../components/tool-block.js"
-import { registerToolCall, isToolExpanded } from "../expand-state.js"
+import { isToolExpanded, registerToolCall } from "../expand-state.js"
 
-function formatArgs(toolName: string, args: Record<string, any>): string {
+function formatArgs(toolName: string, args: Record<string, unknown>): string {
 	switch (toolName) {
 		case "read":
-			return args.path ?? ""
 		case "edit":
-			return args.path ?? ""
 		case "write":
-			return args.path ?? ""
+			return String(args.path ?? "")
 		case "grep":
-			return `${args.pattern ?? ""} ${args.path ?? ""}`.trim()
 		case "find":
-			return `${args.pattern ?? ""} ${args.path ?? ""}`.trim()
+			return `${String(args.pattern ?? "")} ${String(args.path ?? "")}`.trim()
 		case "ls":
-			return args.path ?? "."
+			return String(args.path ?? ".")
 		default:
 			return JSON.stringify(args)
 	}
@@ -62,15 +59,15 @@ const builtins = [
 export default function toolRendererExtension(pi: ExtensionAPI) {
 	for (const builtin of builtins) {
 		pi.registerTool({
-			...(builtin as any),
+			...(builtin as unknown as ToolDefinition),
 
-			renderCall(args: any, theme: Theme, ctx: any) {
+			renderCall(args, theme, ctx) {
 				const view = ctx.lastComponent instanceof ToolBlockView ? ctx.lastComponent : new ToolBlockView()
-				buildToolCallHeader(view, builtin.name, formatArgs(builtin.name, args), theme, ctx)
+				buildToolCallHeader(view, builtin.name, formatArgs(builtin.name, args as Record<string, unknown>), theme, ctx)
 				return view
 			},
 
-			renderResult(result: AgentToolResult<any>, options: ToolRenderResultOptions, theme: Theme, ctx: any) {
+			renderResult(result, options, theme, ctx) {
 				const view = ctx.lastComponent instanceof ToolBlockView ? ctx.lastComponent : new ToolBlockView()
 				const content = getTextContent(result)
 
@@ -82,10 +79,7 @@ export default function toolRendererExtension(pi: ExtensionAPI) {
 					view.setExtra([])
 				} else {
 					const summary = formatSummary(builtin.name, content, ctx.isError)
-					view.setFooter(
-						theme.fg("dim", summary),
-						theme.fg("dim", "ctrl+o to expand"),
-					)
+					view.setFooter(theme.fg("dim", summary), theme.fg("dim", "ctrl+o to expand"))
 					view.setExtra([])
 				}
 

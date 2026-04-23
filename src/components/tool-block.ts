@@ -12,7 +12,7 @@ function buildAlignedLine(left: string, right: string, width: number): string {
 	const available = width - rightW - 2
 	if (leftW > available) {
 		const truncLeft = truncateToWidth(left, Math.max(1, available))
-		return truncLeft + "  " + right
+		return `${truncLeft}  ${right}`
 	}
 	const gap = Math.max(2, width - leftW - rightW)
 	return left + " ".repeat(gap) + right
@@ -121,6 +121,8 @@ export function buildToolCallHeader(
 }
 
 export function getTextContent(result: { content: Array<{ type: string; text?: string }> }): string {
-	const block = result.content.find((c): c is { type: "text"; text: string } => c.type === "text" && typeof c.text === "string")
+	const block = result.content.find(
+		(c): c is { type: "text"; text: string } => c.type === "text" && typeof c.text === "string",
+	)
 	return block?.text ?? ""
 }

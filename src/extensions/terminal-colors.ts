@@ -4,8 +4,8 @@ const FG_COLOR = "rgb:A1/A1/A1"
 const BG_COLOR = "rgb:1A/18/18"
 const SET_FG = `\x1b]10;${FG_COLOR}\x07`
 const SET_BG = `\x1b]11;${BG_COLOR}\x07`
-const QUERY_FG = `\x1b]10;?\x07`
-const QUERY_BG = `\x1b]11;?\x07`
+const QUERY_FG = "\x1b]10;?\x07"
+const QUERY_BG = "\x1b]11;?\x07"
 const QUERY_TIMEOUT_MS = 200
 
 export default function terminalColorsExtension(pi: ExtensionAPI) {
@@ -22,6 +22,7 @@ export default function terminalColorsExtension(pi: ExtensionAPI) {
 			buffer += data.toString()
 
 			if (!gotFg) {
+				// biome-ignore lint/suspicious/noControlCharactersInRegex: OSC terminal escape sequence
 				const fgMatch = buffer.match(/\x1b\]10;(.+?)(?:\x07|\x1b\\)/)
 				if (fgMatch) {
 					savedFg = fgMatch[1]
@@ -29,6 +30,7 @@ export default function terminalColorsExtension(pi: ExtensionAPI) {
 				}
 			}
 			if (!gotBg) {
+				// biome-ignore lint/suspicious/noControlCharactersInRegex: OSC terminal escape sequence
 				const bgMatch = buffer.match(/\x1b\]11;(.+?)(?:\x07|\x1b\\)/)
 				if (bgMatch) {
 					savedBg = bgMatch[1]
@@ -58,13 +60,13 @@ export default function terminalColorsExtension(pi: ExtensionAPI) {
 		if (savedFg) {
 			process.stdout.write(`\x1b]10;${savedFg}\x07`)
 		} else {
-			process.stdout.write(`\x1b]110\x07`)
+			process.stdout.write("\x1b]110\x07")
 		}
 
 		if (savedBg) {
 			process.stdout.write(`\x1b]11;${savedBg}\x07`)
 		} else {
-			process.stdout.write(`\x1b]111\x07`)
+			process.stdout.write("\x1b]111\x07")
 		}
 	})
 }
