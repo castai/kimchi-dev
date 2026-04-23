@@ -28,8 +28,11 @@ let cachedVersion: string | undefined
 export function getVersion(): string {
 	if (cachedVersion !== undefined) return cachedVersion
 	try {
-		const dir = dirname(fileURLToPath(import.meta.url))
-		const pkg = JSON.parse(readFileSync(resolve(dir, "../package.json"), "utf-8"))
+		const pkgDir = process.env.PI_PACKAGE_DIR
+		const pkgPath = pkgDir
+			? resolve(pkgDir, "package.json")
+			: resolve(dirname(fileURLToPath(import.meta.url)), "../package.json")
+		const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"))
 		cachedVersion = pkg.version ?? "unknown"
 	} catch {
 		cachedVersion = "unknown"
