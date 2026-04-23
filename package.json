@@ -36,6 +36,7 @@
 		"@modelcontextprotocol/sdk": "^1.25.1",
 		"micromatch": "^4.0.8",
 		"open": "^10.2.0",
+		"shell-quote": "^1.8.3",
 		"undici": "^8.0.2",
 		"zod": "^4.0.0"
 	},
@@ -48,6 +49,7 @@
 		"@mixmark-io/domino": "^2.2.0",
 		"@types/micromatch": "^4.0.10",
 		"@types/node": "^22.15.2",
+		"@types/shell-quote": "^1.7.5",
 		"@types/turndown": "^5.0.5",
 		"node-pty": "^1.1.0",
 		"playwright": "^1.52.0",
@@ -65,7 +67,8 @@
 			"@biomejs/biome",
 			"esbuild",
 			"koffi",
-			"node-pty","protobufjs"
+			"node-pty",
+			"protobufjs"
 		]
 	}
 }

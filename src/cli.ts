@@ -26,7 +26,6 @@ import webSearchExtension from "./extensions/web-search/index.js"
 import { updateModelsConfig } from "./models.js"
 import { runSetupWizard } from "./setup-wizard.js"
 import { setAvailableModelIds } from "./startup-context.js"
-import { seedDefaultSettings } from "./startup-settings.js"
 
 const telemetryConfig = readTelemetryConfig()
 
@@ -114,10 +113,6 @@ try {
 	// override in place.
 	reserveShiftTabForPermissions(agentDir)
 
-	// Default quietStartup=true so the built-in extension/skill banners don't
-	// clutter the TUI on first run. Users can flip this back in /settings.
-	seedDefaultSettings(agentDir)
-
 	// Share the discovered model IDs with extensions before main() runs.
 	// prompt-enrichment reads this to build ModelRegistry with live model IDs.
 	setAvailableModelIds(modelsResult.models)
@@ -161,7 +156,7 @@ try {
 		bashCollapseExtension,
 		loopGuardExtension,
 		mcpAdapterExtension,
-        permissionsExtension,
+		permissionsExtension,
 		promptEnrichmentExtension(skillPaths),
 		promptSummaryExtension,
 		uiExtension,

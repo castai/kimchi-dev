@@ -146,7 +146,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		updateStatus(ctx)
 	}
 
-	pi.on("session_start", async (_event, ctx) => {
+	function doLoadConfig(ctx: ExtensionContext): { errors: string[] } {
 		const { loaded: lc, errors } = loadConfig({
 			cwd: ctx.cwd,
 			cliConfigPath: pi.getFlag("permissions-config") as string | undefined,
@@ -155,6 +155,11 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		})
 		loaded = lc
 		rebuildConfigRules()
+		return { errors }
+	}
+
+	pi.on("session_start", async (_event, ctx) => {
+		const { errors } = doLoadConfig(ctx)
 
 		for (const err of errors) {
 			if (ctx.hasUI) ctx.ui.notify(`permissions: ${err}`, "warning")
@@ -251,14 +256,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		restorePlanMode: () => restoreToolsFromPlanMode(),
 		rebuildConfigRules,
 		reloadConfig: (ctx) => {
-			const { loaded: lc, errors } = loadConfig({
-				cwd: ctx.cwd,
-				cliConfigPath: pi.getFlag("permissions-config") as string | undefined,
-				cliAllow: splitFlag(pi.getFlag("allow-tool")),
-				cliDeny: splitFlag(pi.getFlag("deny-tool")),
-			})
-			loaded = lc
-			rebuildConfigRules()
+			const { errors } = doLoadConfig(ctx)
 			if (errors.length && ctx.hasUI) {
 				for (const err of errors) ctx.ui.notify(`permissions: ${err}`, "warning")
 			}
