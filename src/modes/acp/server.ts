@@ -478,12 +478,12 @@ export async function runAcpMode(options: RunAcpOptions): Promise<void> {
 		return agentInstance
 	}, stream)
 
-	const signals: NodeJS.Signals[] = process.platform === "win32" ? ["SIGTERM"] : ["SIGTERM", "SIGHUP"]
+	const signals: NodeJS.Signals[] = process.platform === "win32" ? ["SIGTERM"] : ["SIGTERM", "SIGHUP", "SIGINT"]
 	let shuttingDown = false
 	const onSignal = (sig: NodeJS.Signals) => {
 		if (shuttingDown) return
 		shuttingDown = true
-		const code = sig === "SIGHUP" ? 129 : 143
+		const code = sig === "SIGHUP" ? 129 : sig === "SIGINT" ? 130 : 143
 		agentInstance
 			?.shutdown()
 			.catch(() => {})

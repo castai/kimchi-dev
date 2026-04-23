@@ -9,6 +9,7 @@ import { DEFAULT_SKILL_PATHS, loadConfig, readTelemetryConfig, writeMigrationSta
 import { isBunBinary } from "./env.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
+import shutdownMarkerExtension from "./extensions/shutdown-marker.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
 import permissionsExtension from "./extensions/permissions/index.js"
@@ -151,6 +152,7 @@ try {
 
 	const extensionFactories = [
 		sessionIdCaptureExtension,
+		shutdownMarkerExtension,
 		userMessagePatchExtension,
 		terminalColorsExtension,
 		bashCollapseExtension,
