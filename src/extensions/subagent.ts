@@ -445,10 +445,12 @@ const SubagentParams = Type.Object({
 		}),
 	),
 	tokenBudget: Type.Optional(
-		Type.Integer({
+		Type.Union([
+			Type.Integer({ minimum: 1 }),
+			Type.String({ pattern: "^[1-9][0-9]*$" }),
+		], {
 			description:
 				"Maximum total tokens (input + output) the subagent may consume. Subagent is killed when exceeded. Omit unless you have an explicit reason to cap token usage — do not set this speculatively.",
-			minimum: 1,
 		}),
 	),
 })
@@ -541,11 +543,13 @@ export default function (pi: ExtensionAPI) {
 			const invocation = getSubagentInvocation(args)
 
 			let lastToolCall: string | undefined
+			const tokenBudget =
+				params.tokenBudget !== undefined ? Number(params.tokenBudget) : undefined
 			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(
 				invocation,
 				ctx.cwd,
 				signal,
-				params.tokenBudget,
+				tokenBudget,
 				(text) => {
 					lastToolCall = undefined
 					onUpdate?.({ content: [{ type: "text", text }], details: undefined })
