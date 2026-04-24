@@ -26,6 +26,7 @@ import webSearchExtension from "./extensions/web-search/index.js"
 import { updateModelsConfig } from "./models.js"
 import { runSetupWizard } from "./setup-wizard.js"
 import { setAvailableModelIds } from "./startup-context.js"
+import { getVersion } from "./utils.js"
 
 const telemetryConfig = readTelemetryConfig()
 
@@ -145,9 +146,17 @@ try {
 	// Suppress Node.js warnings (same as pi-mono's own cli.js)
 	process.emitWarning = () => {}
 
-	// Set up HTTP proxy support
+	// Set up HTTP proxy support with User-Agent injection
 	const { EnvHttpProxyAgent, setGlobalDispatcher } = await import("undici")
-	setGlobalDispatcher(new EnvHttpProxyAgent())
+	const userAgent = `kimchi/${getVersion()}`
+	const agent = new EnvHttpProxyAgent()
+	setGlobalDispatcher(
+		agent.compose((dispatch) => (opts, handler) => {
+			const headers = new Headers((opts.headers ?? undefined) as HeadersInit)
+			headers.set("user-agent", userAgent)
+			return dispatch({ ...opts, headers: Object.fromEntries(headers) }, handler)
+		}),
+	)
 
 	const extensionFactories = [
 		sessionIdCaptureExtension,
