@@ -67,8 +67,11 @@ function safeUsername(): string {
 function readGitBranch(cwd: string): string | undefined {
 	try {
 		return (
-			execSync("git symbolic-ref --short HEAD", { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() ||
-			undefined
+			execSync("git symbolic-ref --short HEAD", {
+				cwd,
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			}).trim() || undefined
 		)
 	} catch {
 		return undefined
@@ -211,7 +214,7 @@ export default function (skillPaths: string[]) {
 				localDate: now.toLocaleDateString("en-CA"),
 				isGitRepo,
 				gitBranch: isGitRepo ? readGitBranch(ctx.cwd) : undefined,
-				gitRemote: isGitRepo ? cachedGitRemote ?? undefined : undefined,
+				gitRemote: isGitRepo ? (cachedGitRemote ?? undefined) : undefined,
 			}
 
 			if (subagentMode) {
