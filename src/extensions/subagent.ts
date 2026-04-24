@@ -1,10 +1,17 @@
 import { spawn } from "node:child_process"
-import { existsSync } from "node:fs"
-import { dirname, isAbsolute, resolve } from "node:path"
+import { existsSync, writeFileSync } from "node:fs"
+import { dirname, isAbsolute, join, resolve } from "node:path"
 import type { AssistantMessage, ToolCall } from "@mariozechner/pi-ai"
-import type { ExtensionAPI, SessionEntry, Theme } from "@mariozechner/pi-coding-agent"
+import {
+	CURRENT_SESSION_VERSION,
+	type ExtensionAPI,
+	type SessionEntry,
+	type SessionHeader,
+	type Theme,
+} from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
+import { v7 as uuidv7 } from "uuid"
 import { ToolBlockView, getTextContent } from "../components/tool-block.js"
 import { isBunBinary, isRunningUnderBun } from "../env.js"
 import { isToolExpanded, registerToolCall } from "../expand-state.js"
@@ -175,12 +182,14 @@ export function buildSubagentArgs(
 	params: { provider: string; model: string; prompt: string },
 	resolvedAttachments: string[],
 	extensionArgs: string[],
+	childSessionFile?: string,
 ): string[] {
+	const sessionArgs = childSessionFile !== undefined ? ["--session", childSessionFile] : ["--no-session"]
 	return [
 		"--mode",
 		"json",
 		"-p",
-		"--no-session",
+		...sessionArgs,
 		"--provider",
 		params.provider,
 		"--model",
@@ -419,6 +428,8 @@ function formatFooterStatus(counts: Map<string, number>, theme: Theme): string {
 interface SubagentStats {
 	durationMs: number
 	tokenUsage: SubagentTokenUsage
+	sessionId?: string
+	sessionFile?: string
 }
 
 function formatStats(stats: SubagentStats, theme: Theme): string {
@@ -534,7 +545,22 @@ export default function (pi: ExtensionAPI) {
 					isError: true,
 				}
 			}
-			const args = buildSubagentArgs(params, validated.resolved, collectExtensionArgs())
+			const parentSessionDir = ctx.sessionManager.getSessionDir()
+			const parentSessionFile = ctx.sessionManager.getSessionFile()
+			const sessionId = uuidv7()
+			const timestamp = new Date().toISOString()
+			const childSessionFile = join(parentSessionDir, `${timestamp.replace(/[:.]/g, "-")}_${sessionId}.jsonl`)
+			const header: SessionHeader = {
+				type: "session",
+				version: CURRENT_SESSION_VERSION,
+				id: sessionId,
+				timestamp,
+				cwd: ctx.cwd,
+				parentSession: parentSessionFile,
+			}
+			writeFileSync(childSessionFile, `${JSON.stringify(header)}\n`)
+
+			const args = buildSubagentArgs(params, validated.resolved, collectExtensionArgs(), childSessionFile)
 			const invocation = getSubagentInvocation(args)
 
 			let lastToolCall: string | undefined
@@ -569,7 +595,7 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.setStatus(FOOTER_STATUS_KEY, formatFooterStatus(sessionCounts, ctx.ui.theme))
 			}
 
-			const stats: SubagentStats = { durationMs, tokenUsage }
+			const stats: SubagentStats = { durationMs, tokenUsage, sessionId, sessionFile: childSessionFile }
 
 			if (failureReason !== undefined || exitCode !== 0) {
 				const error: SubagentError = {
