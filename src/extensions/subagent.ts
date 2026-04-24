@@ -1,10 +1,17 @@
 import { spawn } from "node:child_process"
-import { existsSync } from "node:fs"
-import { dirname, isAbsolute, resolve } from "node:path"
+import { existsSync, writeFileSync } from "node:fs"
+import { dirname, isAbsolute, join, resolve } from "node:path"
 import type { AssistantMessage, ToolCall } from "@mariozechner/pi-ai"
-import type { ExtensionAPI, SessionEntry, Theme } from "@mariozechner/pi-coding-agent"
+import {
+	CURRENT_SESSION_VERSION,
+	type ExtensionAPI,
+	type SessionEntry,
+	type SessionHeader,
+	type Theme,
+} from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
 import { Type } from "@sinclair/typebox"
+import { v7 as uuidv7 } from "uuid"
 import { ToolBlockView, getTextContent } from "../components/tool-block.js"
 import { isBunBinary, isRunningUnderBun } from "../env.js"
 import { isToolExpanded, registerToolCall } from "../expand-state.js"
@@ -175,12 +182,14 @@ export function buildSubagentArgs(
 	params: { provider: string; model: string; prompt: string },
 	resolvedAttachments: string[],
 	extensionArgs: string[],
+	childSessionFile?: string,
 ): string[] {
+	const sessionArgs = childSessionFile !== undefined ? ["--session", childSessionFile] : ["--no-session"]
 	return [
 		"--mode",
 		"json",
 		"-p",
-		"--no-session",
+		...sessionArgs,
 		"--provider",
 		params.provider,
 		"--model",
@@ -189,6 +198,36 @@ export function buildSubagentArgs(
 		...resolvedAttachments.map((p) => `@${p}`),
 		params.prompt,
 	]
+}
+
+export interface ChildSessionHandle {
+	sessionId: string
+	sessionFile: string
+}
+
+/** Pre-writes a header-only .jsonl session file for a subagent child so pi-mono's `--session <path>` opens it and preserves the back-reference to the parent. Returns undefined when the parent has no persistent session to link to (in-memory / --no-session parent, or empty session dir). Throws on I/O errors so callers can surface them as subagent failures. Exposed for testing. */
+export function prepareChildSessionFile(
+	parentSessionDir: string,
+	parentSessionFile: string | undefined,
+	cwd: string,
+	generateId: () => string = uuidv7,
+	now: () => Date = () => new Date(),
+): ChildSessionHandle | undefined {
+	// Parent is in-memory (--no-session) or has no resolvable session dir: there's nothing to back-reference, so skip the pre-write and let the child run with --no-session too. No broken links, no orphan files.
+	if (parentSessionFile === undefined || parentSessionDir.length === 0) return undefined
+	const sessionId = generateId()
+	const timestamp = now().toISOString()
+	const sessionFile = join(parentSessionDir, `${timestamp.replace(/[:.]/g, "-")}_${sessionId}.jsonl`)
+	const header: SessionHeader = {
+		type: "session",
+		version: CURRENT_SESSION_VERSION,
+		id: sessionId,
+		timestamp,
+		cwd,
+		parentSession: parentSessionFile,
+	}
+	writeFileSync(sessionFile, `${JSON.stringify(header)}\n`, { mode: 0o600 })
+	return { sessionId, sessionFile }
 }
 
 function getSubagentInvocation(args: string[]): { command: string; args: string[] } {
@@ -419,6 +458,8 @@ function formatFooterStatus(counts: Map<string, number>, theme: Theme): string {
 interface SubagentStats {
 	durationMs: number
 	tokenUsage: SubagentTokenUsage
+	sessionId?: string
+	sessionFile?: string
 }
 
 function formatStats(stats: SubagentStats, theme: Theme): string {
@@ -534,7 +575,34 @@ export default function (pi: ExtensionAPI) {
 					isError: true,
 				}
 			}
-			const args = buildSubagentArgs(params, validated.resolved, collectExtensionArgs())
+			const parentSessionDir = ctx.sessionManager.getSessionDir()
+			const parentSessionFile = ctx.sessionManager.getSessionFile()
+			let sessionId: string | undefined
+			let childSessionFile: string | undefined
+			try {
+				const prepared = prepareChildSessionFile(parentSessionDir, parentSessionFile, ctx.cwd)
+				if (prepared) {
+					sessionId = prepared.sessionId
+					childSessionFile = prepared.sessionFile
+				}
+			} catch (err) {
+				const detail = err instanceof Error ? err.message : String(err)
+				const zeroUsage: SubagentTokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+				const error: SubagentError = {
+					reason: "exit_error",
+					model: params.model,
+					tokenUsage: zeroUsage,
+					durationMs: 0,
+					detail: `Failed to pre-write subagent session file under ${parentSessionDir}: ${detail}`,
+				}
+				return {
+					content: [{ type: "text", text: JSON.stringify(error) }],
+					details: { durationMs: 0, tokenUsage: zeroUsage },
+					isError: true,
+				}
+			}
+
+			const args = buildSubagentArgs(params, validated.resolved, collectExtensionArgs(), childSessionFile)
 			const invocation = getSubagentInvocation(args)
 
 			let lastToolCall: string | undefined
@@ -569,7 +637,7 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.setStatus(FOOTER_STATUS_KEY, formatFooterStatus(sessionCounts, ctx.ui.theme))
 			}
 
-			const stats: SubagentStats = { durationMs, tokenUsage }
+			const stats: SubagentStats = { durationMs, tokenUsage, sessionId, sessionFile: childSessionFile }
 
 			if (failureReason !== undefined || exitCode !== 0) {
 				const error: SubagentError = {

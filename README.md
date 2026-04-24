@@ -46,6 +46,12 @@ A default `models.json` is created automatically on first run at `~/.config/kimc
 
 kimchi-code respects `HTTP_PROXY` / `HTTPS_PROXY` environment variables for network requests.
 
+### Subagent sessions
+
+Every `subagent` invocation writes its own persistent session file alongside the parent's, in the same session directory. The child's session header back-references its parent, and the parent's tool-result records the child's session id and file path. Nested subagents (sub-subagents) follow the same rule at any depth — all descendants land next to the original top-level parent.
+
+This means subagent runs are fully recoverable from disk: open the parent's `.jsonl`, follow the `sessionFile` on any `subagent` tool-result to the child, and replay it like any other session. In pi's session-selector, children render under their parent as a tree. Deleting the parent's session directory removes its children automatically.
+
 ## Tags
 
 kimchi-code supports tagging LLM requests for usage tracking and cost attribution. Tags are automatically included with every LLM request and displayed in the footer of the interactive UI.
