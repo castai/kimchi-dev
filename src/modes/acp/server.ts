@@ -8,6 +8,7 @@ import {
 	type AuthenticateRequest,
 	type AuthenticateResponse,
 	type CancelNotification,
+	type ContentBlock,
 	type InitializeRequest,
 	type InitializeResponse,
 	type NewSessionRequest,
@@ -139,7 +140,7 @@ export class KimchiAcpAgent implements Agent {
 			}
 		}
 		const text = params.prompt
-			.map((b) => (b.type === "text" ? b.text : ""))
+			.map((b: ContentBlock) => (b.type === "text" ? b.text : ""))
 			.join("")
 			.trim()
 		if (!text) {
@@ -322,7 +323,7 @@ export class KimchiAcpAgent implements Agent {
 		// AgentSession event emitter, and awaiting inside it would back-pressure
 		// every subsequent event through the event loop, which pi-mono's
 		// _processAgentEvent does not expect.
-		this.conn.sessionUpdate(params).catch((err) => {
+		this.conn.sessionUpdate(params).catch((err: unknown) => {
 			process.stderr.write(`acp sessionUpdate failed: ${String(err)}\n`)
 		})
 	}
@@ -472,7 +473,7 @@ export async function runAcpMode(options: RunAcpOptions): Promise<void> {
 	const stream = ndJsonStream(writable, readable)
 
 	let agentInstance: KimchiAcpAgent | undefined
-	const conn = new AgentSideConnection((c) => {
+	const conn = new AgentSideConnection((c: AgentSideConnection) => {
 		agentInstance = new KimchiAcpAgent(c, options)
 		return agentInstance
 	}, stream)

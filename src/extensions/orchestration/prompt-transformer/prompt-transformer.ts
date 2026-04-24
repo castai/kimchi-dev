@@ -6,6 +6,18 @@ import systemPromptTemplate from "./prompts/orchestrator-system-prompt.js"
 import subagentSystemPromptTemplate from "./prompts/subagent-system-prompt.js"
 import userPromptTemplate from "./prompts/transformed-user-prompt.js"
 
+export interface EnvironmentInfo {
+	os: string
+	username: string
+	homeDir: string
+	cwd: string
+	currentTime: string
+	localDate: string
+	isGitRepo: boolean
+	gitBranch?: string
+	gitRemote?: string
+}
+
 const SUBAGENT_TOOL_NAME = "subagent"
 
 function formatModel(model: OrchestrationModelDescriptor): string {
@@ -68,29 +80,35 @@ export function transformPrompt(userPrompt: string, registry: ModelRegistry, cur
 
 export function buildOrchestratorSystemPrompt(
 	tools: readonly ToolInfo[],
+	env: EnvironmentInfo,
 	contextFiles?: readonly ContextFile[],
 	skills?: readonly Skill[],
 ): string {
 	const toolsSection = formatToolsSection(tools)
+	const environmentSection = formatEnvironmentSection(env)
 	const projectContext = formatProjectContext(contextFiles)
 	const skillsSection = formatSkills(skills)
 	return systemPromptTemplate
 		.replace("{{TOOLS}}", () => toolsSection)
+		.replace("{{ENVIRONMENT}}", () => environmentSection)
 		.replace("{{PROJECT_CONTEXT}}", () => projectContext)
 		.replace("{{SKILLS}}", () => skillsSection)
 }
 
 export function buildSubagentSystemPrompt(
 	tools: readonly ToolInfo[],
+	env: EnvironmentInfo,
 	contextFiles?: readonly ContextFile[],
 	skills?: readonly Skill[],
 ): string {
 	const filtered = tools.filter((t) => t.name !== SUBAGENT_TOOL_NAME)
 	const toolsSection = formatToolsSection(filtered)
+	const environmentSection = formatEnvironmentSection(env)
 	const projectContext = formatProjectContext(contextFiles)
 	const skillsSection = formatSkills(skills)
 	return subagentSystemPromptTemplate
 		.replace("{{TOOLS}}", () => toolsSection)
+		.replace("{{ENVIRONMENT}}", () => environmentSection)
 		.replace("{{PROJECT_CONTEXT}}", () => projectContext)
 		.replace("{{SKILLS}}", () => skillsSection)
 }
@@ -98,6 +116,22 @@ export function buildSubagentSystemPrompt(
 function formatToolsSection(tools: readonly ToolInfo[]): string {
 	if (tools.length === 0) return "(No tools available)"
 	return tools.map((t) => `- ${t.name}: ${t.description}`).join("\n")
+}
+
+function formatEnvironmentSection(env: EnvironmentInfo): string {
+	const lines = [
+		"# Environment",
+		"",
+		`- OS: ${env.os}`,
+		`- Username: ${env.username}`,
+		`- Home directory: "${env.homeDir}"`,
+		`- Working directory: "${env.cwd}"`,
+		`- Current time: ${env.currentTime} (local date: ${env.localDate})`,
+		`- Git repository: ${env.isGitRepo ? "yes" : "no"}`,
+	]
+	if (env.gitBranch !== undefined) lines.push(`- Git branch: ${env.gitBranch}`)
+	if (env.gitRemote !== undefined) lines.push(`- Git remote: ${env.gitRemote}`)
+	return lines.join("\n")
 }
 
 function formatProjectContext(contextFiles?: readonly ContextFile[]): string {

@@ -20,7 +20,9 @@
  * returns "continue" so the message passes through unchanged.
  */
 
-import { homedir } from "node:os"
+import { execSync } from "node:child_process"
+import { existsSync } from "node:fs"
+import { homedir, platform, userInfo } from "node:os"
 import { isAbsolute, join, normalize, resolve } from "node:path"
 import type { AssistantMessage, ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
@@ -29,6 +31,7 @@ import { getAvailableModelIds } from "../../startup-context.js"
 import { ModelRegistry } from "./model-registry/index.js"
 import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/context-files.js"
 import {
+	type EnvironmentInfo,
 	buildOrchestratorSystemPrompt,
 	buildSubagentSystemPrompt,
 	isSubagent,
@@ -51,6 +54,39 @@ function expandSkillPaths(configuredPaths: string[], cwd: string): string[] {
 		}
 	}
 	return expanded
+}
+
+function safeUsername(): string {
+	try {
+		return userInfo().username
+	} catch {
+		return process.env.USER ?? process.env.USERNAME ?? "unknown"
+	}
+}
+
+function readGitBranch(cwd: string): string | undefined {
+	try {
+		return (
+			execSync("git symbolic-ref --short HEAD", {
+				cwd,
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			}).trim() || undefined
+		)
+	} catch {
+		return undefined
+	}
+}
+
+function readGitRemote(cwd: string): string | undefined {
+	try {
+		return (
+			execSync("git remote get-url origin", { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() ||
+			undefined
+		)
+	} catch {
+		return undefined
+	}
 }
 
 export default function (skillPaths: string[]) {
@@ -147,8 +183,14 @@ export default function (skillPaths: string[]) {
 			})
 		}
 
+		const platformNames: Record<string, string> = { darwin: "macOS", win32: "Windows" }
+		const cachedOs = platformNames[platform()] ?? platform()
+		const cachedUsername = safeUsername()
+		const cachedHomeDir = homedir()
+
 		let cachedContextFiles: ContextFile[] | undefined
 		let cachedSkills: Skill[] | undefined
+		let cachedGitRemote: string | undefined | null = null
 
 		pi.on("before_agent_start", async (_event, ctx) => {
 			const tools = pi.getAllTools()
@@ -158,17 +200,34 @@ export default function (skillPaths: string[]) {
 				skillPaths: expandSkillPaths(skillPaths, ctx.cwd),
 			}).skills
 
+			const now = new Date()
+			const isGitRepo = existsSync(join(ctx.cwd, ".git", "HEAD"))
+			if (isGitRepo && cachedGitRemote === null) {
+				cachedGitRemote = readGitRemote(ctx.cwd)
+			}
+			const env: EnvironmentInfo = {
+				os: cachedOs,
+				username: cachedUsername,
+				homeDir: cachedHomeDir,
+				cwd: ctx.cwd,
+				currentTime: now.toISOString(),
+				localDate: now.toLocaleDateString("en-CA"),
+				isGitRepo,
+				gitBranch: isGitRepo ? readGitBranch(ctx.cwd) : undefined,
+				gitRemote: isGitRepo ? (cachedGitRemote ?? undefined) : undefined,
+			}
+
 			if (subagentMode) {
 				// Filter the subagent tool out of the active tool set to prevent
 				// the subagent from spawning further subagents.
 				const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
 				pi.setActiveTools(activeTools)
 
-				const systemPrompt = buildSubagentSystemPrompt(tools, cachedContextFiles, cachedSkills)
+				const systemPrompt = buildSubagentSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
 				return { systemPrompt }
 			}
 
-			const systemPrompt = buildOrchestratorSystemPrompt(tools, cachedContextFiles, cachedSkills)
+			const systemPrompt = buildOrchestratorSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
 			return { systemPrompt }
 		})
 	}
