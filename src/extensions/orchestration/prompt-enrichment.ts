@@ -22,11 +22,11 @@
 
 import { homedir } from "node:os"
 import { isAbsolute, join, normalize, resolve } from "node:path"
-import type { AssistantMessage, ImageContent, TextContent } from "@mariozechner/pi-ai"
+import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
 import { ANSI, fg } from "../../ansi.js"
 import { getAvailableModelIds } from "../../startup-context.js"
-import { CONTINUATION_NUDGE_TEXT, ContinuationNudge } from "./continuation-nudge.js"
+import { CONTINUATION_NUDGE_TEXT, ContinuationNudge, buildEmptyTurnNudgedMessages } from "./continuation-nudge.js"
 import { ModelRegistry } from "./model-registry/index.js"
 import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/context-files.js"
 import {
@@ -140,39 +140,14 @@ export default function (skillPaths: string[]) {
 				return { action: "handled" as const }
 			})
 
-			// Detect when the model returned only tool calls with no text, received tool results,
-			// and is about to be called again. Some models (e.g. kimi-k2.5) silently return an
-			// empty response in this situation instead of producing a text answer. Injecting a
-			// nudge before the follow-up call reliably prevents the empty turn.
+			// Pre-LLM-call complement of the turn_end nudge above: the model returned only
+			// tool calls with no text, tool results are queued, and it is about to be
+			// called again. Some Kimi deployments return an empty response on this specific
+			// follow-up; a user-role nudge injected into the context reliably prevents it.
 			pi.on("context", async (event) => {
-				const messages = event.messages
-
-				const lastAssistant = [...messages].reverse().find((m): m is AssistantMessage => m.role === "assistant")
-				if (!lastAssistant) return
-
-				const hasToolCalls = lastAssistant.content.some((c) => c.type === "toolCall")
-				const hasText = lastAssistant.content.some((c) => c.type === "text")
-				if (!hasToolCalls || hasText) return
-
-				const lastAssistantIndex = messages.lastIndexOf(lastAssistant)
-				const hasToolResultsAfter = messages.slice(lastAssistantIndex + 1).some((m) => m.role === "toolResult")
-				if (!hasToolResultsAfter) return
-
-				return {
-					messages: [
-						...messages,
-						{
-							role: "user" as const,
-							content: [
-								{
-									type: "text" as const,
-									text: "If you have finished, please summarize the result for the user. Otherwise, continue with the next tool call.",
-								},
-							],
-							timestamp: Date.now(),
-						},
-					],
-				}
+				const nudged = buildEmptyTurnNudgedMessages(event.messages)
+				if (!nudged) return
+				return { messages: nudged }
 			})
 		}
 
