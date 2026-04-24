@@ -25,7 +25,7 @@ import webFetchExtension from "./extensions/web-fetch/index.js"
 import webSearchExtension from "./extensions/web-search/index.js"
 import { updateModelsConfig } from "./models.js"
 import { runSetupWizard } from "./setup-wizard.js"
-import { setAvailableModelIds } from "./startup-context.js"
+import { setAvailableModels } from "./startup-context.js"
 import { getVersion } from "./utils.js"
 
 const telemetryConfig = readTelemetryConfig()
@@ -105,10 +105,7 @@ try {
 		throw new Error("KIMCHI_CODING_AGENT_DIR is not set; cli.ts must be entered via entry.ts")
 	}
 	const modelsJsonPath = resolve(agentDir, "models.json")
-	const modelsResult = await updateModelsConfig(modelsJsonPath, config.apiKey)
-	if (modelsResult.source === "default") {
-		console.error(`Warning: using default models (${modelsResult.error})`)
-	}
+	const { models } = await updateModelsConfig(modelsJsonPath, config.apiKey)
 
 	// Must run before main() so the keybindings file is loaded with the
 	// override in place.
@@ -116,7 +113,7 @@ try {
 
 	// Share the discovered model IDs with extensions before main() runs.
 	// prompt-enrichment reads this to build ModelRegistry with live model IDs.
-	setAvailableModelIds(modelsResult.models)
+	setAvailableModels(models)
 
 	// Write default settings on first run only — respect user's choices afterward
 	const settingsPath = resolve(agentDir, "settings.json")

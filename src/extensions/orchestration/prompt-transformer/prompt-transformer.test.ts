@@ -1,5 +1,6 @@
 import type { Skill } from "@mariozechner/pi-coding-agent"
 import { describe, expect, it } from "vitest"
+import type { ModelMetadata } from "../../../models.js"
 import { MODEL_CAPABILITIES, ModelRegistry } from "../model-registry/index.js"
 import {
 	type EnvironmentInfo,
@@ -20,6 +21,22 @@ const testEnv: EnvironmentInfo = {
 
 const ALL_KNOWN_IDS = [...MODEL_CAPABILITIES.keys()]
 
+function fakeMetadata(slug: string): ModelMetadata {
+	return {
+		slug,
+		display_name: "",
+		description: "",
+		provider: "ai-enabler",
+		tool_call: true,
+		reasoning: false,
+		input_modalities: ["text"],
+		is_serverless: true,
+		limits: { context_window: 131072, max_output_tokens: 16384 },
+	}
+}
+
+const ALL_KNOWN_METADATA = ALL_KNOWN_IDS.map(fakeMetadata)
+
 function createSkill(overrides: Partial<Skill> & { name: string; description: string }): Skill {
 	return {
 		filePath: `/skills/${overrides.name}/SKILL.md`,
@@ -31,7 +48,7 @@ function createSkill(overrides: Partial<Skill> & { name: string; description: st
 }
 
 describe("transformPrompt", () => {
-	const registry = new ModelRegistry(ALL_KNOWN_IDS)
+	const registry = new ModelRegistry(ALL_KNOWN_METADATA)
 	const currentModel = { id: "kimi-k2.5", name: "Kimi K2.5" }
 
 	it("includes the original user prompt", () => {

@@ -1,162 +1,114 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { getVersion } from "./utils.js"
 
-const CAST_AI_MODELS_API = "https://api.cast.ai/v1/llm/openai/models?providerName=AI%20Enabler"
-const CAST_AI_LLM_BASE_URL = "https://llm.kimchi.dev/openai/v1"
+const KIMCHI_API = "https://llm.kimchi.dev"
+const MODELS_METADATA_API = `${KIMCHI_API}/v1/models/metadata?include_in_cli=true`
+const CHAT_COMPLETIONS_API = `${KIMCHI_API}/openai/v1`
 const FETCH_TIMEOUT_MS = 5000
 
-const EXCLUDED_MODEL_PATTERNS = [/^smoll/i, /^qwen/i]
-
-function filterAndSortModels(models: string[]): string[] {
-	return models.filter((id) => !EXCLUDED_MODEL_PATTERNS.some((re) => re.test(id))).sort((a, b) => a.localeCompare(b))
+export interface ModelMetadata {
+	slug: string
+	display_name: string
+	description: string
+	provider: string
+	tool_call: boolean
+	reasoning: boolean
+	input_modalities: ("text" | "image")[]
+	is_serverless: boolean
+	limits: {
+		context_window: number
+		max_output_tokens: number
+	}
 }
 
-interface CastAIModelsResponse {
-	models: string[]
+interface ModelsMetadataResponse {
+	models: ModelMetadata[]
 }
 
-function modelIdToName(id: string): string {
-	return id
-		.split(/[-_]/)
-		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-		.join(" ")
+function sortModels(models: ModelMetadata[]): ModelMetadata[] {
+	const serverless = models.filter((m) => m.is_serverless)
+	const rest = models.filter((m) => !m.is_serverless)
+	return [...serverless, ...rest]
 }
 
-async function fetchAvailableModels(apiKey: string): Promise<string[]> {
-	const response = await fetch(CAST_AI_MODELS_API, {
+async function fetchAvailableModels(apiKey: string): Promise<ModelMetadata[]> {
+	const response = await fetch(MODELS_METADATA_API, {
 		headers: { Authorization: `Bearer ${apiKey}` },
 		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
 	})
 	if (!response.ok) {
 		throw new Error(`Failed to fetch models: ${response.status} ${response.statusText}`)
 	}
-	const body = await response.json()
-	if (!body || typeof body !== "object" || !Array.isArray(body.models)) {
+	const body = (await response.json()) as ModelsMetadataResponse
+	if (!Array.isArray(body?.models)) {
 		throw new Error("Unexpected response shape from models API")
 	}
-	return (body as CastAIModelsResponse).models
+	return body.models
 }
 
-function buildModelsConfig(models: string[]) {
+interface PiModelConfig {
+	id: string
+	name: string
+	reasoning: boolean
+	input: ("text" | "image")[]
+	contextWindow: number
+	maxTokens: number
+	cost: { input: number; output: number; cacheRead: number; cacheWrite: number }
+	compat?: { supportsReasoningEffort?: boolean }
+}
+
+function metadataToModel(m: ModelMetadata): PiModelConfig {
+	// TODO: our LiteLLM gateway does not support `thinking.type.enabled` for Antrhopic >Opus 4.6 models
+	// Therefore, we disable it for now. Revisit, once we upgrade our LiteLLM version.
+	const compat = m.provider === "anthropic" ? { supportsReasoningEffort: false } : undefined
+	return {
+		id: m.slug,
+		name: m.display_name.trim().length > 0 ? m.display_name : m.slug,
+		reasoning: m.reasoning,
+		input: m.input_modalities,
+		contextWindow: m.limits.context_window,
+		maxTokens: m.limits.max_output_tokens,
+		// TODO: add costs support
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		...(compat && { compat }),
+	}
+}
+
+function buildModelsConfig(models: ModelMetadata[]) {
 	return {
 		providers: {
 			"kimchi-dev": {
-				baseUrl: CAST_AI_LLM_BASE_URL,
+				baseUrl: CHAT_COMPLETIONS_API,
 				apiKey: "KIMCHI_API_KEY",
 				api: "openai-completions",
 				authHeader: true,
 				headers: { "User-Agent": `kimchi/${getVersion()}` },
-				models: models.map((id) => ({
-					id,
-					name: modelIdToName(id),
-					reasoning: false,
-					input: ["text"],
-					contextWindow: 131072,
-					maxTokens: 16384,
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				})),
+			    models: models.map(metadataToModel),
 			},
 		},
 	}
 }
 
-/**
- * The default models.json configuration for the Cast AI provider.
- * Models are registered with the "kimchi-dev" provider name. The apiKey field
- * references the KIMCHI_API_KEY environment variable, which is set by the
- * CLI entry point from the resolved kimchi config before pi-mono imports.
- */
-const DEFAULT_MODELS_CONFIG = {
-	providers: {
-		"kimchi-dev": {
-			baseUrl: CAST_AI_LLM_BASE_URL,
-			apiKey: "KIMCHI_API_KEY",
-			api: "openai-completions",
-			authHeader: true,
-			headers: { "User-Agent": `kimchi/${getVersion()}` },
-			models: [
-				{
-					id: "kimi-k2.5",
-					name: "Kimi K2.5",
-					reasoning: false,
-					input: ["text"],
-					contextWindow: 131072,
-					maxTokens: 16384,
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				},
-				{
-					id: "glm-5-fp8",
-					name: "GLM 5 FP8",
-					reasoning: false,
-					input: ["text"],
-					contextWindow: 131072,
-					maxTokens: 16384,
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				},
-				{
-					id: "minimax-m2.7",
-					name: "Minimax M2.7",
-					reasoning: true,
-					input: ["text"],
-					contextWindow: 196608,
-					maxTokens: 32768,
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				},
-			],
-		},
-	},
+export interface ModelsConfigResult {
+	models: ModelMetadata[]
 }
 
-export type ModelsConfigResult =
-	| { source: "discovered"; models: string[] }
-	| { source: "default"; models: string[]; error?: string }
-
 /**
- * Fetch available models from the Cast AI API and write the configuration to
- * modelsJsonPath. Falls back to the static default configuration if the fetch
- * fails. Always overwrites any existing file so the model list stays current
- * on every startup.
+ * Fetch available models from the kimchi metadata API and write the
+ * configuration to modelsJsonPath. Always overwrites any existing file so
+ * the model list stays current on every startup. Throws on fetch failure
+ * or empty response.
  */
 export async function updateModelsConfig(modelsJsonPath: string, apiKey: string): Promise<ModelsConfigResult> {
 	const dir = dirname(modelsJsonPath)
 	mkdirSync(dir, { recursive: true })
 
-	try {
-		const fetched = await fetchAvailableModels(apiKey)
-		const models = filterAndSortModels(fetched)
-		if (models.length > 0) {
-			writeFileSync(modelsJsonPath, JSON.stringify(buildModelsConfig(models), null, "\t"), "utf-8")
-			return { source: "discovered", models }
-		}
-		writeFileSync(modelsJsonPath, JSON.stringify(DEFAULT_MODELS_CONFIG, null, "\t"), "utf-8")
-		return {
-			source: "default",
-			models: DEFAULT_MODELS_CONFIG.providers["kimchi-dev"].models.map((m) => m.id),
-			error: fetched.length === 0 ? "API returned empty model list" : "API returned no usable models after filtering",
-		}
-	} catch (err) {
-		writeFileSync(modelsJsonPath, JSON.stringify(DEFAULT_MODELS_CONFIG, null, "\t"), "utf-8")
-		return {
-			source: "default",
-			models: DEFAULT_MODELS_CONFIG.providers["kimchi-dev"].models.map((m) => m.id),
-			error: err instanceof Error ? err.message : String(err),
-		}
+	const fetched = await fetchAvailableModels(apiKey)
+	if (fetched.length === 0) {
+		throw new Error("API returned empty model list")
 	}
-}
-
-/**
- * Check whether the models.json at the given path already contains a "kimchi-dev" provider.
- */
-export function hasKimchiProvider(modelsJsonPath: string): boolean {
-	if (!existsSync(modelsJsonPath)) {
-		return false
-	}
-	try {
-		const raw = readFileSync(modelsJsonPath, "utf-8")
-		const config = JSON.parse(raw)
-		return config?.providers?.["kimchi-dev"] !== undefined
-	} catch {
-		return false
-	}
+	const models = sortModels(fetched)
+	writeFileSync(modelsJsonPath, JSON.stringify(buildModelsConfig(models), null, "\t"), "utf-8")
+	return { models }
 }
