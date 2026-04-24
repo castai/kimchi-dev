@@ -13,16 +13,28 @@ if (!process.env.KIMCHI_API_KEY) {
 	console.warn("[smoke] KIMCHI_API_KEY not set — subagent-session-tracking smoke test will be skipped.")
 }
 
+interface TokenUsage {
+	input: number
+	output: number
+	cacheRead: number
+	cacheWrite: number
+}
+
 interface SubagentDetails {
 	sessionId?: string
 	sessionFile?: string
-	tokenUsage?: unknown
+	tokenUsage?: TokenUsage
 	durationMs?: number
 }
 
 interface SessionEntry {
 	type: string
-	message?: { role?: string; toolCallId?: string; details?: unknown }
+	message?: {
+		role?: string
+		toolCallId?: string
+		details?: unknown
+		usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number }
+	}
 }
 
 function readJsonl<T = SessionEntry>(path: string): T[] {
@@ -30,6 +42,72 @@ function readJsonl<T = SessionEntry>(path: string): T[] {
 		.split("\n")
 		.filter((l) => l.trim().length > 0)
 		.map((l) => JSON.parse(l) as T)
+}
+
+const ZERO_USAGE: TokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+
+function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+	return {
+		input: a.input + b.input,
+		output: a.output + b.output,
+		cacheRead: a.cacheRead + b.cacheRead,
+		cacheWrite: a.cacheWrite + b.cacheWrite,
+	}
+}
+
+function subtractUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+	return {
+		input: a.input - b.input,
+		output: a.output - b.output,
+		cacheRead: a.cacheRead - b.cacheRead,
+		cacheWrite: a.cacheWrite - b.cacheWrite,
+	}
+}
+
+// Per-session sum of `message.usage` across every assistant message — this is the child's "per-turn" billing, recomputed from the on-disk session file.
+function sumAssistantUsage(entries: SessionEntry[]): TokenUsage {
+	let total: TokenUsage = { ...ZERO_USAGE }
+	for (const entry of entries) {
+		if (entry.type !== "message" || entry.message?.role !== "assistant") continue
+		const u = entry.message.usage
+		if (!u) continue
+		total = addUsage(total, {
+			input: u.input ?? 0,
+			output: u.output ?? 0,
+			cacheRead: u.cacheRead ?? 0,
+			cacheWrite: u.cacheWrite ?? 0,
+		})
+	}
+	return total
+}
+
+// Every (parentSession, subagentStats) edge carried in a parent session file's tool-result entries.
+interface BillingEdge {
+	parentFile: string
+	childSessionId: string
+	childSessionFile: string
+	aggregate: TokenUsage
+}
+
+function extractSubagentEdges(parentFile: string, entries: SessionEntry[]): BillingEdge[] {
+	const edges: BillingEdge[] = []
+	for (const entry of entries) {
+		if (entry.type !== "message" || entry.message?.role !== "toolResult") continue
+		const details = entry.message.details as SubagentDetails | undefined
+		if (!details?.sessionId || !details.sessionFile || !details.tokenUsage) continue
+		edges.push({
+			parentFile,
+			childSessionId: details.sessionId,
+			childSessionFile: details.sessionFile,
+			aggregate: {
+				input: details.tokenUsage.input,
+				output: details.tokenUsage.output,
+				cacheRead: details.tokenUsage.cacheRead,
+				cacheWrite: details.tokenUsage.cacheWrite,
+			},
+		})
+	}
+	return edges
 }
 
 describe("subagent session tracking smoke tests", () => {
@@ -189,6 +267,107 @@ describe("subagent session tracking smoke tests", () => {
 			)
 			expect(childToolResult, "child tool-result should reference grandchild.sessionFile").toBeDefined()
 			expect((childToolResult?.message?.details as SubagentDetails).sessionId).toBe(grandchild?.header.id)
+		},
+	)
+
+	// Phase 6: walk a real nested-subagent session directory and confirm per-turn usage stored in each child's session file reconciles with the aggregate SubagentStats recorded in its parent's tool-result, and that the PRD §10 billing-walk conventions (leaves-only and all-minus-aggregates) agree on the total. This is the success-criterion #3 check — if it diverges, downstream billing tooling cannot trust the on-disk session files.
+	it.skipIf(!process.env.KIMCHI_API_KEY)(
+		"per-turn usage in each child session file matches the aggregate in the parent's tool-result, and both rollup conventions agree on the total",
+		{ timeout: 120_000, retry: 1 },
+		() => {
+			const prompt = [
+				"Use the `subagent` tool exactly once with these arguments:",
+				'- provider: "kimchi-dev"',
+				'- model: "kimi-k2.5"',
+				"- prompt: (multi-line, copy verbatim)",
+				'    """',
+				"    Use the `subagent` tool exactly once with these arguments:",
+				'    - provider: "kimchi-dev"',
+				'    - model: "kimi-k2.5"',
+				'    - prompt: "Reply with only the single word: OK"',
+				"",
+				"    After it returns, echo the subagent's reply verbatim as your final answer and nothing else.",
+				'    """',
+				"",
+				"After it returns, echo the subagent's reply verbatim as your final answer and nothing else.",
+			].join("\n")
+
+			runBinary({
+				args: ["--session-dir", sessionDir, "-p", prompt],
+				extraEnv: { KIMCHI_API_KEY: process.env.KIMCHI_API_KEY as string },
+				timeoutMs: 110_000,
+			})
+
+			const files = readdirSync(sessionDir).filter((f) => f.endsWith(".jsonl"))
+			expect(files.length, "billing walk needs the full nested tree on disk").toBeGreaterThanOrEqual(3)
+
+			interface Loaded {
+				file: string
+				id: string
+				parentSession: string | undefined
+				entries: SessionEntry[]
+				perTurn: TokenUsage
+				edges: BillingEdge[]
+			}
+
+			const sessions: Loaded[] = []
+			for (const name of files) {
+				const full = join(sessionDir, name)
+				const entries = readJsonl(full)
+				const header = entries[0] as unknown as { type?: string; id?: string; parentSession?: string }
+				if (header?.type !== "session" || !header.id) continue
+				sessions.push({
+					file: full,
+					id: header.id,
+					parentSession: header.parentSession,
+					entries,
+					perTurn: sumAssistantUsage(entries),
+					edges: extractSubagentEdges(full, entries),
+				})
+			}
+
+			const byFile = new Map(sessions.map((s) => [s.file, s]))
+			const allEdges = sessions.flatMap((s) => s.edges)
+			expect(
+				allEdges.length,
+				"billing walk expects at least two subagent edges (top → child, child → grandchild)",
+			).toBeGreaterThanOrEqual(2)
+
+			// Primary reconciliation: for every SubagentStats edge, the aggregate stored on the parent equals the sum of `message.usage` across the child's assistant messages. A mismatch here means either the stdout message_end stream missed a turn or the child flushed a message the parent didn't count.
+			for (const edge of allEdges) {
+				const child = byFile.get(edge.childSessionFile)
+				expect(
+					child,
+					`child session file referenced by edge should exist on disk: ${edge.childSessionFile}`,
+				).toBeDefined()
+				if (!child) continue
+				expect(
+					child.perTurn,
+					`child ${edge.childSessionId} per-turn sum must equal its parent's SubagentStats.tokenUsage`,
+				).toEqual(edge.aggregate)
+			}
+
+			// Secondary self-consistency: PRD §10 gives two conventions for summing tokens across a session directory without double-counting. They must yield identical totals over the same tree.
+			const referencedIds = new Set(allEdges.map((e) => e.childSessionId))
+			const leavesTotal = sessions
+				.filter((s) => !referencedIds.has(s.id))
+				.map((s) => s.perTurn)
+				.reduce(addUsage, { ...ZERO_USAGE })
+
+			const allSummed = sessions.map((s) => s.perTurn).reduce(addUsage, { ...ZERO_USAGE })
+			const subtractTotal = allEdges.map((e) => e.aggregate).reduce(subtractUsage, allSummed)
+
+			expect(
+				leavesTotal,
+				"leaves-only and all-minus-aggregates conventions must agree on the billing total over the same session tree",
+			).toEqual(subtractTotal)
+
+			console.log("[phase6] billing walk:", {
+				sessions: sessions.length,
+				edges: allEdges.length,
+				leavesTotal,
+				subtractTotal,
+			})
 		},
 	)
 })
