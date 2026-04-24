@@ -200,9 +200,9 @@ export function buildSubagentArgs(
 	]
 }
 
-export interface PreparedChildSession {
+export interface ChildSessionHandle {
 	sessionId: string
-	childSessionFile: string
+	sessionFile: string
 }
 
 /** Pre-writes a header-only .jsonl session file for a subagent child so pi-mono's `--session <path>` opens it and preserves the back-reference to the parent. Returns undefined when the parent has no persistent session to link to (in-memory / --no-session parent, or empty session dir). Throws on I/O errors so callers can surface them as subagent failures. Exposed for testing. */
@@ -210,15 +210,14 @@ export function prepareChildSessionFile(
 	parentSessionDir: string,
 	parentSessionFile: string | undefined,
 	cwd: string,
-	writeFile: (path: string, data: string, mode: number) => void = (p, d, m) => writeFileSync(p, d, { mode: m }),
 	generateId: () => string = uuidv7,
 	now: () => Date = () => new Date(),
-): PreparedChildSession | undefined {
+): ChildSessionHandle | undefined {
 	// Parent is in-memory (--no-session) or has no resolvable session dir: there's nothing to back-reference, so skip the pre-write and let the child run with --no-session too. No broken links, no orphan files.
 	if (parentSessionFile === undefined || parentSessionDir.length === 0) return undefined
 	const sessionId = generateId()
 	const timestamp = now().toISOString()
-	const childSessionFile = join(parentSessionDir, `${timestamp.replace(/[:.]/g, "-")}_${sessionId}.jsonl`)
+	const sessionFile = join(parentSessionDir, `${timestamp.replace(/[:.]/g, "-")}_${sessionId}.jsonl`)
 	const header: SessionHeader = {
 		type: "session",
 		version: CURRENT_SESSION_VERSION,
@@ -227,8 +226,8 @@ export function prepareChildSessionFile(
 		cwd,
 		parentSession: parentSessionFile,
 	}
-	writeFile(childSessionFile, `${JSON.stringify(header)}\n`, 0o600)
-	return { sessionId, childSessionFile }
+	writeFileSync(sessionFile, `${JSON.stringify(header)}\n`, { mode: 0o600 })
+	return { sessionId, sessionFile }
 }
 
 function getSubagentInvocation(args: string[]): { command: string; args: string[] } {
@@ -584,7 +583,7 @@ export default function (pi: ExtensionAPI) {
 				const prepared = prepareChildSessionFile(parentSessionDir, parentSessionFile, ctx.cwd)
 				if (prepared) {
 					sessionId = prepared.sessionId
-					childSessionFile = prepared.childSessionFile
+					childSessionFile = prepared.sessionFile
 				}
 			} catch (err) {
 				const detail = err instanceof Error ? err.message : String(err)

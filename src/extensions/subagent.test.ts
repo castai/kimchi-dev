@@ -317,7 +317,6 @@ describe("prepareChildSessionFile", () => {
 			tmp,
 			parentFile,
 			"/work/dir",
-			undefined,
 			() => fixedId,
 			() => fixedTs,
 		)
@@ -325,9 +324,9 @@ describe("prepareChildSessionFile", () => {
 		expect(prepared).toBeDefined()
 		expect(prepared?.sessionId).toBe(fixedId)
 		// Filename pattern: <ISO-with-colons-and-dots-replaced>_<uuid>.jsonl in the parent session dir.
-		expect(prepared?.childSessionFile).toBe(join(tmp, `2026-04-24T10-20-30-400Z_${fixedId}.jsonl`))
+		expect(prepared?.sessionFile).toBe(join(tmp, `2026-04-24T10-20-30-400Z_${fixedId}.jsonl`))
 
-		const contents = readFileSync(prepared?.childSessionFile ?? "", "utf-8")
+		const contents = readFileSync(prepared?.sessionFile ?? "", "utf-8")
 		expect(contents.endsWith("\n")).toBe(true)
 		const lines = contents.trimEnd().split("\n")
 		expect(lines).toHaveLength(1)
@@ -343,13 +342,13 @@ describe("prepareChildSessionFile", () => {
 		})
 	})
 
+	// Prompt content may contain secrets, so the header file must not be world/group-readable.
 	it("writes the header file with 0o600 permissions", () => {
 		const parentFile = join(tmp, "parent.jsonl")
 		const prepared = prepareChildSessionFile(tmp, parentFile, "/work/dir")
 
-		// Ensure the prepared path actually landed in the parent dir.
-		expect(prepared?.childSessionFile.startsWith(tmp)).toBe(true)
-		const mode = statSync(prepared?.childSessionFile ?? "").mode & 0o777
+		expect(prepared?.sessionFile.startsWith(tmp)).toBe(true)
+		const mode = statSync(prepared?.sessionFile ?? "").mode & 0o777
 		expect(mode).toBe(0o600)
 	})
 
@@ -359,7 +358,7 @@ describe("prepareChildSessionFile", () => {
 		expect(() => prepareChildSessionFile(missingDir, parentFile, "/work/dir")).toThrow()
 	})
 
-	// PRD N4: parallel subagents under one parent must each get a distinct sessionId. Guards against regressions like caching/memoizing the id per parent, which would silently collide under fan-out.
+	// Guards against regressions like caching/memoizing the id per parent, which would silently collide under fan-out.
 	it("assigns a distinct sessionId to each call so parallel spawns cannot collide", () => {
 		const parentFile = join(tmp, "parent.jsonl")
 		const ids = Array.from({ length: 8 }, () => prepareChildSessionFile(tmp, parentFile, "/work/dir")?.sessionId)
