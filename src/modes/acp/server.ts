@@ -203,13 +203,13 @@ export class KimchiAcpAgent implements Agent {
 		await entry.session.abort()
 	}
 
-	async shutdown(): Promise<void> {
+	async shutdown(cause: "signal" | "disconnect" = "disconnect"): Promise<void> {
 		if (this.shutdownPromise) return this.shutdownPromise
-		this.shutdownPromise = this.doShutdown()
+		this.shutdownPromise = this.doShutdown(cause)
 		return this.shutdownPromise
 	}
 
-	private async doShutdown(): Promise<void> {
+	private async doShutdown(cause: "signal" | "disconnect"): Promise<void> {
 		// Drain any in-flight turn promises before tearing down the session.
 		// On the signal path we process.exit immediately so this is mostly
 		// cosmetic, but runAcpMode's finally also calls shutdown when conn.closed
@@ -222,7 +222,7 @@ export class KimchiAcpAgent implements Agent {
 			// calling dispose(). dispose() is synchronous and returns void, so
 			// async extension handlers (e.g. telemetry drain, shutdown marker)
 			// would be fire-and-forgotten if we relied on dispose() alone.
-			await entry.session.extensionRunner?.emit({ type: "session_shutdown" })
+			await entry.session.extensionRunner?.emit({ type: "session_shutdown", cause } as { type: "session_shutdown" })
 			entry.session.dispose()
 		}
 		this.sessions.clear()
@@ -497,7 +497,7 @@ export async function runAcpMode(options: RunAcpOptions): Promise<void> {
 		shuttingDown = true
 		const code = sig === "SIGHUP" ? 129 : sig === "SIGINT" ? 130 : 143
 		agentInstance
-			?.shutdown()
+			?.shutdown("signal")
 			.catch(() => {})
 			.finally(() => process.exit(code))
 	}

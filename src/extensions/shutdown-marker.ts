@@ -8,7 +8,7 @@ export interface AgentEndData {
 }
 
 export interface AgentTerminatedData {
-	reason: "signal"
+	reason: "signal" | "disconnect"
 	timestamp: number
 }
 
@@ -32,10 +32,10 @@ export class ShutdownMarker {
 		this.agentEndWritten = true
 	}
 
-	onSessionShutdown(append: AppendFn): void {
+	onSessionShutdown(cause: "signal" | "disconnect", append: AppendFn): void {
 		if (this.agentEndWritten || this.shutdownWritten) return
 		this.shutdownWritten = true
-		append(AGENT_TERMINATED_ENTRY_TYPE, { reason: "signal", timestamp: Date.now() } satisfies AgentTerminatedData)
+		append(AGENT_TERMINATED_ENTRY_TYPE, { reason: cause, timestamp: Date.now() } satisfies AgentTerminatedData)
 	}
 }
 
@@ -54,7 +54,8 @@ export default function shutdownMarkerExtension(pi: ExtensionAPI): void {
 		marker.onAgentEnd((type, data) => pi.appendEntry(type, data))
 	})
 
-	pi.on("session_shutdown", () => {
-		marker.onSessionShutdown((type, data) => pi.appendEntry(type, data))
+	pi.on("session_shutdown", (event) => {
+		const cause = (event as { cause?: "signal" | "disconnect" }).cause ?? "signal"
+		marker.onSessionShutdown(cause, (type, data) => pi.appendEntry(type, data))
 	})
 }

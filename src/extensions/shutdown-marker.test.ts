@@ -81,7 +81,7 @@ describe("ShutdownMarker", () => {
 			},
 			{
 				label: "skips second agent_terminated on duplicate session_shutdown call",
-				setup: (marker, append) => marker.onSessionShutdown(append),
+				setup: (marker, append) => marker.onSessionShutdown("signal", append),
 				expectedCalls: [
 					{
 						type: AGENT_TERMINATED_ENTRY_TYPE,
@@ -98,9 +98,30 @@ describe("ShutdownMarker", () => {
 				const append = (type: string, data: unknown) => calls.push({ type, data })
 
 				setup(marker, append)
-				marker.onSessionShutdown(append)
+				marker.onSessionShutdown("signal", append)
 
 				expect(calls).toEqual(expectedCalls)
+			})
+		}
+	})
+
+	describe("cause is reflected in agent_terminated reason", () => {
+		const cases: Array<{ cause: "signal" | "disconnect" }> = [{ cause: "signal" }, { cause: "disconnect" }]
+
+		for (const { cause } of cases) {
+			it(`writes reason "${cause}" when cause is "${cause}"`, () => {
+				const marker = new ShutdownMarker()
+				const calls: Array<{ type: string; data: unknown }> = []
+				const append = (type: string, data: unknown) => calls.push({ type, data })
+
+				marker.onSessionShutdown(cause, append)
+
+				expect(calls).toEqual([
+					{
+						type: AGENT_TERMINATED_ENTRY_TYPE,
+						data: { reason: cause, timestamp: FIXED_TIME } satisfies AgentTerminatedData,
+					},
+				])
 			})
 		}
 	})
@@ -113,7 +134,7 @@ describe("ShutdownMarker", () => {
 
 			marker.onAgentEnd(append)
 			marker.onAgentStart()
-			marker.onSessionShutdown(append)
+			marker.onSessionShutdown("signal", append)
 
 			expect(calls).toEqual([
 				{
@@ -136,7 +157,7 @@ describe("ShutdownMarker", () => {
 
 			marker.onAgentEnd(append)
 			marker.onSessionStart()
-			marker.onSessionShutdown(append)
+			marker.onSessionShutdown("signal", append)
 
 			expect(calls).toEqual([
 				{
@@ -155,9 +176,9 @@ describe("ShutdownMarker", () => {
 			const calls: Array<{ type: string; data: unknown }> = []
 			const append = (type: string, data: unknown) => calls.push({ type, data })
 
-			marker.onSessionShutdown(append)
+			marker.onSessionShutdown("signal", append)
 			marker.onSessionStart()
-			marker.onSessionShutdown(append)
+			marker.onSessionShutdown("signal", append)
 
 			expect(calls).toEqual([
 				{
