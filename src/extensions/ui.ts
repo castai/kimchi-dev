@@ -1,13 +1,29 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
+import type { TUI } from "@mariozechner/pi-tui"
 import { PromptEditor } from "../components/editor.js"
 import { StatsFooter } from "../components/footer.js"
 import { LogoHeader } from "../components/logo.js"
 import { SplashHeader } from "../components/splash-header.js"
 import { collapseAll, expandNext, resetState } from "../expand-state.js"
 
+const HORIZONTAL_PADDING = 2
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: strip OSC 133 shell integration marks (cause blue triangles in iTerm2)
+const OSC133_RE = /\x1b\]133;[A-Z]\x07/g
+
+function patchTuiPadding(tui: TUI) {
+	const original = tui.render.bind(tui)
+	const pad = " ".repeat(HORIZONTAL_PADDING)
+	tui.render = function (width: number): string[] {
+		const lines = original(Math.max(1, width - HORIZONTAL_PADDING * 2))
+		return lines.map((line: string) => pad + line.replace(OSC133_RE, ""))
+	}
+}
+
 export default function uiExtension(pi: ExtensionAPI) {
 	let splashActive = false
 	let currentEditor: PromptEditor | undefined
+	let tuiPatched = false
 
 	pi.on("session_start", (event, ctx) => {
 		resetState()
@@ -18,6 +34,10 @@ export default function uiExtension(pi: ExtensionAPI) {
 		ctx.ui.setHeader((_tui, theme) => (isSplash ? new SplashHeader(theme) : new LogoHeader(theme)))
 		ctx.ui.setFooter((_tui, theme, footerData) => new StatsFooter(ctx, theme, footerData))
 		ctx.ui.setEditorComponent((tui, editorTheme, keybindings) => {
+			if (!tuiPatched) {
+				tuiPatched = true
+				patchTuiPadding(tui)
+			}
 			tui.setShowHardwareCursor(true)
 			const editor = new PromptEditor(tui, editorTheme, keybindings, ctx.ui.theme)
 			editor.setSplashMode(isSplash)

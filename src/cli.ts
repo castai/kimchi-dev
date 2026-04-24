@@ -21,7 +21,6 @@ import telemetryExtension from "./extensions/telemetry.js"
 import terminalColorsExtension from "./extensions/terminal-colors.js"
 import toolRendererExtension from "./extensions/tool-renderer.js"
 import uiExtension from "./extensions/ui.js"
-import userMessagePatchExtension from "./extensions/user-message-patch.js"
 import webFetchExtension from "./extensions/web-fetch/index.js"
 import webSearchExtension from "./extensions/web-search/index.js"
 import { updateModelsConfig } from "./models.js"
@@ -163,7 +162,6 @@ try {
 	const extensionFactories = [
 		sessionIdCaptureExtension,
 		shutdownMarkerExtension,
-		userMessagePatchExtension,
 		terminalColorsExtension,
 		bashCollapseExtension,
 		loopGuardExtension,
