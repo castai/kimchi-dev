@@ -359,13 +359,10 @@ describe("prepareChildSessionFile", () => {
 		expect(() => prepareChildSessionFile(missingDir, parentFile, "/work/dir")).toThrow()
 	})
 
-	it("uses real uuidv7 by default and produces a distinct session per call", () => {
+	// PRD N4: parallel subagents under one parent must each get a distinct sessionId. Guards against regressions like caching/memoizing the id per parent, which would silently collide under fan-out.
+	it("assigns a distinct sessionId to each call so parallel spawns cannot collide", () => {
 		const parentFile = join(tmp, "parent.jsonl")
-		const a = prepareChildSessionFile(tmp, parentFile, "/work/dir")
-		const b = prepareChildSessionFile(tmp, parentFile, "/work/dir")
-		expect(a?.sessionId).toBeTruthy()
-		expect(b?.sessionId).toBeTruthy()
-		expect(a?.sessionId).not.toBe(b?.sessionId)
-		expect(a?.childSessionFile).not.toBe(b?.childSessionFile)
+		const ids = Array.from({ length: 8 }, () => prepareChildSessionFile(tmp, parentFile, "/work/dir")?.sessionId)
+		expect(new Set(ids).size).toBe(ids.length)
 	})
 })
