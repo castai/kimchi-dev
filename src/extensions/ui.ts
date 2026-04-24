@@ -14,7 +14,7 @@ const OSC133_RE = /\x1b\]133;[A-Z]\x07/g
 function patchTuiPadding(tui: TUI) {
 	const original = tui.render.bind(tui)
 	const pad = " ".repeat(HORIZONTAL_PADDING)
-	tui.render = function (width: number): string[] {
+	tui.render = (width: number): string[] => {
 		const lines = original(Math.max(1, width - HORIZONTAL_PADDING * 2))
 		return lines.map((line: string) => pad + line.replace(OSC133_RE, ""))
 	}
