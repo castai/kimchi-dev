@@ -4,11 +4,21 @@ import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
 import { RST_FG, TEAL_FG } from "../ansi.js"
 import { formatCount } from "../extensions/format.js"
 import { getActiveSubagentCount } from "../extensions/subagent.js"
+import { getActiveTags, getCurrentPhase, parseTag } from "../extensions/tags.js"
+
+interface FooterSegment {
+	text: string
+	width: number
+}
 
 const BAR_WIDTH = 16
 
 function teal(text: string): string {
 	return `${TEAL_FG}${text}${RST_FG}`
+}
+
+function seg(text: string): FooterSegment {
+	return { text, width: visibleWidth(text) }
 }
 
 export class StatsFooter implements Component {
@@ -20,13 +30,24 @@ export class StatsFooter implements Component {
 
 	invalidate(): void {}
 
-	render(width: number): string[] {
-		const { theme, ctx } = this
-		const dim = (s: string) => theme.fg("dim", s)
+	private dim(s: string): string {
+		return this.theme.fg("dim", s)
+	}
 
+	private sessionSegment(): FooterSegment {
+		const name = this.ctx.sessionManager.getSessionName() ?? "default"
+		return seg(this.dim(name))
+	}
+
+	private modelSegment(): FooterSegment {
+		const modelId = this.ctx.model?.id ?? "n/a"
+		return seg(teal(modelId))
+	}
+
+	private usageSegment(): FooterSegment | null {
 		let totalInput = 0
 		let totalOutput = 0
-		for (const entry of ctx.sessionManager.getEntries()) {
+		for (const entry of this.ctx.sessionManager.getEntries()) {
 			if (entry.type === "message") {
 				const msg = entry.message
 				if (msg?.role === "assistant" && msg.usage) {
@@ -35,50 +56,74 @@ export class StatsFooter implements Component {
 				}
 			}
 		}
+		if (!totalInput && !totalOutput) return null
+		const tokens = [totalInput ? `↑${formatCount(totalInput)}` : "", totalOutput ? `↓${formatCount(totalOutput)}` : ""]
+			.filter(Boolean)
+			.join(" ")
+		return seg(this.dim(tokens))
+	}
 
-		const contextUsage = ctx.getContextUsage()
-		const contextPercent = contextUsage?.percent ?? 0
+	private contextSegment(): FooterSegment {
+		const contextUsage = this.ctx.getContextUsage()
+		const pct = contextUsage?.percent ?? 0
 
-		const segments: string[] = []
+		const filled = Math.max(0, Math.min(BAR_WIDTH, Math.round((pct / 100) * BAR_WIDTH)))
+		const bar = this.theme.fg("success", "█".repeat(filled)) + this.dim("░".repeat(BAR_WIDTH - filled))
+		const pctColor = pct > 90 ? "error" : pct > 70 ? "warning" : undefined
+		const pctStr = pctColor ? this.theme.fg(pctColor, `${Math.round(pct)}%`) : teal(`${Math.round(pct)}%`)
+		return seg(`${bar} ${pctStr} ${this.dim("ctx")}`)
+	}
 
-		const modelName = ctx.model?.id ?? "no-model"
-		segments.push(teal(modelName))
+	private phaseSegment(): FooterSegment {
+		const phase = getCurrentPhase() ?? "n/a"
+		return seg(`${this.dim("phase:")}${teal(phase)}`)
+	}
 
-		const subagentCount = getActiveSubagentCount()
-		if (subagentCount > 0) {
-			segments.push(teal(`${subagentCount} subagent${subagentCount === 1 ? "" : "s"}`))
-		}
+	private tagsSegment(parsed: Array<{ key: string; value: string }>): FooterSegment | null {
+		const display = parsed.filter((t) => t.key !== "team" && t.key !== "phase")
+		if (display.length === 0) return null
+		const formatted = display.map((t) => this.dim(`${t.key}:${t.value}`)).join(this.dim(" "))
+		return seg(`${this.dim("tags:")}${formatted}`)
+	}
 
-		const filled = Math.max(0, Math.min(BAR_WIDTH, Math.round((contextPercent / 100) * BAR_WIDTH)))
-		const bar = theme.fg("success", "█".repeat(filled)) + dim("░".repeat(BAR_WIDTH - filled))
-		const percentStr =
-			contextPercent > 90
-				? theme.fg("error", `${Math.round(contextPercent)}%`)
-				: contextPercent > 70
-					? theme.fg("warning", `${Math.round(contextPercent)}%`)
-					: teal(`${Math.round(contextPercent)}%`)
-		segments.push(`${bar} ${percentStr} ${dim("ctx")}`)
+	private teamSegment(parsed: Array<{ key: string; value: string }>): FooterSegment | null {
+		const team = parsed.find((t) => t.key === "team")
+		if (!team) return null
+		return seg(`${this.dim("team:")}${teal(team.value)}`)
+	}
 
-		if (totalInput || totalOutput) {
-			const tokens = [
-				totalInput ? `↑${formatCount(totalInput)}` : "",
-				totalOutput ? `↓${formatCount(totalOutput)}` : "",
-			]
-				.filter(Boolean)
-				.join(" ")
-			segments.push(dim(tokens))
-		}
+	private subagentSegment(): FooterSegment | null {
+		const count = getActiveSubagentCount()
+		if (count === 0) return null
+		return seg(teal(`${count} subagent${count === 1 ? "" : "s"}`))
+	}
 
-		const sep = ` ${dim("·")} `
-		const left = segments.join(sep)
+	render(width: number): string[] {
+		const tags = getActiveTags()
+			.map(parseTag)
+			.filter((t): t is { key: string; value: string } => t !== null)
+
+		const segments = [
+			this.sessionSegment(),
+			this.modelSegment(),
+			this.subagentSegment(),
+			this.usageSegment(),
+			this.contextSegment(),
+			this.phaseSegment(),
+			this.tagsSegment(tags),
+			this.teamSegment(tags),
+		].filter((s): s is FooterSegment => s !== null)
+
+		const sep = ` ${this.dim("·")} `
+		const left = segments.map((s) => s.text).join(sep)
 		const leftWidth = visibleWidth(left)
 
-		const hint = dim("/ for commands")
+		const hint = this.dim("/ for commands")
 		const hintWidth = visibleWidth(hint)
 
 		let line: string
 		if (leftWidth + 2 + hintWidth <= width) {
-			line = left + " ".repeat(width - leftWidth - hintWidth) + hint
+			line = `${left}${" ".repeat(width - leftWidth - hintWidth)}${hint}`
 		} else {
 			line = truncateToWidth(left, width)
 		}

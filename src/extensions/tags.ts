@@ -432,8 +432,19 @@ const SetPhaseParams = Type.Object({
 
 // ─── Extension entry point ─────────────────────────────────────────────────────
 
+let tagManagerInstance: TagManager | undefined
+
+export function getCurrentPhase(): string | undefined {
+	return tagManagerInstance?.getPhase()
+}
+
+export function getActiveTags(): string[] {
+	return tagManagerInstance?.getAllTags() ?? []
+}
+
 export default function tagsExtension(pi: ExtensionAPI) {
 	const tagManager = new TagManager()
+	tagManagerInstance = tagManager
 
 	// Register the /tags command
 	pi.registerCommand("tags", {
