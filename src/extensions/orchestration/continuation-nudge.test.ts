@@ -1,7 +1,11 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core"
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@mariozechner/pi-ai"
 import { describe, expect, it } from "vitest"
-import { ContinuationNudge, EMPTY_TURN_NUDGE_TEXT, buildEmptyTurnNudgedMessages } from "./continuation-nudge.js"
+import {
+	ContinuationNudge,
+	EMPTY_TURN_NUDGE_TEXT,
+	type OrchestratorMessages,
+	buildEmptyTurnNudgedMessages,
+} from "./continuation-nudge.js"
 
 function makeAssistant(content: AssistantMessage["content"]): AssistantMessage {
 	return {
@@ -138,7 +142,7 @@ function makeToolResult(toolCallId: string, text: string): ToolResultMessage {
 	}
 }
 
-function lastMessage(messages: AgentMessage[]): AgentMessage {
+function lastMessage(messages: OrchestratorMessages): OrchestratorMessages[number] {
 	return messages[messages.length - 1]
 }
 
@@ -148,32 +152,32 @@ describe("buildEmptyTurnNudgedMessages", () => {
 	})
 
 	it("returns undefined when the last assistant message has text", () => {
-		const messages: AgentMessage[] = [makeUser("q"), textOnlyMessage]
+		const messages: OrchestratorMessages = [makeUser("q"), textOnlyMessage]
 		expect(buildEmptyTurnNudgedMessages(messages)).toBeUndefined()
 	})
 
 	it("returns undefined when the last assistant message has both text and a tool call", () => {
-		const messages: AgentMessage[] = [makeUser("q"), textAndToolCallMessage, makeToolResult("call_2", "ok")]
+		const messages: OrchestratorMessages = [makeUser("q"), textAndToolCallMessage, makeToolResult("call_2", "ok")]
 		expect(buildEmptyTurnNudgedMessages(messages)).toBeUndefined()
 	})
 
 	it("returns undefined when tool calls are present but no tool results have arrived yet", () => {
-		const messages: AgentMessage[] = [makeUser("q"), toolCallMessage]
+		const messages: OrchestratorMessages = [makeUser("q"), toolCallMessage]
 		expect(buildEmptyTurnNudgedMessages(messages)).toBeUndefined()
 	})
 
 	it("appends a user-role nudge when tool-call-only assistant is followed by tool results", () => {
-		const messages: AgentMessage[] = [makeUser("q"), toolCallMessage, makeToolResult("call_1", "done")]
+		const messages: OrchestratorMessages = [makeUser("q"), toolCallMessage, makeToolResult("call_1", "done")]
 		const nudged = buildEmptyTurnNudgedMessages(messages)
 		expect(nudged).toBeDefined()
 		expect(nudged?.length).toBe(messages.length + 1)
-		const appended = lastMessage(nudged as AgentMessage[])
+		const appended = lastMessage(nudged as OrchestratorMessages)
 		expect(appended.role).toBe("user")
 		expect((appended as UserMessage).content).toEqual([{ type: "text", text: EMPTY_TURN_NUDGE_TEXT }])
 	})
 
 	it("does not mutate the caller's messages array", () => {
-		const messages: AgentMessage[] = [makeUser("q"), toolCallMessage, makeToolResult("call_1", "done")]
+		const messages: OrchestratorMessages = [makeUser("q"), toolCallMessage, makeToolResult("call_1", "done")]
 		const originalLength = messages.length
 		buildEmptyTurnNudgedMessages(messages)
 		expect(messages.length).toBe(originalLength)
@@ -181,7 +185,7 @@ describe("buildEmptyTurnNudgedMessages", () => {
 
 	it("uses the most recent assistant message (ignores older ones)", () => {
 		// An earlier text-only assistant turn should not disqualify a later tool-call-only drift.
-		const messages: AgentMessage[] = [
+		const messages: OrchestratorMessages = [
 			makeUser("q1"),
 			textOnlyMessage,
 			makeUser("q2"),

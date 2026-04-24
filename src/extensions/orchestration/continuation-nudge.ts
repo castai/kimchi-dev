@@ -20,8 +20,16 @@
  * `prompt-enrichment.ts` inside the `if (!subagentMode)` guard.
  */
 
-import type { AgentMessage } from "@mariozechner/pi-agent-core"
 import type { AssistantMessage } from "@mariozechner/pi-ai"
+import type { ContextEvent } from "@mariozechner/pi-coding-agent"
+
+/**
+ * Message-array shape passed through `context` events. Derived from
+ * `ContextEvent` because `AgentMessage` lives in `@mariozechner/pi-agent-core`,
+ * which is only a transitive dep — importing it directly works under npm's
+ * flat install but breaks under pnpm's strict resolution (and thus CI).
+ */
+export type OrchestratorMessages = ContextEvent["messages"]
 
 export const CONTINUATION_NUDGE_TEXT =
 	"You ended your turn without calling a tool. If the task is complete, reply with a brief summary. Otherwise, call the appropriate tool now — for any delegated pipeline step, that means invoking the `subagent` tool immediately."
@@ -73,7 +81,7 @@ export class ContinuationNudge {
  * Stateless by design — every decision is computable from the messages array
  * alone, which also makes it trivial to unit test.
  */
-export function buildEmptyTurnNudgedMessages(messages: AgentMessage[]): AgentMessage[] | undefined {
+export function buildEmptyTurnNudgedMessages(messages: OrchestratorMessages): OrchestratorMessages | undefined {
 	const lastAssistant = [...messages].reverse().find((m): m is AssistantMessage => m.role === "assistant")
 	if (!lastAssistant) return undefined
 
