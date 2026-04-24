@@ -18,3 +18,9 @@ export const ANSI = {
 	accent: "38;2;138;190;183",
 	dim: tc("102;102;102", "242"),
 }
+
+import { truncateToWidth } from "@mariozechner/pi-tui"
+
+export function clampLines(lines: string[], width: number): string[] {
+	return lines.map((line) => truncateToWidth(line, width))
+}

@@ -1,6 +1,7 @@
 import type { Theme } from "@mariozechner/pi-coding-agent"
 import type { Component } from "@mariozechner/pi-tui"
 import { visibleWidth } from "@mariozechner/pi-tui"
+import { clampLines } from "../ansi.js"
 import { buildLogoLines, buildPathLine, buildVersionLine } from "./logo-art.js"
 import { splashTopPadding } from "./splash-layout.js"
 
@@ -38,6 +39,6 @@ export class SplashHeader implements Component {
 		result.push(`${" ".repeat(Math.max(0, Math.floor((width - versionWidth) / 2)))}${versionLine}`)
 		result.push(`${" ".repeat(Math.max(0, Math.floor((width - pathWidth) / 2)))}${pathLine}`)
 
-		return result
+		return clampLines(result, width)
 	}
 }

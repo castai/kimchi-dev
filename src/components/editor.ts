@@ -2,7 +2,7 @@ import { CustomEditor, type Theme } from "@mariozechner/pi-coding-agent"
 import type { KeybindingsManager } from "@mariozechner/pi-coding-agent"
 import type { EditorTheme, TUI } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
-import { RST_FG, TEAL_FG } from "../ansi.js"
+import { RST_FG, TEAL_FG, clampLines } from "../ansi.js"
 import { splashTopPadding } from "./splash-layout.js"
 
 const CHEVRON_WIDTH = 2
@@ -94,6 +94,6 @@ export class PromptEditor extends CustomEditor {
 			for (let i = 0; i < bottomPad; i++) result.push("")
 		}
 
-		return result
+		return clampLines(result, width)
 	}
 }
