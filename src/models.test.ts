@@ -260,4 +260,21 @@ describe("updateModelsConfig", () => {
 
 		expect(existsSync(nestedPath)).toBe(true)
 	})
+
+	it("writes default models silently when apiKey is empty", async () => {
+		const result = await updateModelsConfig(modelsJsonPath, "")
+
+		expect(result).toEqual({
+			source: "default",
+			models: ["kimi-k2.5", "glm-5-fp8", "minimax-m2.7"],
+		})
+		expect(fetch).not.toHaveBeenCalled()
+		expect(existsSync(modelsJsonPath)).toBe(true)
+		const config = JSON.parse(readFileSync(modelsJsonPath, "utf-8"))
+		expect(config.providers["kimchi-dev"].models.map((m: { id: string }) => m.id)).toEqual([
+			"kimi-k2.5",
+			"glm-5-fp8",
+			"minimax-m2.7",
+		])
+	})
 })

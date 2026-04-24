@@ -215,22 +215,16 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 	}
 
 	const fileKey = readApiKeyFromConfigFile(configPath)
-	if (fileKey) {
-		return {
-			apiKey: fileKey,
-			agentConfigDir: AGENT_CONFIG_DIR,
-			llmEndpoint: CAST_AI_LLM_ENDPOINT,
-			maxToolResultChars,
-			mcpSearchLimit,
-			mcpSearch,
-			skillPaths,
-			migrationState,
-		}
+	return {
+		apiKey: fileKey ?? "",
+		agentConfigDir: AGENT_CONFIG_DIR,
+		llmEndpoint: CAST_AI_LLM_ENDPOINT,
+		maxToolResultChars,
+		mcpSearchLimit,
+		mcpSearch,
+		skillPaths,
+		migrationState,
 	}
-
-	throw new Error(
-		"No Kimchi API key found. Set the KIMCHI_API_KEY environment variable or log in with the kimchi CLI (`kimchi auth login`).",
-	)
 }
 
 export function getAgentConfigDir(): string {
@@ -257,4 +251,8 @@ export function writeMigrationState(state: MigrationState, configPath?: string):
 
 export function writeSkillPaths(paths: string[], configPath?: string): void {
 	writeConfigField("skillPaths", paths, configPath ?? KIMCHI_CONFIG_PATH)
+}
+
+export function writeApiKey(key: string, configPath?: string): void {
+	writeConfigField("api_key", key, configPath ?? KIMCHI_CONFIG_PATH)
 }
