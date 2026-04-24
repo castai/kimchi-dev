@@ -252,7 +252,7 @@ function formatTagsForFooter(tags: string[], theme: Theme, phase: Phase | undefi
 
 	// Phase indicator (if set)
 	if (phase) {
-		statusParts.push(theme.fg("success", `↳ ${phase}`))
+		statusParts.push(theme.fg("dim", "phase: ") + theme.fg("success", phase))
 	}
 
 	// Tags indicator

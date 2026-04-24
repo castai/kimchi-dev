@@ -11,6 +11,8 @@ import bashCollapseExtension from "./extensions/bash-collapse.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
+import permissionsExtension from "./extensions/permissions/index.js"
+import { reserveShiftTabForPermissions } from "./extensions/permissions/keybindings.js"
 import promptSummaryExtension from "./extensions/prompt-summary.js"
 import subagentExtension from "./extensions/subagent.js"
 import tagsExtension from "./extensions/tags.js"
@@ -107,6 +109,10 @@ try {
 		console.error(`Warning: using default models (${modelsResult.error})`)
 	}
 
+	// Must run before main() so the keybindings file is loaded with the
+	// override in place.
+	reserveShiftTabForPermissions(agentDir)
+
 	// Share the discovered model IDs with extensions before main() runs.
 	// prompt-enrichment reads this to build ModelRegistry with live model IDs.
 	setAvailableModelIds(modelsResult.models)
@@ -150,6 +156,7 @@ try {
 		bashCollapseExtension,
 		loopGuardExtension,
 		mcpAdapterExtension,
+		permissionsExtension,
 		promptEnrichmentExtension(skillPaths),
 		promptSummaryExtension,
 		uiExtension,

@@ -41,11 +41,14 @@ export class StatsFooter implements Component {
 		const contextPercent = contextUsage?.percent ?? 0
 
 		const segments: string[] = []
+		const statuses = footerData.getExtensionStatuses()
+
+		const permissionsMode = footerData.getExtensionStatuses().get("permissions-mode")
+		if (permissionsMode) segments.push(permissionsMode)
 
 		const modelName = ctx.model?.id ?? "no-model"
 		segments.push(teal(modelName))
 
-		const statuses = footerData.getExtensionStatuses()
 		const subagentStatus = statuses.get("subagent-sessions")
 		if (subagentStatus) {
 			const match = subagentStatus.match(/\[(\d+)\]/)
