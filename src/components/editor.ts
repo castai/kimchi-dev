@@ -87,6 +87,11 @@ export class PromptEditor extends CustomEditor {
 		}
 
 		if (this._splashMode) {
+			const hintText = this.appTheme.fg("muted", "Ctrl + p Agents")
+			const hintWidth = visibleWidth(hintText)
+			const hintLine = pad + " ".repeat(Math.max(0, innerWidth - hintWidth)) + hintText
+			result.push(hintLine)
+
 			const termRows = process.stdout.rows ?? 24
 			const headerLines = splashTopPadding() + 7
 			const used = headerLines + 1 + result.length + 1
