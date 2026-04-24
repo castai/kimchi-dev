@@ -59,7 +59,7 @@ JSON files, merged in this order (later layers override `defaultMode`; `allow`/`
 1. `~/.config/kimchi/harness/permissions.json` (user)
 2. `<cwd>/.kimchi/permissions.json` (project)
 3. `<cwd>/.kimchi/permissions.local.json` (local, usually gitignored)
-4. `--permissions-config <path>` **replaces** the merged config entirely.
+4. `--permissions-config <path>` **replaces** the merged file config (user + project + local). `--allow-tool` / `--deny-tool` still layer on top as session rules under the `cli` source.
 
 Schema:
 
@@ -99,9 +99,9 @@ Evaluated in source order (highest first): **session > cli > local > project > u
 ## CLI flags
 
 - `--plan` / `--auto` — start in that mode.
-- `--permissions-config <path>` — override all config files.
-- `--allow-tool "<rule>,<rule>,..."` — session allow rules.
-- `--deny-tool "<rule>,<rule>,..."` — session deny rules.
+- `--permissions-config <path>` — replace the file config (user + project + local) with a single file.
+- `--allow-tool "<rule>,<rule>,..."` — session allow rules (layer on top of `--permissions-config`).
+- `--deny-tool "<rule>,<rule>,..."` — session deny rules (layer on top of `--permissions-config`).
 
 ## Env vars
 

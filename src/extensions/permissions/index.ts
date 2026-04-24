@@ -8,7 +8,16 @@ import planModeSupplement from "./prompts/plan-mode-supplement.js"
 import { evaluateRules, parseRules, stringifyRule } from "./rules.js"
 import { SessionMemory } from "./session-memory.js"
 import { isReadOnlyBashCommand, isReadOnlyTool } from "./taxonomy.js"
-import { BUILTIN_DENY, type PermissionMode, type Rule } from "./types.js"
+import { BUILTIN_DENY, DEFAULT_CONFIG, type PermissionMode, type Rule } from "./types.js"
+
+// Safe default so any event that fires before session_start (and therefore
+// before doLoadConfig) doesn't crash reading `loaded.config.*`.
+const EMPTY_LOADED_CONFIG: LoadedConfig = {
+	config: DEFAULT_CONFIG,
+	allowBySource: { user: [], project: [], local: [], cli: [] },
+	denyBySource: { user: [], project: [], local: [], cli: [] },
+	paths: {},
+}
 
 // bash is allowed but gated per-command by isReadOnlyBashCommand.
 const PLAN_MODE_TOOLS = ["read", "grep", "find", "ls", "web_search", "web_fetch", "questionnaire", "bash"]
@@ -56,7 +65,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	// Snapshot env before propagateModeToEnv overwrites it; otherwise
 	// currentMode() would read its own writes and ignore flag/runtime precedence.
 	const envBaseline = process.env.KIMCHI_PERMISSIONS
-	let loaded: LoadedConfig
+	let loaded: LoadedConfig = EMPTY_LOADED_CONFIG
 	let configRules: Rule[] = []
 	let runtimeMode: PermissionMode | undefined
 	let cliMode: PermissionMode | undefined
