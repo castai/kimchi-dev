@@ -26,6 +26,7 @@ import type { AssistantMessage, ImageContent, TextContent } from "@mariozechner/
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
 import { ANSI, fg } from "../../ansi.js"
 import { getAvailableModelIds } from "../../startup-context.js"
+import { CONTINUATION_NUDGE_TEXT, ContinuationNudge } from "./continuation-nudge.js"
 import { ModelRegistry } from "./model-registry/index.js"
 import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/context-files.js"
 import {
@@ -73,6 +74,34 @@ export default function (skillPaths: string[]) {
 					`${fg(ANSI.accent, ` New model available: "kimchi-dev/${warning.modelId}"`)}\n${fg(ANSI.dim, " Update the app or add the new model to model capabilities config to unlock orchestration support.")}`,
 				)
 			}
+
+			// Detect the inverse of the context-event nudge below: the orchestrator reasons
+			// in prose, announces it will delegate, and ends its turn without emitting the
+			// `subagent` tool call. The agent loop would otherwise exit and wait for another
+			// user prompt. Nudge once per user-input cycle, and only when no tool has fired
+			// that cycle — so genuine end-of-task summaries are left alone. Mirrors AISI
+			// Inspect's `on_continue`.
+			//
+			// The reset handler is registered BEFORE the enrichment handler below because
+			// that one returns `{action: "handled"}` in interactive mode, which short-
+			// circuits the input-handler chain.
+			const continuationNudge = new ContinuationNudge()
+
+			pi.on("input", async (event) => {
+				if (event.source === "extension") return
+				continuationNudge.resetForNewUserInput()
+			})
+
+			pi.on("tool_execution_start", async () => {
+				continuationNudge.recordToolCall()
+			})
+
+			pi.on("turn_end", async (event) => {
+				if (event.message.role !== "assistant") return
+				const { shouldNudge } = continuationNudge.evaluateTurn(event.message)
+				if (!shouldNudge) return
+				pi.sendUserMessage(CONTINUATION_NUDGE_TEXT)
+			})
 
 			pi.on("input", async (event, ctx) => {
 				if (event.source === "extension") {
