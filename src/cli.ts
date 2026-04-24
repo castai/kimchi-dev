@@ -147,17 +147,15 @@ try {
 	// Suppress Node.js warnings (same as pi-mono's own cli.js)
 	process.emitWarning = () => {}
 
-	// Set up HTTP proxy support with User-Agent injection
-	const { EnvHttpProxyAgent, setGlobalDispatcher } = await import("undici")
 	const userAgent = `kimchi/${getVersion()}`
-	const agent = new EnvHttpProxyAgent()
-	setGlobalDispatcher(
-		agent.compose((dispatch) => (opts, handler) => {
-			const headers = new Headers((opts.headers ?? undefined) as HeadersInit)
+	const originalFetch = globalThis.fetch.bind(globalThis)
+	globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+		const headers = new Headers(init?.headers)
+		if (!headers.has("user-agent")) {
 			headers.set("user-agent", userAgent)
-			return dispatch({ ...opts, headers: Object.fromEntries(headers) }, handler)
-		}),
-	)
+		}
+		return originalFetch(input, { ...init, headers })
+	}
 
 	const extensionFactories = [
 		sessionIdCaptureExtension,
