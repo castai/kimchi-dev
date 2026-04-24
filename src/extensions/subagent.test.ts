@@ -1,8 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { buildSubagentArgs, parseSubagentEvent, validateAttachments } from "./subagent.js"
+import { CURRENT_SESSION_VERSION } from "@mariozechner/pi-coding-agent"
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { buildSubagentArgs, parseSubagentEvent, prepareChildSessionFile, validateAttachments } from "./subagent.js"
 
 describe("parseSubagentEvent", () => {
 	const cases: Record<
@@ -255,13 +256,14 @@ describe("buildSubagentArgs", () => {
 		expect(args.some((a) => a.startsWith("@"))).toBe(false)
 	})
 
-	it("places attachments after extensionArgs and before prompt", () => {
-		const args = buildSubagentArgs(base, ["/abs/a.png", "/abs/b.txt"], ["-e", "ext-one"])
+	it("emits --session <path> and places attachments after extensionArgs and before prompt when a childSessionFile is provided", () => {
+		const args = buildSubagentArgs(base, ["/abs/a.png", "/abs/b.txt"], ["-e", "ext-one"], "/abs/sessions/child.jsonl")
 		expect(args).toEqual([
 			"--mode",
 			"json",
 			"-p",
-			"--no-session",
+			"--session",
+			"/abs/sessions/child.jsonl",
 			"--provider",
 			"kimchi-dev",
 			"--model",
@@ -274,10 +276,96 @@ describe("buildSubagentArgs", () => {
 		])
 	})
 
+	it("falls back to --no-session when childSessionFile is omitted (in-memory parent case)", () => {
+		const args = buildSubagentArgs(base, [], [])
+		expect(args).toContain("--no-session")
+		expect(args).not.toContain("--session")
+	})
+
 	it("passes absolute paths straight through with a single @ prefix", () => {
 		const abs = resolve("/tmp/img.png")
 		const args = buildSubagentArgs(base, [abs], [])
 		expect(args).toContain(`@${abs}`)
 		expect(args.some((a) => a.startsWith("@@"))).toBe(false)
+	})
+})
+
+describe("prepareChildSessionFile", () => {
+	let tmp: string
+
+	beforeEach(() => {
+		tmp = mkdtempSync(join(tmpdir(), "subagent-prewrite-"))
+	})
+	afterEach(() => {
+		rmSync(tmp, { recursive: true, force: true })
+	})
+
+	it("returns undefined when the parent session file is undefined (in-memory parent)", () => {
+		expect(prepareChildSessionFile(tmp, undefined, "/some/cwd")).toBeUndefined()
+	})
+
+	it("returns undefined when the parent session dir is empty", () => {
+		expect(prepareChildSessionFile("", "/abs/parent.jsonl", "/some/cwd")).toBeUndefined()
+	})
+
+	it("writes a header-only file with correct fields and schema version", () => {
+		const parentFile = join(tmp, "parent.jsonl")
+		const fixedId = "01928374-5565-7abc-8def-123456789abc"
+		const fixedTs = new Date("2026-04-24T10:20:30.400Z")
+
+		const prepared = prepareChildSessionFile(
+			tmp,
+			parentFile,
+			"/work/dir",
+			undefined,
+			() => fixedId,
+			() => fixedTs,
+		)
+
+		expect(prepared).toBeDefined()
+		expect(prepared?.sessionId).toBe(fixedId)
+		// Filename pattern: <ISO-with-colons-and-dots-replaced>_<uuid>.jsonl in the parent session dir.
+		expect(prepared?.childSessionFile).toBe(join(tmp, `2026-04-24T10-20-30-400Z_${fixedId}.jsonl`))
+
+		const contents = readFileSync(prepared?.childSessionFile ?? "", "utf-8")
+		expect(contents.endsWith("\n")).toBe(true)
+		const lines = contents.trimEnd().split("\n")
+		expect(lines).toHaveLength(1)
+
+		const header = JSON.parse(lines[0]) as Record<string, unknown>
+		expect(header).toEqual({
+			type: "session",
+			version: CURRENT_SESSION_VERSION,
+			id: fixedId,
+			timestamp: fixedTs.toISOString(),
+			cwd: "/work/dir",
+			parentSession: parentFile,
+		})
+	})
+
+	it("writes the header file with 0o600 permissions", () => {
+		const parentFile = join(tmp, "parent.jsonl")
+		const prepared = prepareChildSessionFile(tmp, parentFile, "/work/dir")
+
+		// Ensure the prepared path actually landed in the parent dir.
+		expect(prepared?.childSessionFile.startsWith(tmp)).toBe(true)
+		const mode = statSync(prepared?.childSessionFile ?? "").mode & 0o777
+		expect(mode).toBe(0o600)
+	})
+
+	it("propagates I/O errors (e.g. non-existent parent dir) so callers can surface them", () => {
+		const missingDir = join(tmp, "does-not-exist")
+		const parentFile = join(missingDir, "parent.jsonl")
+		expect(() => prepareChildSessionFile(missingDir, parentFile, "/work/dir")).toThrow()
+	})
+
+	it("uses real uuidv7 by default and produces a distinct session per call", () => {
+		const parentFile = join(tmp, "parent.jsonl")
+		const a = prepareChildSessionFile(tmp, parentFile, "/work/dir")
+		const b = prepareChildSessionFile(tmp, parentFile, "/work/dir")
+		expect(a?.sessionId).toBeTruthy()
+		expect(b?.sessionId).toBeTruthy()
+		expect(a?.sessionId).not.toBe(b?.sessionId)
+		expect(a?.childSessionFile).not.toBe(b?.childSessionFile)
 	})
 })

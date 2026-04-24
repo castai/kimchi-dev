@@ -200,6 +200,37 @@ export function buildSubagentArgs(
 	]
 }
 
+export interface PreparedChildSession {
+	sessionId: string
+	childSessionFile: string
+}
+
+/** Pre-writes a header-only .jsonl session file for a subagent child so pi-mono's `--session <path>` opens it and preserves the back-reference to the parent. Returns undefined when the parent has no persistent session to link to (in-memory / --no-session parent, or empty session dir). Throws on I/O errors so callers can surface them as subagent failures. Exposed for testing. */
+export function prepareChildSessionFile(
+	parentSessionDir: string,
+	parentSessionFile: string | undefined,
+	cwd: string,
+	writeFile: (path: string, data: string, mode: number) => void = (p, d, m) => writeFileSync(p, d, { mode: m }),
+	generateId: () => string = uuidv7,
+	now: () => Date = () => new Date(),
+): PreparedChildSession | undefined {
+	// Parent is in-memory (--no-session) or has no resolvable session dir: there's nothing to back-reference, so skip the pre-write and let the child run with --no-session too. No broken links, no orphan files.
+	if (parentSessionFile === undefined || parentSessionDir.length === 0) return undefined
+	const sessionId = generateId()
+	const timestamp = now().toISOString()
+	const childSessionFile = join(parentSessionDir, `${timestamp.replace(/[:.]/g, "-")}_${sessionId}.jsonl`)
+	const header: SessionHeader = {
+		type: "session",
+		version: CURRENT_SESSION_VERSION,
+		id: sessionId,
+		timestamp,
+		cwd,
+		parentSession: parentSessionFile,
+	}
+	writeFile(childSessionFile, `${JSON.stringify(header)}\n`, 0o600)
+	return { sessionId, childSessionFile }
+}
+
 function getSubagentInvocation(args: string[]): { command: string; args: string[] } {
 	// Bun single-file binary: process.execPath IS the self-contained binary and the entry script is baked in, so we spawn with just the CLI args. Do NOT prepend process.argv[1] — it's a virtual /$bunfs/... path that only exists inside this process's embedded filesystem, and the child would either error or misread it as a positional arg.
 	if (isBunBinary) {
@@ -547,39 +578,28 @@ export default function (pi: ExtensionAPI) {
 			}
 			const parentSessionDir = ctx.sessionManager.getSessionDir()
 			const parentSessionFile = ctx.sessionManager.getSessionFile()
-			// Parent is in-memory (--no-session) or has no resolvable session dir: there's nothing to back-reference, so skip the pre-write and let the child run with --no-session too. No broken links, no orphan files.
-			const canPersistChild = parentSessionFile !== undefined && parentSessionDir.length > 0
 			let sessionId: string | undefined
 			let childSessionFile: string | undefined
-			if (canPersistChild) {
-				sessionId = uuidv7()
-				const timestamp = new Date().toISOString()
-				childSessionFile = join(parentSessionDir, `${timestamp.replace(/[:.]/g, "-")}_${sessionId}.jsonl`)
-				const header: SessionHeader = {
-					type: "session",
-					version: CURRENT_SESSION_VERSION,
-					id: sessionId,
-					timestamp,
-					cwd: ctx.cwd,
-					parentSession: parentSessionFile,
+			try {
+				const prepared = prepareChildSessionFile(parentSessionDir, parentSessionFile, ctx.cwd)
+				if (prepared) {
+					sessionId = prepared.sessionId
+					childSessionFile = prepared.childSessionFile
 				}
-				try {
-					writeFileSync(childSessionFile, `${JSON.stringify(header)}\n`, { mode: 0o600 })
-				} catch (err) {
-					const detail = err instanceof Error ? err.message : String(err)
-					const zeroUsage: SubagentTokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-					const error: SubagentError = {
-						reason: "exit_error",
-						model: params.model,
-						tokenUsage: zeroUsage,
-						durationMs: 0,
-						detail: `Failed to pre-write subagent session file at ${childSessionFile}: ${detail}`,
-					}
-					return {
-						content: [{ type: "text", text: JSON.stringify(error) }],
-						details: { durationMs: 0, tokenUsage: zeroUsage },
-						isError: true,
-					}
+			} catch (err) {
+				const detail = err instanceof Error ? err.message : String(err)
+				const zeroUsage: SubagentTokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+				const error: SubagentError = {
+					reason: "exit_error",
+					model: params.model,
+					tokenUsage: zeroUsage,
+					durationMs: 0,
+					detail: `Failed to pre-write subagent session file under ${parentSessionDir}: ${detail}`,
+				}
+				return {
+					content: [{ type: "text", text: JSON.stringify(error) }],
+					details: { durationMs: 0, tokenUsage: zeroUsage },
+					isError: true,
 				}
 			}
 
