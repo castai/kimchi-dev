@@ -130,6 +130,8 @@ async function sendLog(
 	}
 }
 
+const TELEMETRY_DRAIN_TIMEOUT_MS = 5_000
+
 // ---------------------------------------------------------------------------
 // Extension
 // ---------------------------------------------------------------------------
@@ -142,12 +144,33 @@ export default function telemetryExtension(config: TelemetryConfig) {
 		let sessionStartMs = Date.now()
 		const sentMessages = new Set<string>()
 		const pendingArgs = new Map<string, { toolName: string; args: unknown }>()
+		const inFlight = new Set<Promise<void>>()
+		let shuttingDown = false
+
+		function track(p: Promise<void>): void {
+			if (shuttingDown) return
+			inFlight.add(p)
+			p.finally(() => inFlight.delete(p))
+		}
 
 		pi.on("session_start", async () => {
 			sessionId = crypto.randomUUID()
 			sessionStartMs = Date.now()
 			sentMessages.clear()
 			pendingArgs.clear()
+			shuttingDown = false
+		})
+
+		pi.on("session_shutdown", async () => {
+			shuttingDown = true
+			if (inFlight.size === 0) return
+			const drain = Promise.allSettled([...inFlight])
+			let timer: NodeJS.Timeout | undefined
+			const timeout = new Promise<void>((resolve) => {
+				timer = setTimeout(resolve, TELEMETRY_DRAIN_TIMEOUT_MS)
+			})
+			await Promise.race([drain, timeout])
+			clearTimeout(timer)
 		})
 
 		pi.on("message_end", async (event) => {
@@ -166,16 +189,18 @@ export default function telemetryExtension(config: TelemetryConfig) {
 				const costTotal = assistant.usage.cost.total
 				const sessionUptimeMs = Date.now() - sessionStartMs
 
-				void sendLog(config, sessionId, "api_request", {
-					model,
-					provider,
-					input_tokens: input,
-					output_tokens: output,
-					cache_read_tokens: cacheRead,
-					cache_creation_tokens: cacheWrite,
-					cost_usd: costTotal,
-					session_uptime_ms: sessionUptimeMs,
-				})
+				track(
+					sendLog(config, sessionId, "api_request", {
+						model,
+						provider,
+						input_tokens: input,
+						output_tokens: output,
+						cache_read_tokens: cacheRead,
+						cache_creation_tokens: cacheWrite,
+						cost_usd: costTotal,
+						session_uptime_ms: sessionUptimeMs,
+					}),
+				)
 			} catch (err) {
 				console.error("[telemetry] message_end handler error:", err)
 			}
@@ -195,10 +220,10 @@ export default function telemetryExtension(config: TelemetryConfig) {
 			if (toolName === "bash") {
 				const command = String(args?.command ?? "")
 				if (/git\s+commit\b/.test(command) && !/--dry-run/.test(command)) {
-					void sendLog(config, sessionId, "tool_usage", { tool: "bash", action: "git_commit" })
+					track(sendLog(config, sessionId, "tool_usage", { tool: "bash", action: "git_commit" }))
 				}
 				if (/gh\s+pr\s+create\b/.test(command)) {
-					void sendLog(config, sessionId, "tool_usage", { tool: "bash", action: "gh_pr_create" })
+					track(sendLog(config, sessionId, "tool_usage", { tool: "bash", action: "gh_pr_create" }))
 				}
 			}
 
@@ -206,12 +231,14 @@ export default function telemetryExtension(config: TelemetryConfig) {
 				const filePath = String(args?.filePath ?? "")
 				const language = inferLanguage(filePath)
 				const changes = countLineChanges(String(args?.oldString ?? ""), String(args?.newString ?? ""))
-				void sendLog(config, sessionId, "tool_usage", {
-					tool: "edit",
-					language,
-					lines_added: changes.added,
-					lines_removed: changes.removed,
-				})
+				track(
+					sendLog(config, sessionId, "tool_usage", {
+						tool: "edit",
+						language,
+						lines_added: changes.added,
+						lines_removed: changes.removed,
+					}),
+				)
 			}
 
 			if (toolName === "write") {
@@ -219,11 +246,13 @@ export default function telemetryExtension(config: TelemetryConfig) {
 				const language = inferLanguage(filePath)
 				const content = String(args?.content ?? "")
 				const lines = content ? content.split("\n").length : 1
-				void sendLog(config, sessionId, "tool_usage", {
-					tool: "write",
-					language,
-					lines_added: lines,
-				})
+				track(
+					sendLog(config, sessionId, "tool_usage", {
+						tool: "write",
+						language,
+						lines_added: lines,
+					}),
+				)
 			}
 
 			if (toolName === "multiedit") {
@@ -234,12 +263,14 @@ export default function telemetryExtension(config: TelemetryConfig) {
 					: []
 				for (const edit of edits) {
 					const changes = countLineChanges(String(edit.oldString ?? ""), String(edit.newString ?? ""))
-					void sendLog(config, sessionId, "tool_usage", {
-						tool: "edit",
-						language,
-						lines_added: changes.added,
-						lines_removed: changes.removed,
-					})
+					track(
+						sendLog(config, sessionId, "tool_usage", {
+							tool: "edit",
+							language,
+							lines_added: changes.added,
+							lines_removed: changes.removed,
+						}),
+					)
 				}
 			}
 		})

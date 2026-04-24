@@ -72,6 +72,7 @@ export class KimchiAcpAgent implements Agent {
 	// Track non-text prompt block types we've already warned about so a
 	// misbehaving client that sends 1000 image blocks doesn't flood stderr.
 	private warnedBlockTypes = new Set<string>()
+	private shutdownPromise: Promise<void> | undefined
 
 	constructor(
 		private readonly conn: AgentSideConnection,
@@ -202,7 +203,13 @@ export class KimchiAcpAgent implements Agent {
 		await entry.session.abort()
 	}
 
-	async shutdown(): Promise<void> {
+	async shutdown(cause: "signal" | "disconnect" = "disconnect"): Promise<void> {
+		if (this.shutdownPromise) return this.shutdownPromise
+		this.shutdownPromise = this.doShutdown(cause)
+		return this.shutdownPromise
+	}
+
+	private async doShutdown(cause: "signal" | "disconnect"): Promise<void> {
 		// Drain any in-flight turn promises before tearing down the session.
 		// On the signal path we process.exit immediately so this is mostly
 		// cosmetic, but runAcpMode's finally also calls shutdown when conn.closed
@@ -211,6 +218,11 @@ export class KimchiAcpAgent implements Agent {
 		for (const entry of this.sessions.values()) {
 			if (entry.turn) this.failTurn(entry, new Error("acp agent shutting down"))
 			entry.unsubscribe()
+			// Emit session_shutdown to extensions and await all handlers before
+			// calling dispose(). dispose() is synchronous and returns void, so
+			// async extension handlers (e.g. telemetry drain, shutdown marker)
+			// would be fire-and-forgotten if we relied on dispose() alone.
+			await entry.session.extensionRunner?.emit({ type: "session_shutdown", cause } as { type: "session_shutdown" })
 			entry.session.dispose()
 		}
 		this.sessions.clear()
@@ -478,14 +490,14 @@ export async function runAcpMode(options: RunAcpOptions): Promise<void> {
 		return agentInstance
 	}, stream)
 
-	const signals: NodeJS.Signals[] = process.platform === "win32" ? ["SIGTERM"] : ["SIGTERM", "SIGHUP"]
+	const signals: NodeJS.Signals[] = process.platform === "win32" ? ["SIGTERM"] : ["SIGTERM", "SIGHUP", "SIGINT"]
 	let shuttingDown = false
 	const onSignal = (sig: NodeJS.Signals) => {
 		if (shuttingDown) return
 		shuttingDown = true
-		const code = sig === "SIGHUP" ? 129 : 143
+		const code = sig === "SIGHUP" ? 129 : sig === "SIGINT" ? 130 : 143
 		agentInstance
-			?.shutdown()
+			?.shutdown("signal")
 			.catch(() => {})
 			.finally(() => process.exit(code))
 	}
