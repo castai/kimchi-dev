@@ -6,16 +6,12 @@ import { getFolder, getGitBranch, getVersion } from "../utils.js"
 const R = "\x1b[39m"
 
 export class LogoHeader implements Component {
-	private readonly branch: string
-	private readonly folder: string
 	private readonly version: string
 	private readonly theme: Theme
 	private readonly logoLines: string[]
 
 	constructor(theme: Theme) {
 		this.theme = theme
-		this.branch = getGitBranch()
-		this.folder = getFolder()
 		this.version = getVersion()
 
 		const L = theme.getFgAnsi("accent")
@@ -31,7 +27,9 @@ export class LogoHeader implements Component {
 	invalidate(): void {}
 
 	render(width: number): string[] {
-		const { theme, branch, folder, version } = this
+		const { theme, version } = this
+		const branch = getGitBranch()
+		const folder = getFolder()
 		const dim = theme.getFgAnsi("dim")
 		const branchColor = theme.getFgAnsi("mdLink")
 

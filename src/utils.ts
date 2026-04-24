@@ -1,24 +1,25 @@
-import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 
-let cachedBranch: string | undefined
-export function resetGitBranch(): void {
-	cachedBranch = undefined
-}
 export function getGitBranch(): string {
-	if (cachedBranch !== undefined) return cachedBranch
 	try {
-		cachedBranch = execSync("git rev-parse --abbrev-ref HEAD", {
-			encoding: "utf-8",
-			stdio: ["pipe", "pipe", "pipe"],
-		}).trim()
+		let gitPath = resolve(process.cwd(), ".git")
+		let head: string
+		try {
+			head = readFileSync(resolve(gitPath, "HEAD"), "utf-8").trim()
+		} catch {
+			const gitFile = readFileSync(gitPath, "utf-8").trim()
+			if (!gitFile.startsWith("gitdir: ")) return ""
+			gitPath = resolve(process.cwd(), gitFile.slice("gitdir: ".length))
+			head = readFileSync(resolve(gitPath, "HEAD"), "utf-8").trim()
+		}
+		if (head.startsWith("ref: refs/heads/")) return head.slice("ref: refs/heads/".length)
+		return head.slice(0, 7)
 	} catch {
-		cachedBranch = ""
+		return ""
 	}
-	return cachedBranch
 }
 
 export function getFolder(): string {
