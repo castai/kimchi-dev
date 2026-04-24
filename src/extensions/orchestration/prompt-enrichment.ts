@@ -21,7 +21,7 @@
  */
 
 import { execSync } from "node:child_process"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync } from "node:fs"
 import { homedir, platform, userInfo } from "node:os"
 import { isAbsolute, join, normalize, resolve } from "node:path"
 import type { AssistantMessage, ImageContent, TextContent } from "@mariozechner/pi-ai"
@@ -66,8 +66,10 @@ function safeUsername(): string {
 
 function readGitBranch(cwd: string): string | undefined {
 	try {
-		const head = readFileSync(join(cwd, ".git", "HEAD"), "utf8").trim()
-		return head.startsWith("ref: refs/heads/") ? head.slice("ref: refs/heads/".length) : undefined
+		return (
+			execSync("git symbolic-ref --short HEAD", { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() ||
+			undefined
+		)
 	} catch {
 		return undefined
 	}
@@ -178,8 +180,14 @@ export default function (skillPaths: string[]) {
 			})
 		}
 
+		const platformNames: Record<string, string> = { darwin: "macOS", win32: "Windows" }
+		const cachedOs = platformNames[platform()] ?? platform()
+		const cachedUsername = safeUsername()
+		const cachedHomeDir = homedir()
+
 		let cachedContextFiles: ContextFile[] | undefined
 		let cachedSkills: Skill[] | undefined
+		let cachedGitRemote: string | undefined | null = null
 
 		pi.on("before_agent_start", async (_event, ctx) => {
 			const tools = pi.getAllTools()
@@ -189,19 +197,21 @@ export default function (skillPaths: string[]) {
 				skillPaths: expandSkillPaths(skillPaths, ctx.cwd),
 			}).skills
 
-			const platformNames: Record<string, string> = { darwin: "macOS", win32: "Windows" }
 			const now = new Date()
 			const isGitRepo = existsSync(join(ctx.cwd, ".git", "HEAD"))
+			if (isGitRepo && cachedGitRemote === null) {
+				cachedGitRemote = readGitRemote(ctx.cwd)
+			}
 			const env: EnvironmentInfo = {
-				os: platformNames[platform()] ?? platform(),
-				username: safeUsername(),
-				homeDir: homedir(),
+				os: cachedOs,
+				username: cachedUsername,
+				homeDir: cachedHomeDir,
 				cwd: ctx.cwd,
 				currentTime: now.toISOString(),
 				localDate: now.toLocaleDateString("en-CA"),
 				isGitRepo,
 				gitBranch: isGitRepo ? readGitBranch(ctx.cwd) : undefined,
-				gitRemote: isGitRepo ? readGitRemote(ctx.cwd) : undefined,
+				gitRemote: isGitRepo ? cachedGitRemote ?? undefined : undefined,
 			}
 
 			if (subagentMode) {
