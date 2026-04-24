@@ -132,7 +132,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		const dots = MODES.map((m) => (m.mode === mode ? theme.fg(m.color, "●") : theme.fg("muted", "○"))).join(" ")
 		const name = theme.fg(active.color, active.label)
 		const hint = theme.fg("dim", "→ shift+tab")
-		ctx.ui.setWidget("permissions-mode-widget", [`${dots}  ${name}  ${hint}`], { placement: "belowEditor" })
+		ctx.ui.setStatus("permissions-mode", `${dots} ${name} ${hint}`)
 	}
 
 	function cycleMode(ctx: ExtensionContext): void {
