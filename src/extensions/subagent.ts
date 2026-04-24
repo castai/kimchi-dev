@@ -547,18 +547,41 @@ export default function (pi: ExtensionAPI) {
 			}
 			const parentSessionDir = ctx.sessionManager.getSessionDir()
 			const parentSessionFile = ctx.sessionManager.getSessionFile()
-			const sessionId = uuidv7()
-			const timestamp = new Date().toISOString()
-			const childSessionFile = join(parentSessionDir, `${timestamp.replace(/[:.]/g, "-")}_${sessionId}.jsonl`)
-			const header: SessionHeader = {
-				type: "session",
-				version: CURRENT_SESSION_VERSION,
-				id: sessionId,
-				timestamp,
-				cwd: ctx.cwd,
-				parentSession: parentSessionFile,
+			// Parent is in-memory (--no-session) or has no resolvable session dir: there's nothing to back-reference, so skip the pre-write and let the child run with --no-session too. No broken links, no orphan files.
+			const canPersistChild = parentSessionFile !== undefined && parentSessionDir.length > 0
+			let sessionId: string | undefined
+			let childSessionFile: string | undefined
+			if (canPersistChild) {
+				sessionId = uuidv7()
+				const timestamp = new Date().toISOString()
+				childSessionFile = join(parentSessionDir, `${timestamp.replace(/[:.]/g, "-")}_${sessionId}.jsonl`)
+				const header: SessionHeader = {
+					type: "session",
+					version: CURRENT_SESSION_VERSION,
+					id: sessionId,
+					timestamp,
+					cwd: ctx.cwd,
+					parentSession: parentSessionFile,
+				}
+				try {
+					writeFileSync(childSessionFile, `${JSON.stringify(header)}\n`, { mode: 0o600 })
+				} catch (err) {
+					const detail = err instanceof Error ? err.message : String(err)
+					const zeroUsage: SubagentTokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+					const error: SubagentError = {
+						reason: "exit_error",
+						model: params.model,
+						tokenUsage: zeroUsage,
+						durationMs: 0,
+						detail: `Failed to pre-write subagent session file at ${childSessionFile}: ${detail}`,
+					}
+					return {
+						content: [{ type: "text", text: JSON.stringify(error) }],
+						details: { durationMs: 0, tokenUsage: zeroUsage },
+						isError: true,
+					}
+				}
 			}
-			writeFileSync(childSessionFile, `${JSON.stringify(header)}\n`)
 
 			const args = buildSubagentArgs(params, validated.resolved, collectExtensionArgs(), childSessionFile)
 			const invocation = getSubagentInvocation(args)
