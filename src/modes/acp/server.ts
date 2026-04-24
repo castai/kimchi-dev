@@ -72,6 +72,7 @@ export class KimchiAcpAgent implements Agent {
 	// Track non-text prompt block types we've already warned about so a
 	// misbehaving client that sends 1000 image blocks doesn't flood stderr.
 	private warnedBlockTypes = new Set<string>()
+	private shutdownPromise: Promise<void> | undefined
 
 	constructor(
 		private readonly conn: AgentSideConnection,
@@ -203,6 +204,12 @@ export class KimchiAcpAgent implements Agent {
 	}
 
 	async shutdown(): Promise<void> {
+		if (this.shutdownPromise) return this.shutdownPromise
+		this.shutdownPromise = this.doShutdown()
+		return this.shutdownPromise
+	}
+
+	private async doShutdown(): Promise<void> {
 		// Drain any in-flight turn promises before tearing down the session.
 		// On the signal path we process.exit immediately so this is mostly
 		// cosmetic, but runAcpMode's finally also calls shutdown when conn.closed

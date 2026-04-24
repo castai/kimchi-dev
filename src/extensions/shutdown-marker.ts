@@ -23,6 +23,10 @@ export class ShutdownMarker {
 		this.shutdownWritten = false
 	}
 
+	onAgentStart(): void {
+		this.agentEndWritten = false
+	}
+
 	onAgentEnd(append: AppendFn): void {
 		append(AGENT_END_ENTRY_TYPE, { timestamp: Date.now() } satisfies AgentEndData)
 		this.agentEndWritten = true
@@ -40,6 +44,10 @@ export default function shutdownMarkerExtension(pi: ExtensionAPI): void {
 
 	pi.on("session_start", () => {
 		marker.onSessionStart()
+	})
+
+	pi.on("agent_start", () => {
+		marker.onAgentStart()
 	})
 
 	pi.on("agent_end", () => {

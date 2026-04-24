@@ -105,6 +105,29 @@ describe("ShutdownMarker", () => {
 		}
 	})
 
+	describe("onAgentStart resets agentEndWritten", () => {
+		it("allows agent_terminated to be written when signal arrives mid-turn after prior agent_end", () => {
+			const marker = new ShutdownMarker()
+			const calls: Array<{ type: string; data: unknown }> = []
+			const append = (type: string, data: unknown) => calls.push({ type, data })
+
+			marker.onAgentEnd(append)
+			marker.onAgentStart()
+			marker.onSessionShutdown(append)
+
+			expect(calls).toEqual([
+				{
+					type: AGENT_END_ENTRY_TYPE,
+					data: { timestamp: FIXED_TIME } satisfies AgentEndData,
+				},
+				{
+					type: AGENT_TERMINATED_ENTRY_TYPE,
+					data: { reason: "signal", timestamp: FIXED_TIME } satisfies AgentTerminatedData,
+				},
+			])
+		})
+	})
+
 	describe("onSessionStart resets state", () => {
 		it("allows agent_terminated to be written again after session_start clears agent_end flag", () => {
 			const marker = new ShutdownMarker()

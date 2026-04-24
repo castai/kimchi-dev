@@ -165,8 +165,12 @@ export default function telemetryExtension(config: TelemetryConfig) {
 			shuttingDown = true
 			if (inFlight.size === 0) return
 			const drain = Promise.allSettled([...inFlight])
-			const timeout = new Promise<void>((resolve) => setTimeout(resolve, TELEMETRY_DRAIN_TIMEOUT_MS))
+			let timer: NodeJS.Timeout | undefined
+			const timeout = new Promise<void>((resolve) => {
+				timer = setTimeout(resolve, TELEMETRY_DRAIN_TIMEOUT_MS)
+			})
 			await Promise.race([drain, timeout])
+			clearTimeout(timer)
 		})
 
 		pi.on("message_end", async (event) => {
