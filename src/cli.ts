@@ -147,14 +147,19 @@ try {
 	// Suppress Node.js warnings (same as pi-mono's own cli.js)
 	process.emitWarning = () => {}
 
-	const userAgent = `kimchi/${getVersion()}`
-	const originalFetch = globalThis.fetch.bind(globalThis)
-	globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-		const headers = new Headers(init?.headers)
-		if (!headers.has("user-agent")) {
-			headers.set("user-agent", userAgent)
+	const fetchPatchedSymbol = Symbol.for("kimchi.fetchPatched")
+	if (!(globalThis.fetch as typeof globalThis.fetch & { [key: symbol]: boolean })[fetchPatchedSymbol]) {
+		const userAgent = `kimchi/${getVersion()}`
+		const originalFetch = globalThis.fetch.bind(globalThis)
+		const patchedFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+			const headers = new Headers(init?.headers)
+			if (!headers.has("user-agent")) {
+				headers.set("user-agent", userAgent)
+			}
+			return originalFetch(input, { ...init, headers })
 		}
-		return originalFetch(input, { ...init, headers })
+		;(patchedFetch as typeof patchedFetch & { [key: symbol]: boolean })[fetchPatchedSymbol] = true
+		globalThis.fetch = patchedFetch
 	}
 
 	const extensionFactories = [
