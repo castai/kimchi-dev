@@ -1,41 +1,23 @@
 import type { Theme } from "@mariozechner/pi-coding-agent"
 import type { Component } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
-import { getFolder, getGitBranch, getVersion } from "../utils.js"
-
-const R = "\x1b[39m"
+import { buildLogoLines, buildPathLine, buildVersionLine } from "./logo-art.js"
 
 export class LogoHeader implements Component {
-	private readonly version: string
 	private readonly theme: Theme
 	private readonly logoLines: string[]
 
 	constructor(theme: Theme) {
 		this.theme = theme
-		this.version = getVersion()
-
-		const L = theme.getFgAnsi("accent")
-		const G = theme.getFgAnsi("bashMode")
-		this.logoLines = [
-			`${G}     █▀${R}  ${L}█  █ ▀█▀ █▄ ▄█ ▄▀▀ █  █ ▀█▀${R}`,
-			`${L}    ███  █▀▄   █  █ ▀ █ █   █▀▀█  █${R}`,
-			`${L}▄  ▄███  █  █  █  █   █ █▄▄ █  █  █${R}`,
-			`${L}▀████▀   ▀  ▀ ▀▀▀ ▀   ▀  ▀▀ ▀  ▀ ▀▀▀${R}`,
-		]
+		this.logoLines = buildLogoLines(theme)
 	}
 
 	invalidate(): void {}
 
 	render(width: number): string[] {
-		const { theme, version } = this
-		const branch = getGitBranch()
-		const folder = getFolder()
-		const dim = theme.getFgAnsi("dim")
-		const branchColor = theme.getFgAnsi("mdLink")
-
-		const versionPart = `${dim}v${version}${R}`
-		const branchPart = branch ? ` ${dim}·${R} ${branchColor}${branch}${R}` : ""
-		const info = `${versionPart} ${dim}·${R} ${dim}${folder}${R}${branchPart}`
+		const versionLine = buildVersionLine(this.theme)
+		const pathLine = buildPathLine(this.theme)
+		const info = `${versionLine} ${pathLine}`
 
 		const result = [""]
 		for (let i = 0; i < this.logoLines.length; i++) {
