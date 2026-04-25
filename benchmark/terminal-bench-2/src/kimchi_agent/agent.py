@@ -27,6 +27,11 @@ BINARY_PATH = f"{INSTALL_DIR}/{BINARY_RELPATH.as_posix()}"
 PI_PACKAGE_DIR = f"{INSTALL_DIR}/{SHARE_RELPATH.as_posix()}"
 UPLOAD_STAGE_DIR = "/tmp/kimchi-stage"
 
+# In-container paths. /logs/agent is bind-mounted to self.logs_dir on the host.
+CONTAINER_LOGS_DIR = "/logs/agent"
+CONTAINER_SESSIONS_DIR = f"{CONTAINER_LOGS_DIR}/sessions"
+CONTAINER_MAIN_SESSION = f"{CONTAINER_SESSIONS_DIR}/main.jsonl"
+
 
 class KimchiCode(BaseInstalledAgent):
     """Harbor agent that runs the kimchi-code binary inside the task container.
@@ -151,12 +156,13 @@ class KimchiCode(BaseInstalledAgent):
         await self.exec_as_agent(
             environment,
             command=(
+                f"mkdir -p {CONTAINER_SESSIONS_DIR} && "
                 f"{shlex.quote(BINARY_PATH)} "
-                f"--print --mode json --no-session "
+                f"--print --mode json --session {CONTAINER_MAIN_SESSION} "
                 f"--model {shlex.quote(self.model_name)} "
                 f"{cli_flags}"
                 f"{shlex.quote(instruction)} "
-                f"2>&1 </dev/null | stdbuf -oL tee /logs/agent/{self._OUTPUT_FILENAME}"
+                f"2>&1 </dev/null | stdbuf -oL tee {CONTAINER_LOGS_DIR}/{self._OUTPUT_FILENAME}"
             ),
             env={"KIMCHI_API_KEY": self._config.api_key, "PI_PACKAGE_DIR": PI_PACKAGE_DIR},
         )

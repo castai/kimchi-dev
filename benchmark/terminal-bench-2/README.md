@@ -104,7 +104,7 @@ Tag format is `key:value`, comma-separated; keys and values are alphanumeric plu
 
 ## Results
 
-`benchmark/terminal-bench-2/jobs/<timestamp>/<task>__<trial_id>/` — each trial directory contains `trial.log`, `result.json` (with `reward`), and `config.json`. The raw kimchi JSONL stream is in `agent/kimchi.txt`.
+`benchmark/terminal-bench-2/jobs/<timestamp>/<task>__<trial_id>/` — each trial directory contains `trial.log`, `result.json` (with `reward`), and `config.json`. The raw kimchi JSONL stream is in `agent/kimchi.txt`. Resumable session files (parent + each subagent, linked via `parentSession`) are in `agent/sessions/*.jsonl`; replay any of them with `kimchi-code --session <path>`.
 
 ## Troubleshooting
 
