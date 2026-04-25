@@ -153,6 +153,12 @@ class KimchiCode(BaseInstalledAgent):
         if cli_flags:
             cli_flags += " "
 
+        # Harbor's _exec merges _extra_env *over* env=, so the merged value must live
+        # in _extra_env to win. Idempotent: a second run() sees the merged string as
+        # "user tags", finds all auto keys collide, and produces the same output.
+        user_tags = self._extra_env.get("KIMCHI_TAGS", "")
+        self._extra_env["KIMCHI_TAGS"] = self._merge_kimchi_tags(user_tags)
+
         await self.exec_as_agent(
             environment,
             command=(
@@ -166,6 +172,42 @@ class KimchiCode(BaseInstalledAgent):
             ),
             env={"KIMCHI_API_KEY": self._config.api_key, "PI_PACKAGE_DIR": PI_PACKAGE_DIR},
         )
+
+    def _auto_tags(self) -> dict[str, str]:
+        # logs_dir is expected to be jobs/<run>/<task>__<trial>/agent. Derive
+        # run / task / trial from that ancestry so they're injected automatically
+        # and survive glob / full-dataset runs where the user can't statically
+        # know the task name.
+        trial_dir = self.logs_dir.parent
+        run_dir = trial_dir.parent
+        if self.logs_dir.name != "agent" or run_dir.parent.name != "jobs":
+            self.logger.debug(
+                "Skipping auto KIMCHI_TAGS; logs_dir does not match jobs/<run>/<task>__<trial>/agent",
+                extra={"logs_dir": str(self.logs_dir)},
+            )
+            return {}
+        trial_id = trial_dir.name
+        return {
+            "run": run_dir.name,
+            "task": trial_id.split("__", 1)[0],
+            "trial": trial_id,
+        }
+
+    def _merge_kimchi_tags(self, user_raw: str) -> str:
+        # User-supplied values via --ae KIMCHI_TAGS=... win on key collision.
+        user_raw = user_raw.strip()
+        user_keys: set[str] = set()
+        for tag in user_raw.split(","):
+            if ":" not in tag:
+                continue
+            key = tag.split(":", 1)[0].strip()
+            if key:
+                user_keys.add(key)
+
+        merged = [f"{k}:{v}" for k, v in self._auto_tags().items() if k not in user_keys]
+        if user_raw:
+            merged.append(user_raw)
+        return ",".join(merged)
 
     def populate_context_post_run(self, context: AgentContext) -> None:
         output_file = self.logs_dir / self._OUTPUT_FILENAME
