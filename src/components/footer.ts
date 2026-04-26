@@ -34,11 +34,6 @@ export class StatsFooter implements Component {
 		return this.theme.fg("dim", s)
 	}
 
-	private sessionSegment(): FooterSegment {
-		const name = this.ctx.sessionManager.getSessionName() ?? "default"
-		return seg(this.dim(name))
-	}
-
 	private modelSegment(): FooterSegment {
 		const modelId = this.ctx.model?.id ?? "n/a"
 		return seg(teal(modelId))
@@ -92,6 +87,12 @@ export class StatsFooter implements Component {
 		return seg(`${this.dim("team:")}${teal(team.value)}`)
 	}
 
+	private permissionsSegment(): FooterSegment | null {
+		const mode = this._footerData.getExtensionStatuses().get("permissions-mode")
+		if (!mode) return null
+		return seg(mode)
+	}
+
 	private subagentSegment(): FooterSegment | null {
 		const count = getActiveSubagentCount()
 		if (count === 0) return null
@@ -104,7 +105,7 @@ export class StatsFooter implements Component {
 			.filter((t): t is { key: string; value: string } => t !== null)
 
 		const segments = [
-			this.sessionSegment(),
+			this.permissionsSegment(),
 			this.modelSegment(),
 			this.subagentSegment(),
 			this.contextSegment(),

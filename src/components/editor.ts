@@ -2,8 +2,8 @@ import { CustomEditor, type Theme } from "@mariozechner/pi-coding-agent"
 import type { KeybindingsManager } from "@mariozechner/pi-coding-agent"
 import type { EditorTheme, TUI } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
-import { RST_FG, TEAL_FG, clampLines } from "../ansi.js"
-import { splashTopPadding } from "./splash-layout.js"
+import { RST_FG, TEAL_FG } from "../ansi.js"
+import { clampLines, splashBottomPaddingFor } from "./splash-layout.js"
 
 const CHEVRON_WIDTH = 2
 const PLACEHOLDER_TEXT = "ask anything or type / for commands"
@@ -87,15 +87,14 @@ export class PromptEditor extends CustomEditor {
 		}
 
 		if (this._splashMode) {
-			const hintText = this.appTheme.fg("muted", "Ctrl + p Agents")
+			const muted = (s: string) => this.appTheme.fg("muted", s)
+			const accent = (s: string) => `${TEAL_FG}${s}${RST_FG}`
+			const hintText = `${accent("/")} ${muted("commands")}  ${accent("Ctrl+p")} ${muted("agents")}`
 			const hintWidth = visibleWidth(hintText)
 			const hintLine = pad + " ".repeat(Math.max(0, innerWidth - hintWidth)) + hintText
 			result.push(hintLine)
 
-			const termRows = process.stdout.rows ?? 24
-			const headerLines = splashTopPadding() + 7
-			const used = headerLines + 1 + result.length + 1
-			const bottomPad = Math.max(0, termRows - used)
+			const bottomPad = splashBottomPaddingFor(result.length)
 			for (let i = 0; i < bottomPad; i++) result.push("")
 		}
 

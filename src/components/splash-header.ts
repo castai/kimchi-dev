@@ -1,9 +1,8 @@
 import type { Theme } from "@mariozechner/pi-coding-agent"
 import type { Component } from "@mariozechner/pi-tui"
 import { visibleWidth } from "@mariozechner/pi-tui"
-import { clampLines } from "../ansi.js"
 import { buildLogoLines, buildPathLine, buildVersionLine } from "./logo-art.js"
-import { splashTopPadding } from "./splash-layout.js"
+import { clampLines, splashTopPadding } from "./splash-layout.js"
 
 export class SplashHeader implements Component {
 	private readonly theme: Theme

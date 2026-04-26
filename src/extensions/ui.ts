@@ -8,7 +8,14 @@ import { collapseAll, expandNext, resetState } from "../expand-state.js"
 
 const HORIZONTAL_PADDING = 2
 
-// biome-ignore lint/suspicious/noControlCharactersInRegex: strip OSC 133 shell integration marks (cause blue triangles in iTerm2)
+// Strip OSC 133 shell-integration marks emitted by pi-mono around each message.
+// In the main terminal screen these marks enable "jump to previous message" in
+// shell-integration-aware terminals (Wezterm, Kitty, Ghostty, iTerm2, etc.).
+// But kimchi runs in the alt screen (see terminal-colors.ts), where scrollback
+// navigation typically doesn't apply — and iTerm2 still renders a visible blue
+// triangle at each mark, which is noisy in the TUI. Net benefit of stripping is
+// positive in kimchi's alt-screen context.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI/OSC
 const OSC133_RE = /\x1b\]133;[A-Z]\x07/g
 
 function patchTuiPadding(tui: TUI) {
