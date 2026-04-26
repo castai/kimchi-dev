@@ -159,16 +159,19 @@ class KimchiCode(BaseInstalledAgent):
         user_tags = self._extra_env.get("KIMCHI_TAGS", "")
         self._extra_env["KIMCHI_TAGS"] = self._merge_kimchi_tags(user_tags)
 
+        # Pipe the prompt via stdin instead of as a positional arg: pi-coding-agent's
+        # parseArgs treats any token starting with `-` as a flag (no `--` end-of-options
+        # marker), which deterministically crashes on instructions like "- You are given...".
         await self.exec_as_agent(
             environment,
             command=(
                 f"mkdir -p {CONTAINER_SESSIONS_DIR} && "
+                f"printf '%s' {shlex.quote(instruction)} | "
                 f"{shlex.quote(BINARY_PATH)} "
                 f"--print --mode json --session {CONTAINER_MAIN_SESSION} "
                 f"--model {shlex.quote(self.model_name)} "
                 f"{cli_flags}"
-                f"{shlex.quote(instruction)} "
-                f"2>&1 </dev/null | stdbuf -oL tee {CONTAINER_LOGS_DIR}/{self._OUTPUT_FILENAME}"
+                f"2>&1 | stdbuf -oL tee {CONTAINER_LOGS_DIR}/{self._OUTPUT_FILENAME}"
             ),
             env={"KIMCHI_API_KEY": self._config.api_key, "PI_PACKAGE_DIR": PI_PACKAGE_DIR},
         )
