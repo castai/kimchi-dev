@@ -31,6 +31,40 @@ beforeAll(() => {
 		JSON.stringify({ skillPaths: [], migrationState: "done" }, null, 2),
 		"utf-8",
 	)
+	// Pre-seed models.json so updateModelsConfig has a cache to fall back to when
+	// the dummy KIMCHI_API_KEY gets a 401 from the live metadata endpoint. Without
+	// this, interactive smoke tests would fail to boot the binary in CI.
+	const agentDir = join(tempHome, ".config", "kimchi", "harness")
+	mkdirSync(agentDir, { recursive: true })
+	writeFileSync(
+		join(agentDir, "models.json"),
+		JSON.stringify(
+			{
+				providers: {
+					"kimchi-dev": {
+						baseUrl: "https://llm.kimchi.dev/openai/v1",
+						apiKey: "KIMCHI_API_KEY",
+						api: "openai-completions",
+						authHeader: true,
+						models: [
+							{
+								id: "kimi-k2.5",
+								name: "Kimi K2.5",
+								reasoning: true,
+								input: ["text", "image"],
+								contextWindow: 262144,
+								maxTokens: 262144,
+								cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+							},
+						],
+					},
+				},
+			},
+			null,
+			"\t",
+		),
+		"utf-8",
+	)
 })
 
 afterAll(() => {
