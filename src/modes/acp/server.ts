@@ -2,7 +2,6 @@
 // @agentclientprotocol/sdk. Lets Zed / openclaw drive kimchi in-process.
 
 import { Readable, Writable } from "node:stream"
-import { filterOutputTags } from "../../extensions/output-tag-filter.js"
 import {
 	type Agent,
 	AgentSideConnection,
@@ -32,6 +31,7 @@ import {
 	SettingsManager,
 	createAgentSession,
 } from "@mariozechner/pi-coding-agent"
+import { filterOutputTags } from "../../extensions/output-tag-filter.js"
 
 /**
  * Produces a ready-to-use AgentSession for a newSession request. The returned
