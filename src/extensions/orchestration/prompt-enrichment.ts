@@ -41,6 +41,7 @@ import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/
 import {
 	type EnvironmentInfo,
 	buildOrchestratorSystemPrompt,
+	buildSingleModelSystemPrompt,
 	buildSubagentSystemPrompt,
 	isSubagent,
 	transformPrompt,
@@ -83,6 +84,29 @@ function readGitRemote(cwd: string): string | undefined {
 	}
 }
 
+// Workaround: pi-mono's applyExtensionFlagValues ignores the actual value for boolean flags (always sets true). Read argv directly until upstream is fixed.
+function readMultiModelArgv(): boolean {
+	const args = process.argv
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i]
+		if (arg === "--multi-model=false") return false
+		if (arg === "--multi-model=true") return true
+		if (arg === "--multi-model") {
+			const next = args[i + 1]
+			if (next === "false") return false
+			if (next === "true") return true
+			return true
+		}
+	}
+	return true
+}
+
+let multiModelEnabled = readMultiModelArgv()
+
+export function getMultiModelEnabled(): boolean {
+	return multiModelEnabled
+}
+
 export default function (skillPaths: string[]) {
 	return (pi: ExtensionAPI) => {
 		const subagentMode = isSubagent()
@@ -91,6 +115,12 @@ export default function (skillPaths: string[]) {
 			type: "boolean",
 			description: "Print enriched prompts in the UI (default: hidden)",
 			default: false,
+		})
+
+		pi.registerFlag("multi-model", {
+			type: "boolean",
+			description: "Enable multi-model orchestration (default: enabled). Toggle with alt+tab.",
+			default: true,
 		})
 
 		// For sub agents we don't want to transform the prompt sent from parent with model capabilities
@@ -103,6 +133,14 @@ export default function (skillPaths: string[]) {
 					`${fg(ANSI.accent, ` New model available: "kimchi-dev/${warning.modelId}"`)}\n${fg(ANSI.dim, " Update the app or add the new model to model capabilities config to unlock orchestration support.")}`,
 				)
 			}
+
+			pi.registerShortcut("alt+tab", {
+				description: "Toggle multi-model orchestration on/off",
+				handler: (ctx) => {
+					multiModelEnabled = !multiModelEnabled
+					ctx.ui.setStatus("multi-model", undefined)
+				},
+			})
 
 			// Detect the inverse of the context-event nudge below: the orchestrator reasons
 			// in prose, announces it will delegate, and ends its turn without emitting the
@@ -144,6 +182,10 @@ export default function (skillPaths: string[]) {
 				// (ctx.isIdle() === false, i.e. session.isStreaming === true).
 				// Skip enrichment and let them pass through unchanged
 				if (!ctx.isIdle()) {
+					return { action: "continue" as const }
+				}
+
+				if (!multiModelEnabled) {
 					return { action: "continue" as const }
 				}
 
@@ -220,12 +262,15 @@ export default function (skillPaths: string[]) {
 			}
 
 			if (subagentMode) {
-				// Filter the subagent tool out of the active tool set to prevent
-				// the subagent from spawning further subagents.
+				// Filter the subagent tool out to prevent infinite delegation chains.
 				const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
 				pi.setActiveTools(activeTools)
-
 				const systemPrompt = buildSubagentSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
+				return { systemPrompt }
+			}
+
+			if (!multiModelEnabled) {
+				const systemPrompt = buildSingleModelSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
 				return { systemPrompt }
 			}
 
