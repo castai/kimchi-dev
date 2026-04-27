@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
+import { getVersion } from "./utils.js"
 
 const CAST_AI_MODELS_API = "https://api.cast.ai/v1/llm/openai/models?providerName=AI%20Enabler"
 const CAST_AI_LLM_BASE_URL = "https://llm.kimchi.dev/openai/v1"
@@ -45,6 +46,7 @@ function buildModelsConfig(models: string[]) {
 				apiKey: "KIMCHI_API_KEY",
 				api: "openai-completions",
 				authHeader: true,
+				headers: { "User-Agent": `kimchi/${getVersion()}` },
 				models: models.map((id) => ({
 					id,
 					name: modelIdToName(id),
@@ -72,6 +74,7 @@ const DEFAULT_MODELS_CONFIG = {
 			apiKey: "KIMCHI_API_KEY",
 			api: "openai-completions",
 			authHeader: true,
+			headers: { "User-Agent": `kimchi/${getVersion()}` },
 			models: [
 				{
 					id: "kimi-k2.5",
