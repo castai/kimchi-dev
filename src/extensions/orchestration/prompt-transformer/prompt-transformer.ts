@@ -12,7 +12,7 @@ export interface EnvironmentInfo {
 	username: string
 	homeDir: string
 	cwd: string
-	workspaceDir: string
+	documentsDir: string
 	currentTime: string
 	localDate: string
 	isGitRepo: boolean
@@ -145,7 +145,7 @@ function formatEnvironmentSection(env: EnvironmentInfo): string {
 		`- Username: ${env.username}`,
 		`- Home directory: "${env.homeDir}"`,
 		`- Working directory: "${env.cwd}"`,
-		`- Workspace directory: "${env.workspaceDir}"`,
+		`- Documents directory: "${env.documentsDir}"`,
 		`- Current time: ${env.currentTime} (local date: ${env.localDate})`,
 		`- Git repository: ${env.isGitRepo ? "yes" : "no"}`,
 	]

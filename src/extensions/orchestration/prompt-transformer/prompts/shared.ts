@@ -17,9 +17,9 @@ export const CORE_GUIDELINES = `- Be concise in your responses.
 - If you encounter an error, diagnose the root cause before retrying.
 - **Pattern recognition**: If the same implementation pattern is needed more than twice, define the abstraction first, then implement.`
 
-export const WORKSPACE_SECTION = `## Workspace
+export const DOCUMENTS_SECTION = `## Documents
 
-The Workspace directory is shown in the Environment section. Use it for **all** intermediate and output files: plans, specs, research notes, findings, or any file passed between agents. Never write working documents to the project directory or a temporary directory.`
+The Documents directory is shown in the Environment section. Use it for **all** intermediate and output files: plans, specs, research notes, findings, or any file passed between agents. Never write working documents to the project directory or a temporary directory.`
 
 export const PHASE_TAGGING = `## Phase Tagging for Analytics
 
