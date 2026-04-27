@@ -28,6 +28,7 @@ import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
 import { ANSI, fg } from "../../ansi.js"
 import { getAvailableModelIds } from "../../startup-context.js"
+import { getGitBranch } from "../../utils.js"
 import { CONTINUATION_NUDGE_TEXT, ContinuationNudge, buildEmptyTurnNudgedMessages } from "./continuation-nudge.js"
 import { ModelRegistry } from "./model-registry/index.js"
 import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/context-files.js"
@@ -62,20 +63,6 @@ function safeUsername(): string {
 		return userInfo().username
 	} catch {
 		return process.env.USER ?? process.env.USERNAME ?? "unknown"
-	}
-}
-
-function readGitBranch(cwd: string): string | undefined {
-	try {
-		return (
-			execSync("git symbolic-ref --short HEAD", {
-				cwd,
-				encoding: "utf8",
-				stdio: ["ignore", "pipe", "ignore"],
-			}).trim() || undefined
-		)
-	} catch {
-		return undefined
 	}
 }
 
@@ -217,7 +204,7 @@ export default function (skillPaths: string[]) {
 				currentTime: now.toISOString(),
 				localDate: now.toLocaleDateString("en-CA"),
 				isGitRepo,
-				gitBranch: isGitRepo ? readGitBranch(ctx.cwd) : undefined,
+				gitBranch: isGitRepo ? getGitBranch(ctx.cwd) : undefined,
 				gitRemote: isGitRepo ? (cachedGitRemote ?? undefined) : undefined,
 			}
 

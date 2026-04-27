@@ -21,6 +21,15 @@ import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./sp
 
 const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
+
+let activeSessionCounts: Map<string, number> | null = null
+
+export function getActiveSubagentCount(): number {
+	if (!activeSessionCounts) return 0
+	let total = 0
+	for (const n of activeSessionCounts.values()) total += n
+	return total
+}
 const STDERR_MAX = 8192
 const TIMEOUT_MS = 30 * 60 * 1000
 const INACTIVITY_TIMEOUT_MS = 60 * 1000
@@ -493,6 +502,7 @@ const SubagentParams = Type.Object({
 
 export default function (pi: ExtensionAPI) {
 	const sessionCounts = new Map<string, number>()
+	activeSessionCounts = sessionCounts
 
 	pi.on("session_start", (event, ctx) => {
 		if (ctx.hasUI) {

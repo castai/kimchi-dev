@@ -8,15 +8,57 @@ const QUERY_FG = "\x1b]10;?\x07"
 const QUERY_BG = "\x1b]11;?\x07"
 const QUERY_TIMEOUT_MS = 200
 
+const ENTER_ALT_SCREEN = "\x1b[?1049h"
+const EXIT_ALT_SCREEN = "\x1b[?1049l"
+
 export default function terminalColorsExtension(pi: ExtensionAPI) {
 	let savedFg: string | null = null
 	let savedBg: string | null = null
+	let active = false
+	let altScreenActive = false
+	let exitHandlersInstalled = false
 
-	pi.on("session_start", () => {
-		savedFg = null
-		savedBg = null
+	const restore = () => {
+		if (!active) return
+		active = false
+		if (!process.stdout.isTTY) return
+		if (altScreenActive) {
+			altScreenActive = false
+			process.stdout.write(EXIT_ALT_SCREEN)
+		}
+		process.stdout.write(savedFg ? `\x1b]10;${savedFg}\x07` : "\x1b]110\x07")
+		process.stdout.write(savedBg ? `\x1b]11;${savedBg}\x07` : "\x1b]111\x07")
+	}
 
+	const installExitHandlers = () => {
+		if (exitHandlersInstalled) return
+		exitHandlersInstalled = true
+		process.on("exit", restore)
+		const signalRestore = (signal: NodeJS.Signals) => {
+			restore()
+			process.kill(process.pid, signal)
+		}
+		process.once("SIGINT", () => signalRestore("SIGINT"))
+		process.once("SIGTERM", () => signalRestore("SIGTERM"))
+		process.once("SIGHUP", () => signalRestore("SIGHUP"))
+	}
+
+	pi.on("session_start", (event) => {
 		if (!process.stdin.isTTY) return
+
+		active = true
+		installExitHandlers()
+
+		if (event.reason === "startup") {
+			altScreenActive = true
+			process.stdout.write(ENTER_ALT_SCREEN)
+		}
+
+		if (savedFg !== null || savedBg !== null) {
+			process.stdout.write(SET_FG)
+			process.stdout.write(SET_BG)
+			return
+		}
 
 		let buffer = ""
 		let gotFg = false
@@ -57,19 +99,5 @@ export default function terminalColorsExtension(pi: ExtensionAPI) {
 		process.stdout.write(SET_BG)
 	})
 
-	pi.on("session_shutdown", () => {
-		if (!process.stdin.isTTY) return
-
-		if (savedFg) {
-			process.stdout.write(`\x1b]10;${savedFg}\x07`)
-		} else {
-			process.stdout.write("\x1b]110\x07")
-		}
-
-		if (savedBg) {
-			process.stdout.write(`\x1b]11;${savedBg}\x07`)
-		} else {
-			process.stdout.write("\x1b]111\x07")
-		}
-	})
+	pi.on("session_shutdown", restore)
 }

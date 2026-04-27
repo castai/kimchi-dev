@@ -2,21 +2,27 @@ import { CustomEditor, type Theme } from "@mariozechner/pi-coding-agent"
 import type { KeybindingsManager } from "@mariozechner/pi-coding-agent"
 import type { EditorTheme, TUI } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
-import { TRUECOLOR } from "../ansi.js"
+import { RST_FG, TEAL_FG } from "../ansi.js"
+import { clampLines, splashBottomPaddingFor } from "./splash-layout.js"
 
-const RST = "\x1b[39m"
 const CHEVRON_WIDTH = 2
 const PLACEHOLDER_TEXT = "ask anything or type / for commands"
+const EDITOR_WIDTH = 60
 
 export class PromptEditor extends CustomEditor {
 	private readonly appTheme: Theme
 	private readonly kb: KeybindingsManager
 	private expandHandler?: () => void
+	private _splashMode = false
 
 	constructor(tui: TUI, editorTheme: EditorTheme, keybindings: KeybindingsManager, appTheme: Theme) {
 		super(tui, editorTheme, keybindings)
 		this.appTheme = appTheme
 		this.kb = keybindings
+	}
+
+	setSplashMode(enabled: boolean) {
+		this._splashMode = enabled
 	}
 
 	setExpandHandler(handler: () => void) {
@@ -35,47 +41,63 @@ export class PromptEditor extends CustomEditor {
 		const border = (s: string) => (this.borderColor ? this.borderColor(s) : s)
 		const chevronColor = this.appTheme.getFgAnsi("accent")
 		const textColor = this.appTheme.getFgAnsi("text")
-		const cursorColor = TRUECOLOR ? "\x1b[38;2;93;202;165m" : "\x1b[38;5;79m"
+		const cursorColor = TEAL_FG
 		const muted = this.appTheme.getFgAnsi("muted")
 
-		const inner = width - 2
-		const editorWidth = inner - CHEVRON_WIDTH
-		const lines = super.render(editorWidth)
-		if (lines.length < 2) return lines
+		const innerWidth = this._splashMode ? Math.min(EDITOR_WIDTH, width - 4) : width
+		const contentWidth = innerWidth - CHEVRON_WIDTH
+		const lines = super.render(contentWidth)
 
-		const borderedLine = (content: string, contentWidth: number): string => {
-			const pad = Math.max(0, inner - contentWidth)
-			return `${border("│")}${content}${" ".repeat(pad)}${border("│")}`
-		}
-		const emptyLine = () => borderedLine("", 0)
+		const leftPad = this._splashMode ? Math.max(0, Math.floor((width - innerWidth) / 2)) : 0
+		const pad = leftPad > 0 ? " ".repeat(leftPad) : ""
+		const borderLine = pad + border("─".repeat(innerWidth))
 
-		const top = border(`┌${"─".repeat(inner)}┐`)
-		const bottom = border(`└${"─".repeat(inner)}┘`)
-
-		const result: string[] = [top]
-		result.push(emptyLine())
-
-		for (let i = 1; i < lines.length - 1; i++) {
-			const content = lines[i]
-			const truncated = truncateToWidth(content, editorWidth)
-			const contentWidth = visibleWidth(truncated)
-			const prefix = i === 1 ? `${chevronColor}❯${RST} ` : "  "
-			const withCursor = truncated.replaceAll("\x1b[7m", `${cursorColor}\x1b[7m`)
-			const coloredContent = `${textColor}${withCursor}${RST}`
-			result.push(borderedLine(prefix + coloredContent, contentWidth + CHEVRON_WIDTH))
+		// Find bottom border: scan backwards for a line starting with ─
+		let bottomIdx = Math.min(2, lines.length - 1)
+		for (let i = lines.length - 1; i >= 2; i--) {
+			// biome-ignore lint/suspicious/noControlCharactersInRegex: strip ANSI escapes
+			const stripped = lines[i].replace(/\x1b\[[^m]*m/g, "")
+			if (/^─/.test(stripped)) {
+				bottomIdx = i
+				break
+			}
 		}
 
+		// Use the line with cursor marker, or first content line
+		const cursorLine = lines.slice(1, bottomIdx).find((l) => l.includes("\x1b_pi:c"))
+		const rawContent = cursorLine ?? lines[1] ?? ""
+		const truncated = truncateToWidth(rawContent, contentWidth)
+		const withCursor = truncated.replaceAll("\x1b[7m", `${cursorColor}\x1b[7m`)
+		const visWidth = visibleWidth(truncated)
+
+		let contentLine: string
 		if (this.getText().length === 0) {
 			const cursorMarker = "\x1b_pi:c\x07"
 			const cursor = `${cursorMarker}${cursorColor}\x1b[7m \x1b[0m`
-			const placeholder = `${chevronColor}❯${RST} ${cursor}${muted}${PLACEHOLDER_TEXT}${RST}`
 			const placeholderWidth = CHEVRON_WIDTH + 1 + visibleWidth(PLACEHOLDER_TEXT)
-			result[2] = borderedLine(placeholder, placeholderWidth)
+			contentLine = `${pad}${chevronColor}❯${RST_FG} ${cursor}${muted}${PLACEHOLDER_TEXT}${RST_FG}${" ".repeat(Math.max(0, innerWidth - placeholderWidth))}`
+		} else {
+			contentLine = `${pad}${chevronColor}❯${RST_FG} ${textColor}${withCursor}${RST_FG}${" ".repeat(Math.max(0, innerWidth - CHEVRON_WIDTH - visWidth))}`
 		}
 
-		result.push(emptyLine())
-		result.push(bottom)
+		const result = [borderLine, contentLine, borderLine]
 
-		return result
+		for (let i = bottomIdx + 1; i < lines.length; i++) {
+			result.push(pad + lines[i])
+		}
+
+		if (this._splashMode) {
+			const muted = (s: string) => this.appTheme.fg("muted", s)
+			const accent = (s: string) => `${TEAL_FG}${s}${RST_FG}`
+			const hintText = `${accent("/")} ${muted("commands")}  ${accent("Ctrl+p")} ${muted("agents")}`
+			const hintWidth = visibleWidth(hintText)
+			const hintLine = pad + " ".repeat(Math.max(0, innerWidth - hintWidth)) + hintText
+			result.push(hintLine)
+
+			const bottomPad = splashBottomPaddingFor(result.length)
+			for (let i = 0; i < bottomPad; i++) result.push("")
+		}
+
+		return clampLines(result, width)
 	}
 }

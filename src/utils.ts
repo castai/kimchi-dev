@@ -1,27 +1,29 @@
 import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { dirname, resolve } from "node:path"
+import { dirname, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 
-let cachedBranch: string | undefined
-export function getGitBranch(): string {
-	if (cachedBranch !== undefined) return cachedBranch
+export function getGitBranch(cwd?: string): string | undefined {
 	try {
-		cachedBranch = execSync("git rev-parse --abbrev-ref HEAD", {
-			encoding: "utf-8",
-			stdio: ["pipe", "pipe", "pipe"],
-		}).trim()
+		return (
+			execSync("git symbolic-ref --short HEAD", {
+				cwd: cwd ?? process.cwd(),
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			}).trim() || undefined
+		)
 	} catch {
-		cachedBranch = ""
+		return undefined
 	}
-	return cachedBranch
 }
 
 export function getFolder(): string {
 	const cwd = process.cwd()
 	const home = homedir()
-	return cwd.startsWith(home) ? `~${cwd.slice(home.length)}` : cwd
+	if (cwd === home) return "~"
+	if (cwd.startsWith(home + sep)) return `~${cwd.slice(home.length)}`
+	return cwd
 }
 
 let cachedVersion: string | undefined
