@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-// Extract the function for testing
+// Extract the functions for testing
 function isBareExitAlias(text: string): boolean {
 	const trimmed = text.trim()
 	return trimmed === "exit"
+}
+
+function quitApplication(): never {
+	process.exit(0)
 }
 
 describe("isBareExitAlias", () => {
@@ -54,7 +58,7 @@ describe("exit command behavior", () => {
 	it("calls process.exit(0) when 'exit' is typed", () => {
 		// Simulate what the input handler does
 		if (isBareExitAlias("exit")) {
-			process.exit(0)
+			quitApplication()
 		}
 
 		expect(exitSpy).toHaveBeenCalledWith(0)
@@ -62,7 +66,7 @@ describe("exit command behavior", () => {
 
 	it("does not call process.exit for non-exit input", () => {
 		if (isBareExitAlias("hello")) {
-			process.exit(0)
+			quitApplication()
 		}
 
 		expect(exitSpy).not.toHaveBeenCalled()
@@ -70,9 +74,16 @@ describe("exit command behavior", () => {
 
 	it("does not call process.exit for '/exit' command", () => {
 		if (isBareExitAlias("/exit")) {
-			process.exit(0)
+			quitApplication()
 		}
 
 		expect(exitSpy).not.toHaveBeenCalled()
+	})
+
+	it("calls process.exit(0) via quitApplication for /exit command", async () => {
+		// Simulate what the command handler does
+		quitApplication()
+
+		expect(exitSpy).toHaveBeenCalledWith(0)
 	})
 })

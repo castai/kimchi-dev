@@ -15,6 +15,14 @@ function isBareExitAlias(text: string): boolean {
 	return trimmed === "exit"
 }
 
+/**
+ * Quit the application immediately.
+ * Centralized exit point for consistent behavior across all exit paths.
+ */
+function quitApplication(): never {
+	process.exit(0)
+}
+
 const HORIZONTAL_PADDING = 2
 
 // Strip OSC 133 shell-integration marks emitted by pi-mono around each message.
@@ -66,7 +74,7 @@ export default function uiExtension(pi: ExtensionAPI) {
 	pi.on("input", (event, ctx) => {
 		// Handle bare "exit" alias: immediately quit without sending to model
 		if (isBareExitAlias(event.text)) {
-			process.exit(0)
+			quitApplication()
 		}
 
 		if (!splashActive) return
@@ -79,7 +87,7 @@ export default function uiExtension(pi: ExtensionAPI) {
 	pi.registerCommand("exit", {
 		description: "Exit the application (alias for /quit)",
 		handler: async () => {
-			process.exit(0)
+			quitApplication()
 		},
 	})
 }
