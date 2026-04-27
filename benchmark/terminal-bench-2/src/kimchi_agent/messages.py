@@ -22,6 +22,6 @@ class Message(BaseMessage):
     usage: Usage = Field(default_factory=Usage)
 
 
-class MessageEndEvent(BaseMessage):
+class SessionEntry(BaseMessage):
     type: str
     message: Message = Field(default_factory=Message)

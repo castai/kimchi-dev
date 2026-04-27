@@ -10,7 +10,7 @@ from harbor.agents.installed.base import (
 from pydantic import ValidationError
 
 from kimchi_agent.config import KimchiAgentConfig
-from kimchi_agent.messages import MessageEndEvent
+from kimchi_agent.messages import SessionEntry
 from kimchi_agent.release import BINARY_RELPATH, SHARE_RELPATH, GitHubClient
 
 if TYPE_CHECKING:
@@ -45,7 +45,6 @@ class KimchiCode(BaseInstalledAgent):
     no provider-specific keys are needed.
     """
 
-    _OUTPUT_FILENAME = "kimchi.txt"
 
     CLI_FLAGS: ClassVar[list[CliFlag]] = [
         CliFlag(
@@ -170,10 +169,9 @@ class KimchiCode(BaseInstalledAgent):
                 f"mkdir -p {CONTAINER_SESSIONS_DIR} && "
                 f"printf '%s' {shlex.quote(instruction)} | "
                 f"{shlex.quote(BINARY_PATH)} "
-                f"--print --mode json --session {CONTAINER_MAIN_SESSION} "
+                f"--print --session {CONTAINER_MAIN_SESSION} "
                 f"--model {shlex.quote(self.model_name)} "
                 f"{cli_flags}"
-                f"2>&1 | stdbuf -oL tee {CONTAINER_LOGS_DIR}/{self._OUTPUT_FILENAME}"
             ),
             env={"KIMCHI_API_KEY": self._config.api_key, "PI_PACKAGE_DIR": PI_PACKAGE_DIR},
         )
@@ -215,8 +213,8 @@ class KimchiCode(BaseInstalledAgent):
         return ",".join(merged)
 
     def populate_context_post_run(self, context: AgentContext) -> None:
-        output_file = self.logs_dir / self._OUTPUT_FILENAME
-        if not output_file.exists():
+        session_file = self.logs_dir / "sessions" / "main.jsonl"
+        if not session_file.exists():
             return
 
         total_input_tokens = 0
@@ -224,17 +222,17 @@ class KimchiCode(BaseInstalledAgent):
         total_cache_read_tokens = 0
         total_cost = 0.0
 
-        for line in output_file.read_text().splitlines():
+        for line in session_file.read_text().splitlines():
             line = line.strip()
             if not line:
                 continue
             try:
-                event = MessageEndEvent.model_validate_json(line)
+                entry = SessionEntry.model_validate_json(line)
             except ValidationError:
                 continue
-            if event.type != "message_end" or event.message.role != "assistant":
+            if entry.type != "message" or entry.message.role != "assistant":
                 continue
-            usage = event.message.usage
+            usage = entry.message.usage
             total_input_tokens += usage.input
             total_output_tokens += usage.output
             total_cache_read_tokens += usage.cache_read
