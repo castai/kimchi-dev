@@ -5,6 +5,7 @@ import { StatsFooter } from "../components/footer.js"
 import { LogoHeader } from "../components/logo.js"
 import { SplashHeader } from "../components/splash-header.js"
 import { collapseAll, expandNext, resetState } from "../expand-state.js"
+import { isBareExitAlias, quitApplication } from "./exit-utils.js"
 
 const HORIZONTAL_PADDING = 2
 
@@ -54,10 +55,23 @@ export default function uiExtension(pi: ExtensionAPI) {
 		})
 	})
 
-	pi.on("input", (_event, ctx) => {
+	pi.on("input", (event, ctx) => {
+		// Handle bare "exit" alias: immediately quit without sending to model
+		if (isBareExitAlias(event.text)) {
+			quitApplication()
+		}
+
 		if (!splashActive) return
 		splashActive = false
 		ctx.ui.setHeader((_tui, theme) => new LogoHeader(theme))
 		currentEditor?.setSplashMode(false)
+	})
+
+	// Register /exit as an alias for /quit
+	pi.registerCommand("exit", {
+		description: "Exit the application (alias for /quit)",
+		handler: async () => {
+			quitApplication()
+		},
 	})
 }
