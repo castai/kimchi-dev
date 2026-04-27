@@ -17,6 +17,7 @@ import { isBunBinary, isRunningUnderBun } from "../env.js"
 import { isToolExpanded, registerToolCall } from "../expand-state.js"
 import { findExistingFile, resolveUserPath, stripAtPrefix } from "../fs-paths.js"
 import { formatCount, formatDuration } from "./format.js"
+import { filterOutputTags } from "./output-tag-filter.js"
 import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./spinner.js"
 
 const PROMPT_MAX_LENGTH = 60
@@ -393,7 +394,7 @@ function spawnSubagent(
 			} = parseSubagentEvent(line)
 			if (delta !== null) {
 				accumulated += delta
-				onToken(accumulated)
+				onToken(filterOutputTags(accumulated))
 			}
 			if (lineInput > 0 || lineOutput > 0) {
 				inputTokens += lineInput
@@ -665,7 +666,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			return {
-				content: [{ type: "text", text: accumulated || "(no output)" }],
+				content: [{ type: "text", text: filterOutputTags(accumulated) || "(no output)" }],
 				details: stats,
 			}
 		},
