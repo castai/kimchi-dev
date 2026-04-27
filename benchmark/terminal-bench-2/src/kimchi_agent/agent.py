@@ -55,6 +55,8 @@ class KimchiCode(BaseInstalledAgent):
             choices=["off", "minimal", "low", "medium", "high", "xhigh"],
         ),
         CliFlag("tools", cli="--tools", type="str"),
+        CliFlag("yolo", cli="--yolo", type="bool"),
+        CliFlag("dangerously-skip-permissions", cli="--dangerously-skip-permissions", type="bool"),
     ]
 
     def __init__(self, *args, **kwargs):
