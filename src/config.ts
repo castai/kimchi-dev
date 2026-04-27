@@ -250,8 +250,8 @@ export function clearApiKey(configPath?: string): void {
 	} catch {
 		return
 	}
-	delete raw["apiKey"]
-	delete raw["api_key"]
+	raw.apiKey = undefined
+	raw.api_key = undefined
 	const tmp = `${path}.${process.pid}.tmp`
 	writeFileSync(tmp, `${JSON.stringify(raw, null, 2)}\n`, "utf-8")
 	renameSync(tmp, path)
