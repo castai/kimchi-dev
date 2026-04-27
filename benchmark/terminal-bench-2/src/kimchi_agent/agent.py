@@ -45,7 +45,6 @@ class KimchiCode(BaseInstalledAgent):
     no provider-specific keys are needed.
     """
 
-
     CLI_FLAGS: ClassVar[list[CliFlag]] = [
         CliFlag(
             "thinking",
@@ -55,7 +54,12 @@ class KimchiCode(BaseInstalledAgent):
         ),
         CliFlag("tools", cli="--tools", type="str"),
         CliFlag("yolo", cli="--yolo", type="bool"),
-        CliFlag("dangerously-skip-permissions", cli="--dangerously-skip-permissions", type="bool"),
+        CliFlag(
+            "dangerously-skip-permissions",
+            cli="--dangerously-skip-permissions",
+            type="bool",
+            default=True,
+        ),
     ]
 
     def __init__(self, *args, **kwargs):
