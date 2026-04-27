@@ -1,13 +1,27 @@
 import { CustomEditor, type Theme } from "@mariozechner/pi-coding-agent"
 import type { KeybindingsManager } from "@mariozechner/pi-coding-agent"
 import type { EditorTheme, TUI } from "@mariozechner/pi-tui"
-import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
+import { visibleWidth } from "@mariozechner/pi-tui"
 import { RST_FG, TEAL_FG } from "../ansi.js"
 import { clampLines, splashBottomPaddingFor } from "./splash-layout.js"
 
 const CHEVRON_WIDTH = 2
 const PLACEHOLDER_TEXT = "ask anything or type / for commands"
 const EDITOR_WIDTH = 60
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: strip ANSI escapes
+const ANSI_RE = /\x1b\[[^m]*m/g
+const SCROLL_INDICATOR_RE = /^─── ([↑↓] \d+ more )/
+
+function rebuildBorder(baseLine: string, targetWidth: number, borderFn: (s: string) => string): string {
+	const raw = baseLine.replace(ANSI_RE, "")
+	const match = raw.match(SCROLL_INDICATOR_RE)
+	if (match) {
+		const indicator = `─── ${match[1]}`
+		return borderFn(indicator + "─".repeat(Math.max(0, targetWidth - indicator.length)))
+	}
+	return borderFn("─".repeat(targetWidth))
+}
 
 export class PromptEditor extends CustomEditor {
 	private readonly appTheme: Theme
@@ -50,37 +64,44 @@ export class PromptEditor extends CustomEditor {
 
 		const leftPad = this._splashMode ? Math.max(0, Math.floor((width - innerWidth) / 2)) : 0
 		const pad = leftPad > 0 ? " ".repeat(leftPad) : ""
-		const borderLine = pad + border("─".repeat(innerWidth))
-
 		// Find bottom border: scan backwards for a line starting with ─
 		let bottomIdx = Math.min(2, lines.length - 1)
 		for (let i = lines.length - 1; i >= 2; i--) {
-			// biome-ignore lint/suspicious/noControlCharactersInRegex: strip ANSI escapes
-			const stripped = lines[i].replace(/\x1b\[[^m]*m/g, "")
+			const stripped = lines[i].replace(ANSI_RE, "")
 			if (/^─/.test(stripped)) {
 				bottomIdx = i
 				break
 			}
 		}
 
-		// Use the line with cursor marker, or first content line
-		const cursorLine = lines.slice(1, bottomIdx).find((l) => l.includes("\x1b_pi:c"))
-		const rawContent = cursorLine ?? lines[1] ?? ""
-		const truncated = truncateToWidth(rawContent, contentWidth)
-		const withCursor = truncated.replaceAll("\x1b[7m", `${cursorColor}\x1b[7m`)
-		const visWidth = visibleWidth(truncated)
+		const topBorder = pad + rebuildBorder(lines[0], innerWidth, border)
+		const bottomBorder = pad + rebuildBorder(lines[bottomIdx], innerWidth, border)
+		const result: string[] = [topBorder]
 
-		let contentLine: string
 		if (this.getText().length === 0) {
 			const cursorMarker = "\x1b_pi:c\x07"
 			const cursor = `${cursorMarker}${cursorColor}\x1b[7m \x1b[0m`
 			const placeholderWidth = CHEVRON_WIDTH + 1 + visibleWidth(PLACEHOLDER_TEXT)
-			contentLine = `${pad}${chevronColor}❯${RST_FG} ${cursor}${muted}${PLACEHOLDER_TEXT}${RST_FG}${" ".repeat(Math.max(0, innerWidth - placeholderWidth))}`
+			result.push(
+				`${pad}${chevronColor}❯${RST_FG} ${cursor}${muted}${PLACEHOLDER_TEXT}${RST_FG}${" ".repeat(Math.max(0, innerWidth - placeholderWidth))}`,
+			)
 		} else {
-			contentLine = `${pad}${chevronColor}❯${RST_FG} ${textColor}${withCursor}${RST_FG}${" ".repeat(Math.max(0, innerWidth - CHEVRON_WIDTH - visWidth))}`
+			const contentLines = lines.slice(1, bottomIdx)
+			let cursorIdx = contentLines.findIndex((l) => l.includes("\x1b_pi:c"))
+			if (cursorIdx === -1) cursorIdx = 0
+			for (let i = 0; i < contentLines.length; i++) {
+				const line = contentLines[i]
+				const styled =
+					i === cursorIdx
+						? line.replaceAll("\x1b[7m", `${cursorColor}\x1b[7m`).replaceAll("\x1b[0m", `\x1b[0m${textColor}`)
+						: line
+				const prefix = i === cursorIdx ? `${chevronColor}❯${RST_FG} ` : "  "
+				const rightPad = " ".repeat(Math.max(0, contentWidth - visibleWidth(styled)))
+				result.push(`${pad}${prefix}${textColor}${styled}${rightPad}${RST_FG}`)
+			}
 		}
 
-		const result = [borderLine, contentLine, borderLine]
+		result.push(bottomBorder)
 
 		for (let i = bottomIdx + 1; i < lines.length; i++) {
 			result.push(pad + lines[i])
