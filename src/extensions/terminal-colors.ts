@@ -8,24 +8,16 @@ const QUERY_FG = "\x1b]10;?\x07"
 const QUERY_BG = "\x1b]11;?\x07"
 const QUERY_TIMEOUT_MS = 200
 
-const ENTER_ALT_SCREEN = "\x1b[?1049h"
-const EXIT_ALT_SCREEN = "\x1b[?1049l"
-
 export default function terminalColorsExtension(pi: ExtensionAPI) {
 	let savedFg: string | null = null
 	let savedBg: string | null = null
 	let active = false
-	let altScreenActive = false
 	let exitHandlersInstalled = false
 
 	const restore = () => {
 		if (!active) return
 		active = false
 		if (!process.stdout.isTTY) return
-		if (altScreenActive) {
-			altScreenActive = false
-			process.stdout.write(EXIT_ALT_SCREEN)
-		}
 		process.stdout.write(savedFg ? `\x1b]10;${savedFg}\x07` : "\x1b]110\x07")
 		process.stdout.write(savedBg ? `\x1b]11;${savedBg}\x07` : "\x1b]111\x07")
 	}
@@ -43,16 +35,11 @@ export default function terminalColorsExtension(pi: ExtensionAPI) {
 		process.once("SIGHUP", () => signalRestore("SIGHUP"))
 	}
 
-	pi.on("session_start", (event) => {
+	pi.on("session_start", () => {
 		if (!process.stdin.isTTY) return
 
 		active = true
 		installExitHandlers()
-
-		if (event.reason === "startup") {
-			altScreenActive = true
-			process.stdout.write(ENTER_ALT_SCREEN)
-		}
 
 		if (savedFg !== null || savedBg !== null) {
 			process.stdout.write(SET_FG)
