@@ -36,7 +36,8 @@ describe("isBareExitAlias", () => {
 })
 
 describe("exit command behavior", () => {
-	let exitSpy: ReturnType<typeof vi.spyOn>
+	// biome-ignore lint/suspicious/noExplicitAny: vi.spyOn types differ between vitest versions
+	let exitSpy: any
 
 	beforeEach(() => {
 		exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never)
