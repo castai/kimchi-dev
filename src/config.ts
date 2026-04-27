@@ -54,6 +54,9 @@ function readApiKeyFromConfigFile(configPath: string): string | undefined {
 	try {
 		const raw = readFileSync(configPath, "utf-8")
 		const parsed = JSON.parse(raw)
+		if (typeof parsed.apiKey === "string" && parsed.apiKey.length > 0) {
+			return parsed.apiKey
+		}
 		if (typeof parsed.api_key === "string" && parsed.api_key.length > 0) {
 			return parsed.api_key
 		}
@@ -189,30 +192,12 @@ export function readTelemetryConfig(configPath?: string): TelemetryConfig {
  *
  * Throws if no API key is found in either location.
  */
-export function loadConfig(options?: { configPath?: string; env?: Record<string, string | undefined> }): KimchiConfig {
-	const env = options?.env ?? process.env
+export function loadConfig(options?: { configPath?: string }): KimchiConfig {
 	const configPath = options?.configPath ?? KIMCHI_CONFIG_PATH
 	const extras = readConfigExtras(configPath)
 	const maxToolResultChars = extras.maxToolResultChars ?? 10_000
 	const mcpSearchLimit = extras.mcpSearchLimit ?? 5
 	const mcpSearch: SearchStrategyConfig = { ...SEARCH_STRATEGY_DEFAULTS, ...extras.mcpSearch }
-
-	const skillPaths = extras.skillPaths
-	const migrationState = extras.migrationState
-
-	const envKey = env.KIMCHI_API_KEY
-	if (typeof envKey === "string" && envKey.length > 0) {
-		return {
-			apiKey: envKey,
-			agentConfigDir: AGENT_CONFIG_DIR,
-			llmEndpoint: CAST_AI_LLM_ENDPOINT,
-			maxToolResultChars,
-			mcpSearchLimit,
-			mcpSearch,
-			skillPaths,
-			migrationState,
-		}
-	}
 
 	const fileKey = readApiKeyFromConfigFile(configPath)
 	return {
@@ -222,8 +207,8 @@ export function loadConfig(options?: { configPath?: string; env?: Record<string,
 		maxToolResultChars,
 		mcpSearchLimit,
 		mcpSearch,
-		skillPaths,
-		migrationState,
+		skillPaths: extras.skillPaths,
+		migrationState: extras.migrationState,
 	}
 }
 
@@ -254,5 +239,20 @@ export function writeSkillPaths(paths: string[], configPath?: string): void {
 }
 
 export function writeApiKey(key: string, configPath?: string): void {
-	writeConfigField("api_key", key, configPath ?? KIMCHI_CONFIG_PATH)
+	writeConfigField("apiKey", key, configPath ?? KIMCHI_CONFIG_PATH)
+}
+
+export function clearApiKey(configPath?: string): void {
+	const path = configPath ?? KIMCHI_CONFIG_PATH
+	let raw: Record<string, unknown> = {}
+	try {
+		raw = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>
+	} catch {
+		return
+	}
+	delete raw["apiKey"]
+	delete raw["api_key"]
+	const tmp = `${path}.${process.pid}.tmp`
+	writeFileSync(tmp, `${JSON.stringify(raw, null, 2)}\n`, "utf-8")
+	renameSync(tmp, path)
 }
