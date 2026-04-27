@@ -172,7 +172,6 @@ export default function (skillPaths: string[]) {
 				return { action: "handled" as const }
 			})
 
-
 			// Pre-LLM-call complement of the turn_end nudge above: the model returned only
 			// tool calls with no text, tool results are queued, and it is about to be
 			// called again. Some Kimi deployments return an empty response on this specific
@@ -183,7 +182,7 @@ export default function (skillPaths: string[]) {
 				const nudged = buildEmptyTurnNudgedMessages(cleaned)
 				if (nudged) return { messages: nudged }
 				if (cleaned !== event.messages) return { messages: cleaned }
-			})	
+			})
 		}
 
 		const platformNames: Record<string, string> = { darwin: "macOS", win32: "Windows" }
