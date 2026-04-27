@@ -123,7 +123,7 @@ export default function (skillPaths: string[]) {
 				if (event.message.role !== "assistant") return
 				const { shouldNudge } = continuationNudge.evaluateTurn(event.message)
 				if (!shouldNudge) return
-				pi.sendUserMessage(CONTINUATION_NUDGE_TEXT, { deliverAs: "steer" })
+				pi.sendUserMessage(CONTINUATION_NUDGE_TEXT, { deliverAs: "followUp" })
 			})
 
 			pi.on("input", async (event, ctx) => {
