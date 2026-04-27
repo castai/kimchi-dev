@@ -81,17 +81,23 @@ MODEL=kimchi-dev/kimi-k2.5 ./scripts/run-local.sh -i terminal-bench/fix-git
 
 ### Tagging runs for tracking
 
-kimchi-code attaches tags from `KIMCHI_TAGS` to every outgoing LLM request payload and telemetry event, which lets you slice usage/tokens/cost server-side by run, experiment, or branch. Forward the variable into the task container with `--ae`:
+kimchi-code attaches tags from `KIMCHI_TAGS` to every outgoing LLM request payload and telemetry event, which lets you slice usage/tokens/cost server-side by run, experiment, or branch.
+
+The agent auto-injects `run:<timestamp>`, `task:<task_id>`, and `trial:<task_id>__<suffix>` derived from the trial directory layout (`jobs/<timestamp>/<task>__<trial>/`). You don't need to set these yourself — they're correct across globs (`-i 'terminal-bench/build-*'`), full-dataset runs, and parallel attempts (`-k N`, `-n N`).
+
+To add custom tags, forward `KIMCHI_TAGS` with `--ae`:
 
 ```bash
 ./scripts/run-local.sh \
   -i terminal-bench/fix-git \
-  --ae "KIMCHI_TAGS=bench:terminal-bench-2,task:fix-git,run:baseline"
+  --ae "KIMCHI_TAGS=bench:terminal-bench-2,experiment:baseline"
 ```
+
+User-supplied values win on key collision: passing `--ae KIMCHI_TAGS=task:custom` overrides the auto-injected `task:<task_id>`.
 
 Tag format is `key:value`, comma-separated; keys and values are alphanumeric plus `.`, `_`, `-`, max 64 chars each side. Invalid tags are dropped silently. Per-trial token/cost totals also land in `jobs/<timestamp>/<task>__<trial_id>/result.json` regardless of tags, so for local-only aggregation you can just group result files by the `KIMCHI_TAGS` value you ran them with.
 
-`--ae` is required: the agent passes an explicit env dict to the container and only `KIMCHI_API_KEY` is forwarded from the host by default. Harbor merges `--ae` values on top of that dict (`harbor/agents/installed/base.py` `_exec`), so `--ae KIMCHI_TAGS=...` reaches kimchi-code without any code changes.
+`--ae` is the only mechanism for forwarding extra env: the agent passes an explicit env dict to the container and only `KIMCHI_API_KEY` is forwarded from the host by default. Harbor merges `--ae` values on top of that dict (`harbor/agents/installed/base.py` `_exec`).
 
 ## Environment variables
 
@@ -104,7 +110,7 @@ Tag format is `key:value`, comma-separated; keys and values are alphanumeric plu
 
 ## Results
 
-`benchmark/terminal-bench-2/jobs/<timestamp>/<task>__<trial_id>/` — each trial directory contains `trial.log`, `result.json` (with `reward`), and `config.json`. The raw kimchi JSONL stream is in `agent/kimchi.txt`.
+`benchmark/terminal-bench-2/jobs/<timestamp>/<task>__<trial_id>/` — each trial directory contains `trial.log`, `result.json` (with `reward`), and `config.json`. The raw kimchi JSONL stream is in `agent/kimchi.txt`. Resumable session files (parent + each subagent, linked via `parentSession`) are in `agent/sessions/*.jsonl`; replay any of them with `kimchi-code --session <path>`.
 
 ## Troubleshooting
 
