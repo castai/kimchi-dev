@@ -15,6 +15,7 @@ import {
 } from "./config.js"
 import { isBunBinary } from "./env.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
+import outputFilterExtension from "./extensions/output-filter-extension.js"
 import loginExtension from "./extensions/login/index.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
@@ -181,6 +182,7 @@ try {
 
 		const extensionFactories = [
 			sessionIdCaptureExtension,
+			outputFilterExtension,
 			shutdownMarkerExtension,
 			terminalColorsExtension,
 			bashCollapseExtension,

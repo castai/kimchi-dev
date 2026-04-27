@@ -1,4 +1,4 @@
-export const FILTERED_OUTPUT_TAGS = ["think"]
+const FILTERED_OUTPUT_TAGS = ["think"]
 
 export function filterOutputTags(text: string): string {
 	let result = text
