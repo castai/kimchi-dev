@@ -37,6 +37,20 @@ The supported model list is fetched at startup from the kimchi metadata service.
 
 Use `/model` in the interactive CLI to switch between available models.
 
+### Multi-model orchestration
+
+By default, kimchi-code runs in multi-model mode: the main agent classifies each task, executes what it can directly, and delegates the rest to specialised subagents picked from the available model roster.
+
+To disable orchestration and run as a single, direct coding assistant:
+
+```bash
+kimchi-code --multi-model=false
+```
+
+You can also toggle the mode at any time during a session with the **option/alt+tab** keyboard shortcut. The current state is shown in the footer (`multi-model: on` / `multi-model: off`).
+
+When multi-model is off the agent uses a simpler system prompt and automatic task classification/delegation is disabled. The subagent tool is still available if you explicitly ask the agent to delegate a task.
+
 ### HTTP proxy
 
 kimchi-code respects `HTTP_PROXY` / `HTTPS_PROXY` environment variables for network requests.

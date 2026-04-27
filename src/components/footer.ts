@@ -3,6 +3,7 @@ import type { Component } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
 import { RST_FG, TEAL_FG } from "../ansi.js"
 import { formatCount } from "../extensions/format.js"
+import { getMultiModelEnabled } from "../extensions/orchestration/prompt-enrichment.js"
 import { getActiveSubagentCount } from "../extensions/subagent.js"
 import { getActiveTags, getCurrentPhase, parseTag } from "../extensions/tags.js"
 
@@ -93,6 +94,12 @@ export class StatsFooter implements Component {
 		return seg(mode)
 	}
 
+	private multiModelSegment(): FooterSegment {
+		const enabled = getMultiModelEnabled()
+		const label = enabled ? teal("on") : this.dim("off")
+		return seg(`${this.dim("multi-model:")} ${label} ${this.dim("→ option/alt+tab")}`)
+	}
+
 	private subagentSegment(): FooterSegment | null {
 		const count = getActiveSubagentCount()
 		if (count === 0) return null
@@ -106,6 +113,7 @@ export class StatsFooter implements Component {
 
 		const segments = [
 			this.permissionsSegment(),
+			this.multiModelSegment(),
 			this.modelSegment(),
 			this.subagentSegment(),
 			this.contextSegment(),
