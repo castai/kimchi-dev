@@ -1,23 +1,27 @@
 /**
- * Two complementary workarounds for Kimi K2.x tool-calling quirks that each
- * leave the agent loop in a stuck-looking state. Both targets the same failure
+ * Two complementary nudges for Kimi K2.x tool-calling quirks that each
+ * leave the agent loop in a stuck-looking state. Both target the same failure
  * class (model said one thing, didn't follow through in the next tool-use
- * step) but on opposite sides of the loop lifecycle:
+ * step) but fire at different points in the turn lifecycle:
  *
- *   1. `ContinuationNudge` — post-turn. The orchestrator reasons through the
- *      self-assessment in prose, announces it will delegate, and ends its
- *      turn without emitting the `subagent` tool call. Without a nudge the
- *      agent loop exits and the user has to re-prompt ("is it completed?").
- *      Mirrors AISI Inspect's `on_continue` parameter.
+ *   1. Continuation nudge — post-turn. The orchestrator reasons in prose,
+ *      announces it will delegate, and ends its turn without emitting the
+ *      `subagent` tool call. Delivered as a `followUp` via `pi.sendMessage`
+ *      so the agent loop restarts. Mirrors AISI Inspect's `on_continue`.
  *
- *   2. `buildEmptyTurnNudgedMessages` — pre-LLM-call. The model returned a
- *      tool-call-only response (no text), tool results are queued, and it
- *      is about to be called again. Some Kimi deployments return an empty
- *      response on this specific follow-up. Injecting a user-role nudge
- *      into the context reliably prevents the empty turn.
+ *   2. Empty-turn nudge — pre-LLM-call. The model returned a tool-call-only
+ *      response (no text) and tool results are ready. Some Kimi deployments
+ *      return an empty response on the next call. Injected transiently into
+ *      the context via the `context` event so it doesn't pollute the session
+ *      history.
  *
- * Both are orchestrator-only concerns — they are wired in
- * `prompt-enrichment.ts` inside the `if (!subagentMode)` guard.
+ * Both are delivered as custom messages with `display: false` so they
+ * never appear in the conversation. Stale nudges (those the model has
+ * already acted on) are stripped from the LLM context by
+ * `stripStaleNudges` before each call.
+ *
+ * Both are orchestrator-only concerns — wired in `prompt-enrichment.ts`
+ * inside the `if (!subagentMode)` guard.
  */
 
 import type { AssistantMessage } from "@mariozechner/pi-ai"
@@ -74,13 +78,31 @@ export class ContinuationNudge {
 
 /**
  * Pre-LLM-call nudge for the "tool-call-only assistant, tool results pending"
- * pattern. Returns a new messages array with a user-role nudge appended if
+ * pattern. Returns a new messages array with a custom-role nudge appended if
  * the pattern matches, otherwise `undefined` (signal for the caller to leave
  * the context untouched).
  *
- * Stateless by design — every decision is computable from the messages array
- * alone, which also makes it trivial to unit test.
+ * Injected via the `context` event so it is transient — visible only to the
+ * targeted LLM call, not persisted in the session history.
  */
+export const NUDGE_CUSTOM_TYPE = "nudge"
+
+function isNudgeMessage(m: OrchestratorMessages[number]): boolean {
+	return m.role === "custom" && "customType" in m && (m as { customType: string }).customType === NUDGE_CUSTOM_TYPE
+}
+
+/**
+ * Strip nudge messages that the model has already acted on (i.e. there is an
+ * assistant response after them). Keeps nudges that are still at the tail of
+ * the array — the model hasn't seen those yet.
+ */
+export function stripStaleNudges(messages: OrchestratorMessages): OrchestratorMessages {
+	const lastAssistantIdx = messages.findLastIndex((m) => m.role === "assistant")
+	if (lastAssistantIdx === -1) return messages
+	const stripped = messages.filter((m, i) => i > lastAssistantIdx || !isNudgeMessage(m))
+	return stripped.length === messages.length ? messages : stripped
+}
+
 export function buildEmptyTurnNudgedMessages(messages: OrchestratorMessages): OrchestratorMessages | undefined {
 	const lastAssistant = [...messages].reverse().find((m): m is AssistantMessage => m.role === "assistant")
 	if (!lastAssistant) return undefined
@@ -96,8 +118,10 @@ export function buildEmptyTurnNudgedMessages(messages: OrchestratorMessages): Or
 	return [
 		...messages,
 		{
-			role: "user" as const,
+			role: "custom" as const,
+			customType: NUDGE_CUSTOM_TYPE,
 			content: [{ type: "text" as const, text: EMPTY_TURN_NUDGE_TEXT }],
+			display: false,
 			timestamp: Date.now(),
 		},
 	]

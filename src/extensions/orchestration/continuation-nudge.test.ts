@@ -5,6 +5,7 @@ import {
 	EMPTY_TURN_NUDGE_TEXT,
 	type OrchestratorMessages,
 	buildEmptyTurnNudgedMessages,
+	stripStaleNudges,
 } from "./continuation-nudge.js"
 
 function makeAssistant(content: AssistantMessage["content"]): AssistantMessage {
@@ -142,9 +143,62 @@ function makeToolResult(toolCallId: string, text: string): ToolResultMessage {
 	}
 }
 
+function makeNudge(): OrchestratorMessages[number] {
+	return {
+		role: "custom" as const,
+		customType: "nudge",
+		content: [{ type: "text" as const, text: "nudge" }],
+		display: false,
+		timestamp: Date.now(),
+	}
+}
+
 function lastMessage(messages: OrchestratorMessages): OrchestratorMessages[number] {
 	return messages[messages.length - 1]
 }
+
+describe("stripStaleNudges", () => {
+	it("returns the same array when there are no nudge messages", () => {
+		const messages: OrchestratorMessages = [makeUser("q"), textOnlyMessage]
+		expect(stripStaleNudges(messages)).toBe(messages)
+	})
+
+	it("strips a nudge that precedes an assistant response", () => {
+		const nudge = makeNudge()
+		const messages: OrchestratorMessages = [makeUser("q"), nudge, textOnlyMessage]
+		const result = stripStaleNudges(messages)
+		expect(result).not.toBe(messages)
+		expect(result).toHaveLength(2)
+		expect(result).not.toContainEqual(nudge)
+	})
+
+	it("keeps a nudge that comes after the last assistant message", () => {
+		const nudge = makeNudge()
+		const messages: OrchestratorMessages = [makeUser("q"), textOnlyMessage, nudge]
+		const result = stripStaleNudges(messages)
+		expect(result).toBe(messages)
+	})
+
+	it("strips multiple stale nudges", () => {
+		const messages: OrchestratorMessages = [
+			makeUser("q1"),
+			makeNudge(),
+			textOnlyMessage,
+			makeUser("q2"),
+			makeNudge(),
+			toolCallMessage,
+		]
+		const result = stripStaleNudges(messages)
+		expect(result.filter((m) => m.role === "custom")).toHaveLength(0)
+	})
+
+	it("does not strip non-nudge custom messages", () => {
+		const other = { role: "custom" as const, customType: "other", content: "x", display: false, timestamp: Date.now() }
+		const messages: OrchestratorMessages = [makeUser("q"), other, textOnlyMessage]
+		const result = stripStaleNudges(messages)
+		expect(result).toContainEqual(other)
+	})
+})
 
 describe("buildEmptyTurnNudgedMessages", () => {
 	it("returns undefined when there is no assistant message yet", () => {
@@ -166,14 +220,13 @@ describe("buildEmptyTurnNudgedMessages", () => {
 		expect(buildEmptyTurnNudgedMessages(messages)).toBeUndefined()
 	})
 
-	it("appends a user-role nudge when tool-call-only assistant is followed by tool results", () => {
+	it("appends a custom-role nudge when tool-call-only assistant is followed by tool results", () => {
 		const messages: OrchestratorMessages = [makeUser("q"), toolCallMessage, makeToolResult("call_1", "done")]
 		const nudged = buildEmptyTurnNudgedMessages(messages)
 		expect(nudged).toBeDefined()
 		expect(nudged?.length).toBe(messages.length + 1)
 		const appended = lastMessage(nudged as OrchestratorMessages)
-		expect(appended.role).toBe("user")
-		expect((appended as UserMessage).content).toEqual([{ type: "text", text: EMPTY_TURN_NUDGE_TEXT }])
+		expect(appended.role).toBe("custom")
 	})
 
 	it("does not mutate the caller's messages array", () => {
@@ -184,7 +237,6 @@ describe("buildEmptyTurnNudgedMessages", () => {
 	})
 
 	it("uses the most recent assistant message (ignores older ones)", () => {
-		// An earlier text-only assistant turn should not disqualify a later tool-call-only drift.
 		const messages: OrchestratorMessages = [
 			makeUser("q1"),
 			textOnlyMessage,
