@@ -6,6 +6,15 @@ import { LogoHeader } from "../components/logo.js"
 import { SplashHeader } from "../components/splash-header.js"
 import { collapseAll, expandNext, resetState } from "../expand-state.js"
 
+/**
+ * Check if input is the exit alias and should be transformed to /quit
+ */
+function shouldTransformToQuit(text: string): boolean {
+	const trimmed = text.trim()
+	// Transform plain "exit" (without leading slash) to /exit
+	return trimmed === "exit"
+}
+
 const HORIZONTAL_PADDING = 2
 
 // Strip OSC 133 shell-integration marks emitted by pi-mono around each message.
@@ -54,10 +63,23 @@ export default function uiExtension(pi: ExtensionAPI) {
 		})
 	})
 
-	pi.on("input", (_event, ctx) => {
+	pi.on("input", (event, ctx) => {
+		// Handle exit aliases: immediately quit when user types "exit"
+		if (shouldTransformToQuit(event.text)) {
+			process.exit(0)
+		}
+
 		if (!splashActive) return
 		splashActive = false
 		ctx.ui.setHeader((_tui, theme) => new LogoHeader(theme))
 		currentEditor?.setSplashMode(false)
+	})
+
+	// Register /exit as an alias for /quit
+	pi.registerCommand("exit", {
+		description: "Exit the application (alias for /quit)",
+		handler: async () => {
+			process.exit(0)
+		},
 	})
 }
