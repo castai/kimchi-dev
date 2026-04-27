@@ -85,7 +85,7 @@ function buildModelsConfig(models: ModelMetadata[]) {
 				api: "openai-completions",
 				authHeader: true,
 				headers: { "User-Agent": `kimchi/${getVersion()}` },
-			    models: models.map(metadataToModel),
+				models: models.map(metadataToModel),
 			},
 		},
 	}
