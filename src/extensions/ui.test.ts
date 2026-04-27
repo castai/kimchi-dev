@@ -1,42 +1,42 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // Extract the function for testing
-function shouldTransformToQuit(text: string): boolean {
+function isBareExitAlias(text: string): boolean {
 	const trimmed = text.trim()
 	return trimmed === "exit"
 }
 
-describe("shouldTransformToQuit", () => {
+describe("isBareExitAlias", () => {
 	it("returns true for exact 'exit' input", () => {
-		expect(shouldTransformToQuit("exit")).toBe(true)
+		expect(isBareExitAlias("exit")).toBe(true)
 	})
 
 	it("returns true for 'exit' with leading/trailing whitespace", () => {
-		expect(shouldTransformToQuit("  exit  ")).toBe(true)
-		expect(shouldTransformToQuit("\texit\n")).toBe(true)
-		expect(shouldTransformToQuit("  exit")).toBe(true)
-		expect(shouldTransformToQuit("exit  ")).toBe(true)
+		expect(isBareExitAlias("  exit  ")).toBe(true)
+		expect(isBareExitAlias("\texit\n")).toBe(true)
+		expect(isBareExitAlias("  exit")).toBe(true)
+		expect(isBareExitAlias("exit  ")).toBe(true)
 	})
 
 	it("returns false for '/exit' command", () => {
-		expect(shouldTransformToQuit("/exit")).toBe(false)
+		expect(isBareExitAlias("/exit")).toBe(false)
 	})
 
 	it("returns false for 'EXIT' (case sensitive)", () => {
-		expect(shouldTransformToQuit("EXIT")).toBe(false)
-		expect(shouldTransformToQuit("Exit")).toBe(false)
+		expect(isBareExitAlias("EXIT")).toBe(false)
+		expect(isBareExitAlias("Exit")).toBe(false)
 	})
 
 	it("returns false for empty input", () => {
-		expect(shouldTransformToQuit("")).toBe(false)
-		expect(shouldTransformToQuit("   ")).toBe(false)
+		expect(isBareExitAlias("")).toBe(false)
+		expect(isBareExitAlias("   ")).toBe(false)
 	})
 
 	it("returns false for other text", () => {
-		expect(shouldTransformToQuit("hello")).toBe(false)
-		expect(shouldTransformToQuit("exit now")).toBe(false)
-		expect(shouldTransformToQuit("please exit")).toBe(false)
-		expect(shouldTransformToQuit("quit")).toBe(false)
+		expect(isBareExitAlias("hello")).toBe(false)
+		expect(isBareExitAlias("exit now")).toBe(false)
+		expect(isBareExitAlias("please exit")).toBe(false)
+		expect(isBareExitAlias("quit")).toBe(false)
 	})
 })
 
@@ -53,7 +53,7 @@ describe("exit command behavior", () => {
 
 	it("calls process.exit(0) when 'exit' is typed", () => {
 		// Simulate what the input handler does
-		if (shouldTransformToQuit("exit")) {
+		if (isBareExitAlias("exit")) {
 			process.exit(0)
 		}
 
@@ -61,7 +61,7 @@ describe("exit command behavior", () => {
 	})
 
 	it("does not call process.exit for non-exit input", () => {
-		if (shouldTransformToQuit("hello")) {
+		if (isBareExitAlias("hello")) {
 			process.exit(0)
 		}
 
@@ -69,7 +69,7 @@ describe("exit command behavior", () => {
 	})
 
 	it("does not call process.exit for '/exit' command", () => {
-		if (shouldTransformToQuit("/exit")) {
+		if (isBareExitAlias("/exit")) {
 			process.exit(0)
 		}
 

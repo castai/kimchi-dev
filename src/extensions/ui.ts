@@ -7,11 +7,11 @@ import { SplashHeader } from "../components/splash-header.js"
 import { collapseAll, expandNext, resetState } from "../expand-state.js"
 
 /**
- * Check if input is the exit alias and should be transformed to /quit
+ * Check if input is the bare "exit" alias (without leading slash).
+ * When true, the input handler will immediately exit the process.
  */
-function shouldTransformToQuit(text: string): boolean {
+function isBareExitAlias(text: string): boolean {
 	const trimmed = text.trim()
-	// Transform plain "exit" (without leading slash) to /exit
 	return trimmed === "exit"
 }
 
@@ -64,8 +64,8 @@ export default function uiExtension(pi: ExtensionAPI) {
 	})
 
 	pi.on("input", (event, ctx) => {
-		// Handle exit aliases: immediately quit when user types "exit"
-		if (shouldTransformToQuit(event.text)) {
+		// Handle bare "exit" alias: immediately quit without sending to model
+		if (isBareExitAlias(event.text)) {
 			process.exit(0)
 		}
 
