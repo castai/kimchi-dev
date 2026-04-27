@@ -97,7 +97,8 @@ export class StatsFooter implements Component {
 	private multiModelSegment(): FooterSegment {
 		const enabled = getMultiModelEnabled()
 		const label = enabled ? teal("on") : this.dim("off")
-		return seg(`${this.dim("multi-model:")} ${label} ${this.dim("→ option/alt+shift+tab")}`)
+		const shortcut = process.platform === "darwin" ? "option+tab" : "alt+tab"
+		return seg(`${this.dim("multi-model:")} ${label} ${this.dim(`→ ${shortcut}`)}`)
 	}
 
 	private subagentSegment(): FooterSegment | null {
