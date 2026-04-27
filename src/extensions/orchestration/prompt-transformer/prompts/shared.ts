@@ -17,6 +17,10 @@ export const CORE_GUIDELINES = `- Be concise in your responses.
 - If you encounter an error, diagnose the root cause before retrying.
 - **Pattern recognition**: If the same implementation pattern is needed more than twice, define the abstraction first, then implement.`
 
+export const WORKSPACE_SECTION = `## Workspace
+
+The Workspace directory is shown in the Environment section. Use it for **all** intermediate and output files: plans, specs, research notes, findings, or any file passed between agents. Never write working documents to the project directory or a temporary directory.`
+
 export const PHASE_TAGGING = `## Phase Tagging for Analytics
 
 You must call \`set_phase\` before every block of work. Never take an action without the correct phase being set first. Use one of \`explore\`, \`research\`, \`plan\`, \`build\`, or \`review\` strictly matching current work type.
