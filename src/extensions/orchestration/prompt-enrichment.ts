@@ -78,6 +78,7 @@ function readGitRemote(cwd: string): string | undefined {
 	}
 }
 
+// Workaround: pi-mono's applyExtensionFlagValues ignores the actual value for boolean flags (always sets true). Read argv directly until upstream is fixed.
 function readMultiModelArgv(): boolean {
 	const args = process.argv
 	for (let i = 0; i < args.length; i++) {
