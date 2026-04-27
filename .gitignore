@@ -24,3 +24,6 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# Kimchi docs directory
+.kimchi/

@@ -25,6 +25,21 @@ function patchTuiPadding(tui: TUI) {
 	}
 }
 
+// Track splash state globally so other extensions can reset it
+let splashActive = false
+let currentEditor: PromptEditor | undefined
+
+/**
+ * Reset splash mode and switch to chat view.
+ * Call this from command handlers that need to exit splash mode.
+ */
+export function exitSplashMode(ctx: { ui: { setHeader: (factory: (tui: TUI, theme: import("@mariozechner/pi-coding-agent").Theme) => import("@mariozechner/pi-tui").Component) => void } }): void {
+	if (!splashActive) return
+	splashActive = false
+	ctx.ui.setHeader((_tui, theme) => new LogoHeader(theme))
+	currentEditor?.setSplashMode(false)
+}
+
 function runScript(scriptPath: string, payload: object, tui: TUI, footer: ScriptFooter, onDone: () => void): void {
 	const child = spawn(scriptPath, [], {
 		env: process.env,
@@ -65,8 +80,6 @@ function runScript(scriptPath: string, payload: object, tui: TUI, footer: Script
 }
 
 export default function uiExtension(pi: ExtensionAPI) {
-	let splashActive = false
-	let currentEditor: PromptEditor | undefined
 	let tuiPatched = false
 	let scriptFooter: ScriptFooter | null = null
 	let scriptTui: TUI | null = null
