@@ -1,14 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-
-// Extract the functions for testing
-function isBareExitAlias(text: string): boolean {
-	const trimmed = text.trim()
-	return trimmed === "exit"
-}
-
-function quitApplication(): never {
-	process.exit(0)
-}
+import { isBareExitAlias, quitApplication } from "./exit-utils.js"
 
 describe("isBareExitAlias", () => {
 	it("returns true for exact 'exit' input", () => {
