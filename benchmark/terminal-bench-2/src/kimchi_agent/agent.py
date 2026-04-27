@@ -220,6 +220,7 @@ class KimchiCode(BaseInstalledAgent):
         total_input_tokens = 0
         total_output_tokens = 0
         total_cache_read_tokens = 0
+        total_cache_write_tokens = 0
         total_cost = 0.0
 
         # Aggregate main.jsonl + subagent <timestamp>_<uuid>.jsonl siblings (see
@@ -240,9 +241,13 @@ class KimchiCode(BaseInstalledAgent):
                 total_input_tokens += usage.input
                 total_output_tokens += usage.output
                 total_cache_read_tokens += usage.cache_read
+                total_cache_write_tokens += usage.cache_write
                 total_cost += usage.cost.total
 
-        context.n_input_tokens = total_input_tokens + total_cache_read_tokens
+        # pi-ai treats input, cacheRead, cacheWrite as disjoint summing to totalTokens
+        # (see node_modules/.../pi-ai/dist/providers/anthropic.js). Sum all three for
+        # the wire-level prompt total.
+        context.n_input_tokens = total_input_tokens + total_cache_read_tokens + total_cache_write_tokens
         context.n_output_tokens = total_output_tokens
         context.n_cache_tokens = total_cache_read_tokens
         context.cost_usd = total_cost if total_cost > 0 else None
