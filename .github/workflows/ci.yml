@@ -9,7 +9,7 @@ jobs:
   pr-checks:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     concurrency:
       group: ci-pr-${{ github.head_ref }}
       cancel-in-progress: true
@@ -21,14 +21,17 @@ jobs:
           bun: "true"
           playwright: "true"
 
-      - name: Build
-        run: pnpm run build
-
       - name: Check (lint + type check)
         run: pnpm run check
 
+      - name: Build binary
+        run: pnpm run build:binary
+
       - name: Test
         run: pnpm run test
+
+      - name: Smoke tests
+        run: pnpm run test:smoke
 
   master-checks:
     if: github.event_name == 'push'
