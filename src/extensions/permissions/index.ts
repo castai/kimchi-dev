@@ -10,6 +10,13 @@ import { SessionMemory } from "./session-memory.js"
 import { isReadOnlyBashCommand, isReadOnlyTool } from "./taxonomy.js"
 import { BUILTIN_DENY, DEFAULT_CONFIG, type PermissionMode, type Rule } from "./types.js"
 
+/**
+ * DANGER: Bypass flag that disables ALL permission checks.
+ * WARNING: This skips denylist, rules, classifier, and prompts.
+ * For throwaway/sandboxed environments ONLY.
+ */
+const DANGEROUS_BYPASS_FLAG = "dangerously-skip-permissions"
+
 // Safe default so any event that fires before session_start (and therefore
 // before doLoadConfig) doesn't crash reading `loaded.config.*`.
 const EMPTY_LOADED_CONFIG: LoadedConfig = {
@@ -28,7 +35,8 @@ const BUILTIN_ALLOW_TOOL_NAMES = ["subagent", "set_phase"]
 const MODES: Array<{ mode: PermissionMode; label: string; color: "success" | "warning" | "error" }> = [
 	{ mode: "default", label: "default", color: "success" },
 	{ mode: "plan", label: "plan", color: "warning" },
-	{ mode: "auto", label: "yolo", color: "error" },
+	{ mode: "auto", label: "auto", color: "warning" },
+	{ mode: "yolo", label: "yolo", color: "error" },
 ]
 
 export default function permissionsExtension(pi: ExtensionAPI): void {
@@ -37,8 +45,19 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		type: "boolean",
 		default: false,
 	})
+	pi.registerFlag("yolo", {
+		description: "Alias for --auto. Start in autonomous mode (YOLO with classifier).",
+		type: "boolean",
+		default: false,
+	})
 	pi.registerFlag("auto", {
 		description: "Start in autonomous mode (YOLO with classifier).",
+		type: "boolean",
+		default: false,
+	})
+	pi.registerFlag(DANGEROUS_BYPASS_FLAG, {
+		description:
+			"DANGER: Skip ALL permission checks including denylist (sudo, .env writes), rules, classifier, and prompts. Intended for throwaway/sandbox environments only.",
 		type: "boolean",
 		default: false,
 	})
@@ -71,6 +90,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	let cliMode: PermissionMode | undefined
 	let originalActiveTools: string[] | null = null
 	let planModeApplied = false
+	let yoloWarningShown = false
 
 	function rebuildConfigRules(): void {
 		configRules = [
@@ -83,6 +103,11 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		]
 	}
 
+	/** Propagate permission mode to spawned subagents. */
+	function propagateModeToEnv(): void {
+		process.env.KIMCHI_PERMISSIONS = currentMode()
+	}
+
 	function currentMode(): PermissionMode {
 		return resolveMode({
 			runtime: runtimeMode,
@@ -90,11 +115,6 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 			env: envBaseline,
 			config: loaded.config.defaultMode,
 		}).mode
-	}
-
-	// Spawned subagents inherit the mode via process.env.
-	function propagateModeToEnv(): void {
-		process.env.KIMCHI_PERMISSIONS = currentMode()
 	}
 
 	function allRules(): Rule[] {
@@ -153,6 +173,13 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		if (next === "plan") applyPlanModeTools()
 		propagateModeToEnv()
 		updateStatus(ctx)
+		// Show danger warning when switching to yolo mode (only once per session)
+		if (next === "yolo" && ctx.hasUI && !yoloWarningShown) {
+			yoloWarningShown = true
+			const dangerMsg =
+				"DANGER: Running in YOLO mode. All permission checks are disabled. The agent will execute commands without confirmation. This can modify or delete files. Intended for use in disposable or sandboxed environments only. Not recommended for production use."
+			ctx.ui.notify(ctx.ui.theme.fg("error", dangerMsg), "warning")
+		}
 	}
 
 	function doLoadConfig(ctx: ExtensionContext): { errors: string[] } {
@@ -181,10 +208,20 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 
 		if (pi.getFlag("plan")) cliMode = "plan"
 		else if (pi.getFlag("auto")) cliMode = "auto"
+		// YOLO mode: --yolo and --dangerously-skip-permissions both set yolo mode (no classifier, auto-approve all)
+		else if (pi.getFlag("yolo") || pi.getFlag("dangerously-skip-permissions")) cliMode = "yolo"
 
 		if (currentMode() === "plan") applyPlanModeTools()
 		propagateModeToEnv()
 		updateStatus(ctx)
+
+		// Show danger warning when starting in yolo mode (only once per session)
+		if (currentMode() === "yolo" && ctx.hasUI && !yoloWarningShown) {
+			yoloWarningShown = true
+			const dangerMsg =
+				"DANGER: Running in YOLO mode. All permission checks are disabled. The agent will execute commands without confirmation. This can modify or delete files. Intended for use in disposable or sandboxed environments only. Not recommended for production use."
+			ctx.ui.notify(ctx.ui.theme.fg("error", dangerMsg), "warning")
+		}
 	})
 
 	pi.on("before_agent_start", async (event): Promise<{ systemPrompt?: string }> => {
@@ -196,6 +233,11 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		const mode = currentMode()
 		const toolName = event.toolName.toLowerCase()
 		const input = event.input as Record<string, unknown>
+
+		// YOLO mode: bypass ALL permission checks including rules, denylist, and classifier
+		if (mode === "yolo") {
+			return undefined
+		}
 
 		if (mode === "plan") {
 			if (toolName === "bash") {

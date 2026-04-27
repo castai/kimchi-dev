@@ -6,6 +6,13 @@ describe("parseModeString", () => {
 		expect(parseModeString("default")).toBe("default")
 		expect(parseModeString("plan")).toBe("plan")
 		expect(parseModeString("auto")).toBe("auto")
+		expect(parseModeString("yolo")).toBe("yolo")
+	})
+
+	it("yolo mode is recognized", () => {
+		expect(parseModeString("yolo")).toBe("yolo")
+		expect(parseModeString("YOLO")).toBe("yolo")
+		expect(parseModeString("Yolo")).toBe("yolo")
 	})
 
 	it("is case-insensitive", () => {
@@ -14,7 +21,7 @@ describe("parseModeString", () => {
 	})
 
 	it("returns undefined for unknown/empty", () => {
-		expect(parseModeString("yolo")).toBeUndefined()
+		expect(parseModeString("unknown")).toBeUndefined()
 		expect(parseModeString(undefined)).toBeUndefined()
 		expect(parseModeString("")).toBeUndefined()
 	})

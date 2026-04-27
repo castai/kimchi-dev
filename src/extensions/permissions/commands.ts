@@ -123,13 +123,23 @@ async function openModePicker(ctx: ExtensionContext, deps: CommandDeps): Promise
 
 	const OPT_DEFAULT = `${marker("default")}  default — ask before each tool call`
 	const OPT_PLAN = `${marker("plan")}  plan — read-only exploration`
-	const OPT_AUTO = `${marker("auto")}  yolo — run freely, classifier guards the rest`
+	const OPT_AUTO = `${marker("auto")}  auto — run freely, classifier guards the rest`
+	const OPT_YOLO = `${marker("yolo")}  yolo — run freely, no classifier (DANGER)`
 	const CANCEL = "Cancel"
 
-	const choice = await ctx.ui.select("Select permission mode", [OPT_DEFAULT, OPT_PLAN, OPT_AUTO, CANCEL])
+	const choice = await ctx.ui.select("Select permission mode", [OPT_DEFAULT, OPT_PLAN, OPT_AUTO, OPT_YOLO, CANCEL])
 	if (!choice || choice === CANCEL) return
 
-	const picked: PermissionMode = choice === OPT_DEFAULT ? "default" : choice === OPT_PLAN ? "plan" : "auto"
+	const picked: PermissionMode =
+		choice === OPT_DEFAULT
+			? "default"
+			: choice === OPT_PLAN
+				? "plan"
+				: choice === OPT_AUTO
+					? "auto"
+					: choice === OPT_YOLO
+						? "yolo"
+						: "default"
 	handleMode(ctx, deps, picked)
 }
 
@@ -141,7 +151,7 @@ async function promptForRule(ctx: ExtensionContext, deps: CommandDeps, behavior:
 }
 
 const HELP_TEXT = `/permissions — show current mode and rules
-/permissions mode <default|plan|auto> — switch mode
+/permissions mode <default|plan|auto|yolo> — switch mode
 /permissions allow <rule> — add a session allow rule
 /permissions deny <rule> — add a session deny rule
 /permissions save user|project — persist session rules to config
