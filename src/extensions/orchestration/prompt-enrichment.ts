@@ -27,7 +27,7 @@ import { isAbsolute, join, normalize, resolve } from "node:path"
 import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
 import { ANSI, fg } from "../../ansi.js"
-import { getAvailableModelIds } from "../../startup-context.js"
+import { getAvailableModels } from "../../startup-context.js"
 import { getGitBranch } from "../../utils.js"
 import { CONTINUATION_NUDGE_TEXT, ContinuationNudge, buildEmptyTurnNudgedMessages } from "./continuation-nudge.js"
 import { ModelRegistry } from "./model-registry/index.js"
@@ -89,7 +89,7 @@ export default function (skillPaths: string[]) {
 
 		// For sub agents we don't want to transform the prompt sent from parent with model capabilities
 		if (!subagentMode) {
-			const registry = new ModelRegistry(getAvailableModelIds())
+			const registry = new ModelRegistry(getAvailableModels())
 
 			// Announce newly available API models that have no capability entry yet.
 			for (const warning of registry.warnings) {

@@ -36,6 +36,11 @@ can ingest entire large codebases in a single pass. \
 Weakest at coding; not reliable for complex multi-file changes. \
 Best for codebase exploration, research, and simple well-defined tasks.`
 
+const CLAUDE_OPUS_47_DESCRIPTION = `\
+Anthropic's flagship Claude model. Strongest general reasoning, planning, and vision support. \
+Best for complex multi-step tasks requiring deep research and exploration across large codebases.`
+
+// TODO: these capabilities could be returned by our models metadata API.
 /**
  * Capability knowledge-base keyed by model ID. Used to enrich the dynamic
  * model list from the API with orchestration metadata (tier, strengths,
@@ -76,6 +81,18 @@ export const MODEL_CAPABILITIES: ReadonlyMap<string, ModelCapabilities | "ignore
 			description: NEMOTRON_3_SUPER_DESCRIPTION,
 		},
 	],
+	[
+		"claude-opus-4-7",
+		{
+			vision: true,
+			strengths: ["explore", "research", "plan", "review"],
+			tier: "heavy",
+			description: CLAUDE_OPUS_47_DESCRIPTION,
+		},
+	],
 	["glm-5-fp8", "ignored"],
 	["minimax-m2.5", "ignored"],
+	["claude-opus-4-6", "ignored"],
+	["claude-sonnet-4-6", "ignored"],
+	["claude-sonnet-4-5", "ignored"],
 ])
