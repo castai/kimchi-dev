@@ -260,4 +260,12 @@ describe("updateModelsConfig", () => {
 
 		expect(existsSync(nestedPath)).toBe(true)
 	})
+
+	it("returns empty models without fetching when apiKey is empty", async () => {
+		const result = await updateModelsConfig(modelsJsonPath, "")
+
+		expect(result).toEqual({ models: [] })
+		expect(fetch).not.toHaveBeenCalled()
+		expect(existsSync(modelsJsonPath)).toBe(false)
+	})
 })

@@ -123,15 +123,25 @@ function readCachedMetadata(modelsJsonPath: string): ModelMetadata[] | undefined
 	}
 }
 
+export async function validateApiKey(apiKey: string): Promise<void> {
+	await fetchAvailableModels(apiKey)
+}
+
 /**
  * Fetch available models from the kimchi metadata API and write the
- * configuration to modelsJsonPath. If the fetch fails (or returns an empty
- * list) and the previous models.json is still on disk, returns the cached
- * models with a warning. Throws only when there is no cache to fall back on.
+ * configuration to modelsJsonPath. If no API key is configured, returns
+ * cached models (if available) or an empty list without making a network call.
+ * If the fetch fails and the previous models.json is still on disk, returns
+ * the cached models with a warning. Throws only when a key is present but
+ * there is no cache to fall back on.
  */
 export async function updateModelsConfig(modelsJsonPath: string, apiKey: string): Promise<ModelsConfigResult> {
 	const dir = dirname(modelsJsonPath)
 	mkdirSync(dir, { recursive: true })
+
+	if (!apiKey) {
+		return { models: readCachedMetadata(modelsJsonPath) ?? [] }
+	}
 
 	let fetched: ModelMetadata[]
 	try {

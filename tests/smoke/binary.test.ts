@@ -9,12 +9,6 @@ describe("binary smoke tests", () => {
 		accessSync(BINARY_PATH, constants.X_OK)
 	})
 
-	it("errors with meaningful message when KIMCHI_API_KEY is missing", () => {
-		const result = runBinary({ throwOnError: false })
-		expect(result.status).toBe(1)
-		expect(result.stderr).toContain("No Kimchi API key found")
-	})
-
 	it("--version exits cleanly", () => {
 		const result = runBinary({
 			args: ["--version"],
