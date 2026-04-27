@@ -250,8 +250,10 @@ export function clearApiKey(configPath?: string): void {
 	} catch {
 		return
 	}
-	raw.apiKey = undefined
-	raw.api_key = undefined
+	// biome-ignore lint/performance/noDelete: explicit removal is clearer than relying on JSON.stringify to silently drop undefined values
+	delete raw.apiKey
+	// biome-ignore lint/performance/noDelete: explicit removal is clearer than relying on JSON.stringify to silently drop undefined values
+	delete raw.api_key
 	const tmp = `${path}.${process.pid}.tmp`
 	writeFileSync(tmp, `${JSON.stringify(raw, null, 2)}\n`, "utf-8")
 	renameSync(tmp, path)

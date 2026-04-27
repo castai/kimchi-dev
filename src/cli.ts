@@ -90,7 +90,8 @@ try {
 		let config = loadConfig()
 
 		const envKey = process.env.KIMCHI_API_KEY || undefined
-		process.env.KIMCHI_API_KEY = undefined
+		// biome-ignore lint/performance/noDelete: process.env coerces assignments to strings, so `= undefined` would set it to the literal "undefined"
+		delete process.env.KIMCHI_API_KEY
 		if (envKey && !config.apiKey) {
 			writeApiKey(envKey)
 			config = loadConfig()
