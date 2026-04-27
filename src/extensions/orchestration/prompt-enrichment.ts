@@ -29,7 +29,13 @@ import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-codi
 import { ANSI, fg } from "../../ansi.js"
 import { getAvailableModels } from "../../startup-context.js"
 import { getGitBranch } from "../../utils.js"
-import { CONTINUATION_NUDGE_TEXT, ContinuationNudge, buildEmptyTurnNudgedMessages } from "./continuation-nudge.js"
+import {
+	CONTINUATION_NUDGE_TEXT,
+	ContinuationNudge,
+	NUDGE_CUSTOM_TYPE,
+	buildEmptyTurnNudgedMessages,
+	stripStaleNudges,
+} from "./continuation-nudge.js"
 import { ModelRegistry } from "./model-registry/index.js"
 import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/context-files.js"
 import {
@@ -123,7 +129,10 @@ export default function (skillPaths: string[]) {
 				if (event.message.role !== "assistant") return
 				const { shouldNudge } = continuationNudge.evaluateTurn(event.message)
 				if (!shouldNudge) return
-				pi.sendUserMessage(CONTINUATION_NUDGE_TEXT, { deliverAs: "followUp" })
+				pi.sendMessage(
+					{ customType: NUDGE_CUSTOM_TYPE, content: CONTINUATION_NUDGE_TEXT, display: false },
+					{ deliverAs: "followUp" },
+				)
 			})
 
 			pi.on("input", async (event, ctx) => {
@@ -163,15 +172,18 @@ export default function (skillPaths: string[]) {
 				return { action: "handled" as const }
 			})
 
+
 			// Pre-LLM-call complement of the turn_end nudge above: the model returned only
 			// tool calls with no text, tool results are queued, and it is about to be
 			// called again. Some Kimi deployments return an empty response on this specific
-			// follow-up; a user-role nudge injected into the context reliably prevents it.
+			// follow-up; a custom-role nudge injected transiently into the context prevents it
+			// without polluting the session history.
 			pi.on("context", async (event) => {
-				const nudged = buildEmptyTurnNudgedMessages(event.messages)
-				if (!nudged) return
-				return { messages: nudged }
-			})
+				const cleaned = stripStaleNudges(event.messages)
+				const nudged = buildEmptyTurnNudgedMessages(cleaned)
+				if (nudged) return { messages: nudged }
+				if (cleaned !== event.messages) return { messages: cleaned }
+			})	
 		}
 
 		const platformNames: Record<string, string> = { darwin: "macOS", win32: "Windows" }
