@@ -35,6 +35,7 @@ import { type ContextFile, loadProjectContextFiles } from "./prompt-transformer/
 import {
 	type EnvironmentInfo,
 	buildOrchestratorSystemPrompt,
+	buildSingleModelSystemPrompt,
 	buildSubagentSystemPrompt,
 	isSubagent,
 	transformPrompt,
@@ -248,14 +249,16 @@ export default function (skillPaths: string[]) {
 				gitRemote: isGitRepo ? (cachedGitRemote ?? undefined) : undefined,
 			}
 
-			if (subagentMode || !multiModelEnabled) {
-				if (subagentMode) {
-					// Filter the subagent tool out to prevent infinite delegation chains.
-					const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
-					pi.setActiveTools(activeTools)
-				}
-
+			if (subagentMode) {
+				// Filter the subagent tool out to prevent infinite delegation chains.
+				const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
+				pi.setActiveTools(activeTools)
 				const systemPrompt = buildSubagentSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
+				return { systemPrompt }
+			}
+
+			if (!multiModelEnabled) {
+				const systemPrompt = buildSingleModelSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
 				return { systemPrompt }
 			}
 

@@ -3,6 +3,7 @@ import type { ModelRegistry } from "../model-registry/index.js"
 import type { OrchestrationModelDescriptor } from "../model-registry/types.js"
 import type { ContextFile } from "./context-files.js"
 import systemPromptTemplate from "./prompts/orchestrator-system-prompt.js"
+import singleModelSystemPromptTemplate from "./prompts/single-model-system-prompt.js"
 import subagentSystemPromptTemplate from "./prompts/subagent-system-prompt.js"
 import userPromptTemplate from "./prompts/transformed-user-prompt.js"
 
@@ -89,6 +90,23 @@ export function buildOrchestratorSystemPrompt(
 	const projectContext = formatProjectContext(contextFiles)
 	const skillsSection = formatSkills(skills)
 	return systemPromptTemplate
+		.replace("{{TOOLS}}", () => toolsSection)
+		.replace("{{ENVIRONMENT}}", () => environmentSection)
+		.replace("{{PROJECT_CONTEXT}}", () => projectContext)
+		.replace("{{SKILLS}}", () => skillsSection)
+}
+
+export function buildSingleModelSystemPrompt(
+	tools: readonly ToolInfo[],
+	env: EnvironmentInfo,
+	contextFiles?: readonly ContextFile[],
+	skills?: readonly Skill[],
+): string {
+	const toolsSection = formatToolsSection(tools)
+	const environmentSection = formatEnvironmentSection(env)
+	const projectContext = formatProjectContext(contextFiles)
+	const skillsSection = formatSkills(skills)
+	return singleModelSystemPromptTemplate
 		.replace("{{TOOLS}}", () => toolsSection)
 		.replace("{{ENVIRONMENT}}", () => environmentSection)
 		.replace("{{PROJECT_CONTEXT}}", () => projectContext)
