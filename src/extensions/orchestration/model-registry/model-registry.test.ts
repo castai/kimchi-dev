@@ -10,9 +10,7 @@ function metadata(slug: string, overrides: Partial<ModelMetadata> = {}): ModelMe
 	return {
 		slug,
 		display_name: "",
-		description: "",
 		provider: "ai-enabler",
-		tool_call: true,
 		reasoning: false,
 		input_modalities: ["text"],
 		is_serverless: true,

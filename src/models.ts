@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { getVersion } from "./utils.js"
 
@@ -10,9 +10,7 @@ const FETCH_TIMEOUT_MS = 5000
 export interface ModelMetadata {
 	slug: string
 	display_name: string
-	description: string
 	provider: string
-	tool_call: boolean
 	reasoning: boolean
 	input_modalities: ("text" | "image")[]
 	is_serverless: boolean
@@ -43,6 +41,9 @@ async function fetchAvailableModels(apiKey: string): Promise<ModelMetadata[]> {
 	const body = (await response.json()) as ModelsMetadataResponse
 	if (!Array.isArray(body?.models)) {
 		throw new Error("Unexpected response shape from models API")
+	}
+	if (body.models.length === 0) {
+		throw new Error("API returned empty model list")
 	}
 	return body.models
 }
@@ -94,20 +95,55 @@ export interface ModelsConfigResult {
 	models: ModelMetadata[]
 }
 
+function modelToMetadata(m: PiModelConfig): ModelMetadata {
+	return {
+		slug: m.id,
+		display_name: m.name,
+		// `compat` is only set for anthropic models in metadataToModel, so its
+		// presence is a reliable indicator of the provider after a round-trip.
+		provider: m.compat ? "anthropic" : "",
+		reasoning: m.reasoning,
+		input_modalities: m.input,
+		// is_serverless is not persisted; sortModels will treat all cached models
+		// as serverless on fallback, which is acceptable for a degraded path.
+		is_serverless: true,
+		limits: { context_window: m.contextWindow, max_output_tokens: m.maxTokens },
+	}
+}
+
+function readCachedMetadata(modelsJsonPath: string): ModelMetadata[] | undefined {
+	try {
+		const raw = readFileSync(modelsJsonPath, "utf-8")
+		const parsed = JSON.parse(raw)
+		const models = parsed?.providers?.["kimchi-dev"]?.models
+		if (!Array.isArray(models) || models.length === 0) return undefined
+		return (models as PiModelConfig[]).map(modelToMetadata)
+	} catch {
+		return undefined
+	}
+}
+
 /**
  * Fetch available models from the kimchi metadata API and write the
- * configuration to modelsJsonPath. Always overwrites any existing file so
- * the model list stays current on every startup. Throws on fetch failure
- * or empty response.
+ * configuration to modelsJsonPath. If the fetch fails (or returns an empty
+ * list) and the previous models.json is still on disk, returns the cached
+ * models with a warning. Throws only when there is no cache to fall back on.
  */
 export async function updateModelsConfig(modelsJsonPath: string, apiKey: string): Promise<ModelsConfigResult> {
 	const dir = dirname(modelsJsonPath)
 	mkdirSync(dir, { recursive: true })
 
-	const fetched = await fetchAvailableModels(apiKey)
-	if (fetched.length === 0) {
-		throw new Error("API returned empty model list")
+	let fetched: ModelMetadata[]
+	try {
+		fetched = await fetchAvailableModels(apiKey)
+	} catch (err) {
+		const cached = readCachedMetadata(modelsJsonPath)
+		if (!cached) throw err
+		const message = err instanceof Error ? err.message : String(err)
+		console.warn(`Failed to refresh models from API, using cached list: ${message}`)
+		return { models: cached }
 	}
+
 	const models = sortModels(fetched)
 	writeFileSync(modelsJsonPath, JSON.stringify(buildModelsConfig(models), null, "\t"), "utf-8")
 	return { models }

@@ -7,52 +7,40 @@ import { updateModelsConfig } from "./models.js"
 const KIMI: unknown = {
 	slug: "kimi-k2.5",
 	display_name: "Kimi K2.5",
-	description: "Primary model",
 	provider: "ai-enabler",
-	tool_call: true,
 	reasoning: true,
 	input_modalities: ["text", "image"],
 	is_serverless: true,
-	is_routable: false,
 	limits: { context_window: 262144, max_output_tokens: 262144 },
 }
 
 const GLM: unknown = {
 	slug: "glm-5-fp8",
 	display_name: "GLM-5 FP8",
-	description: "Coding subagent",
 	provider: "ai-enabler",
-	tool_call: true,
 	reasoning: true,
 	input_modalities: ["text"],
 	is_serverless: true,
-	is_routable: false,
 	limits: { context_window: 202752, max_output_tokens: 202752 },
 }
 
 const OPUS_47: unknown = {
 	slug: "claude-opus-4-7",
 	display_name: "",
-	description: "",
 	provider: "anthropic",
-	tool_call: true,
 	reasoning: true,
 	input_modalities: ["text", "image"],
 	is_serverless: false,
-	is_routable: false,
 	limits: { context_window: 1_000_000, max_output_tokens: 128_000 },
 }
 
 const OPUS_46: unknown = {
 	slug: "claude-opus-4-6",
 	display_name: "",
-	description: "",
 	provider: "anthropic",
-	tool_call: true,
 	reasoning: true,
 	input_modalities: ["text", "image"],
 	is_serverless: false,
-	is_routable: false,
 	limits: { context_window: 1_000_000, max_output_tokens: 128_000 },
 }
 
@@ -93,18 +81,6 @@ describe("updateModelsConfig", () => {
 		])
 	})
 
-	it("falls back to derived name when display_name is empty", async () => {
-		vi.mocked(fetch).mockResolvedValueOnce({
-			ok: true,
-			json: async () => ({ models: [OPUS_47] }),
-		} as Response)
-
-		await updateModelsConfig(modelsJsonPath, "test-key")
-
-		const config = JSON.parse(readFileSync(modelsJsonPath, "utf-8"))
-		expect(config.providers["kimchi-dev"].models[0].name).toBe("Claude Opus 4 7")
-	})
-
 	it("passes input_modalities through directly", async () => {
 		vi.mocked(fetch).mockResolvedValueOnce({
 			ok: true,
@@ -115,6 +91,30 @@ describe("updateModelsConfig", () => {
 
 		const config = JSON.parse(readFileSync(modelsJsonPath, "utf-8"))
 		expect(config.providers["kimchi-dev"].models[0].input).toEqual(["text"])
+	})
+
+	it("disables supportsReasoningEffort for anthropic models", async () => {
+		vi.mocked(fetch).mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ models: [OPUS_47] }),
+		} as Response)
+
+		await updateModelsConfig(modelsJsonPath, "test-key")
+
+		const config = JSON.parse(readFileSync(modelsJsonPath, "utf-8"))
+		expect(config.providers["kimchi-dev"].models[0].compat).toEqual({ supportsReasoningEffort: false })
+	})
+
+	it("omits compat for non-anthropic models", async () => {
+		vi.mocked(fetch).mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ models: [KIMI] }),
+		} as Response)
+
+		await updateModelsConfig(modelsJsonPath, "test-key")
+
+		const config = JSON.parse(readFileSync(modelsJsonPath, "utf-8"))
+		expect(config.providers["kimchi-dev"].models[0]).not.toHaveProperty("compat")
 	})
 
 	it("puts AI-Enabler models first and preserves API order for others, all under kimchi-dev", async () => {
@@ -172,12 +172,12 @@ describe("updateModelsConfig", () => {
 		expect(config.providers["kimchi-dev"].models.map((m: { id: string }) => m.id)).toEqual(["kimi-k2.5"])
 	})
 
-	it("throws on network error", async () => {
+	it("throws on fetch failure when no cached config exists", async () => {
 		vi.mocked(fetch).mockRejectedValueOnce(new Error("network error"))
 		await expect(updateModelsConfig(modelsJsonPath, "test-key")).rejects.toThrow("network error")
 	})
 
-	it("throws on non-ok response", async () => {
+	it("throws on non-ok response when no cached config exists", async () => {
 		vi.mocked(fetch).mockResolvedValueOnce({
 			ok: false,
 			status: 401,
@@ -188,7 +188,7 @@ describe("updateModelsConfig", () => {
 		)
 	})
 
-	it("throws on unexpected response shape", async () => {
+	it("throws on unexpected response shape when no cached config exists", async () => {
 		vi.mocked(fetch).mockResolvedValueOnce({
 			ok: true,
 			json: async () => ({ data: "unexpected" }),
@@ -198,12 +198,55 @@ describe("updateModelsConfig", () => {
 		)
 	})
 
-	it("throws when API returns empty list", async () => {
+	it("throws when API returns empty list and no cached config exists", async () => {
 		vi.mocked(fetch).mockResolvedValueOnce({
 			ok: true,
 			json: async () => ({ models: [] }),
 		} as Response)
 		await expect(updateModelsConfig(modelsJsonPath, "test-key")).rejects.toThrow("API returned empty model list")
+	})
+
+	it("falls back to cached metadata when fetch fails", async () => {
+		// Seed a successful fetch so the cache is populated.
+		vi.mocked(fetch).mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ models: [KIMI, OPUS_47] }),
+		} as Response)
+		await updateModelsConfig(modelsJsonPath, "test-key")
+		vi.mocked(fetch).mockRejectedValueOnce(new Error("network down"))
+
+		const result = await updateModelsConfig(modelsJsonPath, "test-key")
+
+		expect(result.models.map((m) => m.slug)).toEqual(["kimi-k2.5", "claude-opus-4-7"])
+	})
+
+	it("falls back to cached metadata when API returns empty list", async () => {
+		vi.mocked(fetch).mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ models: [KIMI] }),
+		} as Response)
+		await updateModelsConfig(modelsJsonPath, "test-key")
+		vi.mocked(fetch).mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ models: [] }),
+		} as Response)
+
+		const result = await updateModelsConfig(modelsJsonPath, "test-key")
+
+		expect(result.models.map((m) => m.slug)).toEqual(["kimi-k2.5"])
+	})
+
+	it("does not overwrite cached models.json when fetch fails", async () => {
+		vi.mocked(fetch).mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ models: [KIMI] }),
+		} as Response)
+		await updateModelsConfig(modelsJsonPath, "test-key")
+		const original = readFileSync(modelsJsonPath, "utf-8")
+		vi.mocked(fetch).mockRejectedValueOnce(new Error("network down"))
+		await updateModelsConfig(modelsJsonPath, "test-key")
+
+		expect(readFileSync(modelsJsonPath, "utf-8")).toBe(original)
 	})
 
 	it("creates nested directories if they do not exist", async () => {
