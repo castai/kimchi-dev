@@ -113,7 +113,7 @@ export default function (skillPaths: string[]) {
 
 		pi.registerFlag("multi-model", {
 			type: "boolean",
-			description: "Enable multi-model orchestration (default: enabled). Toggle with alt+tab.",
+			description: "Enable multi-model orchestration (default: enabled). Toggle with alt+shift+tab.",
 			default: true,
 		})
 
@@ -128,7 +128,7 @@ export default function (skillPaths: string[]) {
 				)
 			}
 
-			pi.registerShortcut("alt+tab", {
+			pi.registerShortcut("alt+shift+tab", {
 				description: "Toggle multi-model orchestration on/off",
 				handler: (ctx) => {
 					multiModelEnabled = !multiModelEnabled

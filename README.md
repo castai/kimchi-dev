@@ -47,7 +47,7 @@ To disable orchestration and run as a single, direct coding assistant:
 kimchi-code --multi-model=false
 ```
 
-You can also toggle the mode at any time during a session with the **option/alt+tab** keyboard shortcut. The current state is shown in the footer (`multi-model: on` / `multi-model: off`).
+You can also toggle the mode at any time during a session with the **option/alt+shift+tab** keyboard shortcut. The current state is shown in the footer (`multi-model: on` / `multi-model: off`).
 
 When multi-model is off the agent uses a single-model system prompt: environment, tools, research rules, guidelines, and phase tagging are all active, but task classification and delegation logic are disabled. The subagent tool is still available if you explicitly ask the agent to delegate a task.
 
