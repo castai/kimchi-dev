@@ -1,4 +1,4 @@
-export type PermissionMode = "default" | "plan" | "auto"
+export type PermissionMode = "default" | "plan" | "auto" | "yolo"
 
 export type RuleBehavior = "allow" | "deny"
 

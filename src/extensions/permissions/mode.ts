@@ -19,7 +19,7 @@ export interface ModeResolutionInput {
 export function parseModeString(s: string | undefined): PermissionMode | undefined {
 	if (!s) return undefined
 	const lower = s.toLowerCase()
-	if (lower === "default" || lower === "plan" || lower === "auto") return lower
+	if (lower === "default" || lower === "plan" || lower === "auto" || lower === "yolo") return lower
 	return undefined
 }
 
