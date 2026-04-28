@@ -18,6 +18,8 @@ export interface HitlSession {
 	ended_at: number | null
 	/** Current session status */
 	status: "active" | "closed" | "orphaned"
+	/** Allow string indexing for SQLite query results */
+	[key: string]: unknown
 }
 
 /**
@@ -38,6 +40,8 @@ export interface HitlEvent {
 	selected_options: string
 	/** Event creation time (Unix epoch milliseconds) */
 	created_at: number
+	/** Allow string indexing for SQLite query results */
+	[key: string]: unknown
 }
 
 /**

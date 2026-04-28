@@ -5,21 +5,11 @@
  * No side effects — completely testable.
  */
 
-import type { HitlStats, HitlSession, TimelineSegment } from "./types.ts"
-import { renderTimeline } from "./timeline.ts"
+import type { HitlStats, HitlSession, TimelineSegment } from "./types.js"
+import { renderTimeline } from "./timeline.js"
 
-/**
- * Theme interface for color/formatting — matches @mariozechner/pi-coding-agent Theme
- */
-export interface Theme {
-	fg: (color: string, text: string) => string
-	bg: (color: string, text: string) => string
-	bold: (text: string) => string
-	dim: (text: string) => string
-	italic: (text: string) => string
-	underline: (text: string) => string
-	strikethrough: (text: string) => string
-}
+// Use the Theme type from @mariozechner/pi-coding-agent
+import type { Theme } from "@mariozechner/pi-coding-agent"
 
 /**
  * Convert milliseconds to human-readable "Xh Ym Zs" format.
@@ -88,11 +78,11 @@ export function formatSessionRow(session: HitlSession, theme: Theme): string {
 	// Status color coding (use text labels since we don't have specific colors)
 	let statusDisplay: string
 	if (session.status === "active") {
-		statusDisplay = theme.fg("yellow", status)
+		statusDisplay = theme.fg("warning", status)
 	} else if (session.status === "closed") {
-		statusDisplay = theme.fg("green", status)
+		statusDisplay = theme.fg("success", status)
 	} else {
-		statusDisplay = theme.fg("red", status)
+		statusDisplay = theme.fg("error", status)
 	}
 
 	return `  ${timestamp}  ${statusDisplay}${duration}`

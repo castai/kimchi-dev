@@ -11,8 +11,8 @@
  * - session_shutdown: Clean up and close session
  */
 
-import { SessionManager } from "./session-manager.ts"
-import { handleMetricsCommand } from "./commands/metrics.ts"
+import { SessionManager } from "./session-manager.js"
+import { handleMetricsCommand } from "./commands/metrics.js"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
 
 /**

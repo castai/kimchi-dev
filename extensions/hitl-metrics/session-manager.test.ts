@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
-import { SessionManager } from "./session-manager.ts"
+import { SessionManager } from "./session-manager.js"
 
 describe("SessionManager", () => {
 	describe("with :memory: database via init()", () => {

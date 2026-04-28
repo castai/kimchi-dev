@@ -5,15 +5,18 @@
  * WAL mode, and schema initialization.
  */
 
-import { Database } from "bun:sqlite"
-import { SESSIONS_TABLE_SQL, EVENTS_TABLE_SQL, PROJECT_HASH_INDEX_SQL, SESSION_ID_INDEX_SQL } from "./schema.ts"
+import { SESSIONS_TABLE_SQL, EVENTS_TABLE_SQL, PROJECT_HASH_INDEX_SQL, SESSION_ID_INDEX_SQL } from "./schema.js"
+
+// bun:sqlite is a built-in Bun module - we use a relaxed type for runtime
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type BunDatabase = any
 
 /**
  * Non-fatal database wrapper for HITL metrics.
  * All operations catch errors, log warnings, and return safe defaults.
  */
 export class HitlDatabase {
-	private db: Database | null = null
+	private db: BunDatabase | null = null
 	private dbPath: string
 	private isClosed = false
 
@@ -30,7 +33,9 @@ export class HitlDatabase {
 	 */
 	open(): boolean {
 		try {
-			this.db = new Database(this.dbPath)
+			// eslint-disable-next-line @typescript-eslint/no-var-requires
+			const sqlite = require("bun:sqlite")
+			this.db = new sqlite.Database(this.dbPath)
 			this.db.exec("PRAGMA journal_mode=WAL")
 			this.db.exec("PRAGMA busy_timeout=3000")
 			return true
@@ -152,7 +157,7 @@ export class HitlDatabase {
 	 * Get the underlying Database instance for advanced operations.
 	 * Returns null if closed or not open.
 	 */
-	get raw(): Database | null {
+	get raw(): BunDatabase | null {
 		return this.isClosed ? null : this.db
 	}
 }

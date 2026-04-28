@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
-import hitlMetricsExtension from "./index.ts"
+import hitlMetricsExtension from "./index.js"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
 
 function createMockPi(): ExtensionAPI & {
@@ -102,7 +102,7 @@ describe("HITL Metrics Extension", () => {
 			await mockPi.trigger("session_start", {}, { cwd: "/tmp/test" } as ExtensionContext)
 			await mockPi.trigger("tool_execution_start", { toolName: "read_file", toolCallId: "call-1" })
 			await new Promise(r => setTimeout(r, 100))
-			await mockPi.trigger("tool_result", { toolName: "read_file", toolCallId: "call-1", isError: false, input: { path: "test.ts" }, result: { content: "" } }, {} as ExtensionContext)
+			await mockPi.trigger("tool_result", { toolName: "read_file", toolCallId: "call-1", isError: false, input: { path: "test.js" }, result: { content: "" } }, {} as ExtensionContext)
 			expect(consoleWarnSpy).not.toHaveBeenCalledWith(expect.stringContaining("read_file"))
 		})
 

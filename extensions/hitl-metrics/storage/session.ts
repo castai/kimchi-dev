@@ -6,8 +6,8 @@
  */
 
 import { randomUUID } from "node:crypto"
-import type { HitlDatabase } from "./db.ts"
-import type { HitlSession, HitlStats, HitlEvent } from "../types.ts"
+import type { HitlDatabase } from "./db.js"
+import type { HitlSession, HitlStats, HitlEvent } from "../types.js"
 
 const FIVE_MINUTES_MS = 5 * 60 * 1000
 

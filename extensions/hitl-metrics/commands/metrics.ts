@@ -5,16 +5,41 @@
  * accumulated data from the SQLite database.
  */
 
-import type { ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-agent"
-import { formatMetrics, formatTimelineSection } from "../formatters.ts"
-import { HitlDatabase, projectHash, getSessionStats, getRecentSessions, getSessionEvents } from "../storage/index.ts"
-import { buildTimeline } from "../timeline.ts"
-import type { HitlStats, HitlSession } from "../types.ts"
+import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent"
+import type { Theme } from "@mariozechner/pi-coding-agent"
+import { formatMetrics, formatTimelineSection } from "../formatters.js"
+import { HitlDatabase, projectHash, getSessionStats, getRecentSessions, getSessionEvents } from "../storage/index.js"
+import { buildTimeline } from "../timeline.js"
+import type { HitlStats, HitlSession } from "../types.js"
 import { homedir } from "node:os"
 import { resolve } from "node:path"
 
 /** Storage directory path (shared with SessionManager) */
 const STORAGE_DIR = resolve(homedir(), ".hitl-metrics")
+
+/**
+ * Create a fallback theme when no UI is available.
+ * This satisfies the Theme type interface without actual color support.
+ */
+function createFallbackTheme(): Theme {
+	const noOp = (text: string) => text
+	// Simple theme that just returns text unchanged
+	return {
+		name: "fallback",
+		fg: (_c: string, text: string) => text,
+		bg: (_c: string, text: string) => text,
+		bold: noOp,
+		italic: noOp,
+		underline: noOp,
+		inverse: noOp,
+		strikethrough: noOp,
+		getFgAnsi: () => "",
+		getBgAnsi: () => "",
+		getColorMode: () => "truecolor",
+		getThinkingBorderColor: () => noOp,
+		getBashModeBorderColor: () => noOp,
+	} as unknown as Theme
+}
 
 /**
  * Get metrics output for a project directory.
@@ -84,18 +109,12 @@ export async function handleMetricsCommand(_args: string, ctx: ExtensionCommandC
 			return
 		}
 
+		let theme: Theme
 		if (!ctx.hasUI) {
-			// No UI available — log to console instead (or we could print without formatting)
+			// No UI available — use fallback theme
+			theme = createFallbackTheme()
+			const output = await getMetricsOutput(cwd, theme)
 			console.log("HITL Metrics:")
-			const output = await getMetricsOutput(cwd, {
-				fg: (_c, t) => t,
-				bg: (_c, t) => t,
-				bold: (t) => t.toUpperCase(),
-				dim: (t) => t,
-				italic: (t) => t,
-				underline: (t) => t,
-				strikethrough: (t) => t,
-			})
 			console.log(output)
 			return
 		}

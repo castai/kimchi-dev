@@ -3,14 +3,14 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
-import { HitlDatabase } from "./db.ts"
+import { HitlDatabase } from "./db.js"
 import {
 	getOrCreateSession,
 	closeSession,
 	closeOrphanSessions,
 	getRecentSessions,
 	getSessionStats,
-} from "./session.ts"
+} from "./session.js"
 
 describe("Session Management", () => {
 	let db: HitlDatabase

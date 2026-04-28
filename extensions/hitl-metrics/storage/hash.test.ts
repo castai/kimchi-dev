@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest"
-import { projectHash } from "./hash.ts"
+import { projectHash } from "./hash.js"
 
 describe("projectHash", () => {
 	it("returns 16 hex characters for a valid path", () => {

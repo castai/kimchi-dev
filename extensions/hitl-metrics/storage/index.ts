@@ -4,9 +4,9 @@
  * Boundary contract for S02 consumption.
  */
 
-export { HitlDatabase } from "./db.ts"
-export { SESSIONS_TABLE_SQL, EVENTS_TABLE_SQL, PROJECT_HASH_INDEX_SQL, SESSION_ID_INDEX_SQL } from "./schema.ts"
-export { projectHash } from "./hash.ts"
+export { HitlDatabase } from "./db.js"
+export { SESSIONS_TABLE_SQL, EVENTS_TABLE_SQL, PROJECT_HASH_INDEX_SQL, SESSION_ID_INDEX_SQL } from "./schema.js"
+export { projectHash } from "./hash.js"
 export {
 	getOrCreateSession,
 	closeSession,
@@ -14,4 +14,4 @@ export {
 	getRecentSessions,
 	getSessionStats,
 	getSessionEvents,
-} from "./session.ts"
+} from "./session.js"

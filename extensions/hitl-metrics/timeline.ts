@@ -5,9 +5,9 @@
  * No side effects — completely testable.
  */
 
-import type { HitlSession, HitlEvent, TimelineSegment } from "./types.ts"
-import type { Theme } from "./formatters.ts"
-import { formatDuration } from "./formatters.ts"
+import type { HitlSession, HitlEvent, TimelineSegment } from "./types.js"
+import type { Theme } from "@mariozechner/pi-coding-agent"
+import { formatDuration } from "./formatters.js"
 
 /** Default chart width in characters */
 const DEFAULT_WIDTH = 60
@@ -166,19 +166,19 @@ export function renderTimeline(
 	}
 	const barLine = barChars.slice(0, width).join("")
 
-	// Color the bar
+	// Color the bar - use theme colors that exist in ThemeColor type
 	let coloredBar = ""
 	for (const char of barLine) {
 		if (char === SOLO_CHAR) {
-			coloredBar += theme.fg("cyan", char)
+			coloredBar += theme.fg("success", char)
 		} else {
-			coloredBar += theme.fg("yellow", char)
+			coloredBar += theme.fg("warning", char)
 		}
 	}
 
-	// Build legend
-	const soloLegend = theme.fg("cyan", SOLO_CHAR) + " solo " + formatDuration(totalSoloMs)
-	const hitlLegend = theme.fg("yellow", HITL_CHAR) + " HITL " + formatDuration(totalHitlMs)
+	// Build legend - use theme colors that exist
+	const soloLegend = theme.fg("success", SOLO_CHAR) + " solo " + formatDuration(totalSoloMs)
+	const hitlLegend = theme.fg("warning", HITL_CHAR) + " HITL " + formatDuration(totalHitlMs)
 	const legendLine = `  ${soloLegend}    ${hitlLegend}`
 
 	return `${coloredBar}\n${legendLine}`

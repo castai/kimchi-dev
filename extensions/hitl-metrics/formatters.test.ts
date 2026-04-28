@@ -3,23 +3,31 @@
  */
 
 import { describe, it, expect } from "vitest"
-import { formatDuration, formatMetrics, formatSessionRow, formatTimelineSection } from "./formatters.ts"
-import type { HitlStats, HitlSession, Theme, TimelineSegment } from "./types.ts"
+import { formatDuration, formatMetrics, formatSessionRow, formatTimelineSection } from "./formatters.js"
+import type { HitlStats, HitlSession, TimelineSegment } from "./types.js"
+import type { Theme } from "@mariozechner/pi-coding-agent"
 
 /**
  * Minimal mock theme that returns plain strings (no ANSI codes)
  * — suitable for deterministic unit tests
  */
 function createMockTheme(): Theme {
+	const noOp = (text: string) => text
 	return {
-		fg: (_color: string, text: string) => text,
-		bg: (_color: string, text: string) => text,
-		bold: (text: string) => text,
-		dim: (text: string) => text,
-		italic: (text: string) => text,
-		underline: (text: string) => text,
-		strikethrough: (text: string) => text,
-	}
+		name: "mock",
+		fg: (_c, text) => text,
+		bg: (_c, text) => text,
+		bold: noOp,
+		italic: noOp,
+		underline: noOp,
+		inverse: noOp,
+		strikethrough: noOp,
+		getFgAnsi: () => "",
+		getBgAnsi: () => "",
+		getColorMode: () => "truecolor",
+		getThinkingBorderColor: () => noOp,
+		getBashModeBorderColor: () => noOp,
+	} as unknown as Theme
 }
 
 describe("formatDuration", () => {
@@ -222,9 +230,6 @@ describe("formatSessionRow", () => {
 		expect(output).toMatch(/\(\d+h \d+m \d+s\)/)
 	})
 })
-
-import { formatTimelineSection } from "./formatters.ts"
-import type { TimelineSegment } from "./types.ts"
 
 describe("formatTimelineSection", () => {
 	const mockTheme = createMockTheme()

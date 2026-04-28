@@ -5,24 +5,35 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { handleMetricsCommand } from "./metrics.ts"
-import { HitlDatabase, projectHash, getSessionStats, getRecentSessions } from "../storage/index.ts"
-import type { HitlStats, HitlSession } from "../types.ts"
+import { handleMetricsCommand } from "./metrics.js"
+import { HitlDatabase, projectHash, getSessionStats, getRecentSessions } from "../storage/index.js"
+import type { HitlStats, HitlSession } from "../types.js"
 import type { ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-agent"
 import { homedir } from "node:os"
 import { resolve } from "node:path"
 import { mkdtempSync, rmSync } from "node:fs"
 
 // --- Mock Theme ---
-const mockTheme: Theme = {
-	fg: (color: string, text: string) => `[${color}:${text}]`,
-	bg: (color: string, text: string) => text,
-	bold: (text: string) => `<b>${text}</b>`,
-	dim: (text: string) => text,
-	italic: (text: string) => text,
-	underline: (text: string) => text,
-	strikethrough: (text: string) => text,
+function createMockTheme(): Theme {
+	const noOp = (text: string) => text
+	return {
+		name: "mock",
+		fg: (_c, text) => `[color:${text}]`,
+		bg: (_c, text) => text,
+		bold: (text) => `<b>${text}</b>`,
+		italic: noOp,
+		underline: noOp,
+		inverse: noOp,
+		strikethrough: noOp,
+		getFgAnsi: () => "",
+		getBgAnsi: () => "",
+		getColorMode: () => "truecolor",
+		getThinkingBorderColor: () => noOp,
+		getBashModeBorderColor: () => noOp,
+	} as unknown as Theme
 }
+
+const mockTheme: Theme = createMockTheme()
 
 // --- Mock ExtensionCommandContext ---
 function createMockCtx(overrides: Partial<ExtensionCommandContext> = {}): ExtensionCommandContext {
@@ -265,7 +276,7 @@ describe("timeline integration", () => {
 	})
 
 	it("getMetricsOutput includes timeline for closed session with events", async () => {
-		const { getMetricsOutput } = await import("./metrics.ts")
+		const { getMetricsOutput } = await import("./metrics.js")
 		const projectHashStr = projectHash(tempDir)
 		const storageDir = resolve(homedir(), ".hitl-metrics")
 		const expectedDbPath = resolve(storageDir, `${projectHashStr}.db`)
@@ -297,9 +308,9 @@ describe("timeline integration", () => {
 		db.close()
 
 		const mockTheme = {
-			fg: (c: string, t: string) => t,
-			bg: (c: string, t: string) => t,
-			bold: (t: string) => t,
+			fg: (_c: string, t: string) => t,
+			bg: (_c: string, t: string) => t,
+			bold: (t: string) => t, inverse: (t: string) => t,
 			dim: (t: string) => t,
 			italic: (t: string) => t,
 			underline: (t: string) => t,
@@ -321,7 +332,7 @@ describe("timeline integration", () => {
 	})
 
 	it("getMetricsOutput omits timeline when no closed sessions exist", async () => {
-		const { getMetricsOutput } = await import("./metrics.ts")
+		const { getMetricsOutput } = await import("./metrics.js")
 		const projectHashStr = projectHash(tempDir)
 		const storageDir = resolve(homedir(), ".hitl-metrics")
 		const expectedDbPath = resolve(storageDir, `${projectHashStr}.db`)
@@ -343,9 +354,9 @@ describe("timeline integration", () => {
 		db.close()
 
 		const mockTheme = {
-			fg: (c: string, t: string) => t,
-			bg: (c: string, t: string) => t,
-			bold: (t: string) => t,
+			fg: (_c: string, t: string) => t,
+			bg: (_c: string, t: string) => t,
+			bold: (t: string) => t, inverse: (t: string) => t,
 			dim: (t: string) => t,
 			italic: (t: string) => t,
 			underline: (t: string) => t,

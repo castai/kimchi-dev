@@ -4,21 +4,32 @@
  * Comprehensive tests for timeline segment computation and ASCII chart rendering.
  */
 
-import { describe, it, expect } from "bun:test"
-import { buildTimeline, renderTimeline } from "./timeline.ts"
-import type { HitlSession, HitlEvent, TimelineSegment } from "./types.ts"
-import type { Theme } from "./formatters.ts"
+import { describe, it, expect } from "vitest"
+import { buildTimeline, renderTimeline } from "./timeline.js"
+import type { HitlSession, HitlEvent, TimelineSegment } from "./types.js"
+import type { Theme } from "@mariozechner/pi-coding-agent"
 
-// Mock theme for testing (no ANSI colors)
-const mockTheme: Theme = {
-	fg: (_color: string, text: string) => text,
-	bg: (_color: string, text: string) => text,
-	bold: (text: string) => text,
-	dim: (text: string) => text,
-	italic: (text: string) => text,
-	underline: (text: string) => text,
-	strikethrough: (text: string) => text,
+// Mock theme for testing (no ANSI colors) — implements Theme interface
+function createMockTheme(): Theme {
+	const noOp = (text: string) => text
+	return {
+		name: "mock",
+		fg: (_c, text) => text,
+		bg: (_c, text) => text,
+		bold: noOp,
+		italic: noOp,
+		underline: noOp,
+		inverse: noOp,
+		strikethrough: noOp,
+		getFgAnsi: () => "",
+		getBgAnsi: () => "",
+		getColorMode: () => "truecolor",
+		getThinkingBorderColor: () => noOp,
+		getBashModeBorderColor: () => noOp,
+	} as unknown as Theme
 }
+
+const mockTheme = createMockTheme()
 
 // Helper to create a session
 function createSession(overrides: Partial<HitlSession> = {}): HitlSession {

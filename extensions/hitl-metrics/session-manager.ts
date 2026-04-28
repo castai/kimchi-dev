@@ -8,8 +8,8 @@
 import * as path from "node:path"
 import * as os from "node:os"
 import * as fs from "node:fs"
-import { HitlDatabase, projectHash, getOrCreateSession, closeSession, closeOrphanSessions } from "./storage/index.ts"
-import type { HitlSession } from "./types.ts"
+import { HitlDatabase, projectHash, getOrCreateSession, closeSession, closeOrphanSessions } from "./storage/index.js"
+import type { HitlSession } from "./types.js"
 
 /**
  * Manages HITL sessions and event recording.
