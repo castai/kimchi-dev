@@ -260,19 +260,11 @@ function extractOutputText(content: ToolResultEvent["content"]): string {
 	return parts.join("\n")
 }
 
-type PendingMessage = {
-	customType: string
-	content: [{ type: "text"; text: string }]
-	display: boolean
-}
-
 export default function loopGuardExtension(pi: ExtensionAPI) {
 	const guard = new LoopGuard()
-	let pendingMessage: PendingMessage | undefined
 
 	pi.on("input", () => {
 		guard.reset()
-		pendingMessage = undefined
 	})
 
 	pi.on("tool_call", (event) => {
@@ -294,18 +286,14 @@ export default function loopGuardExtension(pi: ExtensionAPI) {
 		}
 		const result = guard.record(record)
 		if (result.state === "warn" && result.reason) {
-			pendingMessage = {
-				customType: "loop-guard-steer",
-				content: [{ type: "text", text: result.reason }],
-				display: true,
-			}
+			pi.sendMessage(
+				{
+					customType: "loop-guard-steer",
+					content: [{ type: "text", text: result.reason }],
+					display: false,
+				},
+				{ deliverAs: "steer" },
+			)
 		}
-	})
-
-	pi.on("before_agent_start", () => {
-		if (!pendingMessage) return
-		const message = pendingMessage
-		pendingMessage = undefined
-		return { message }
 	})
 }
