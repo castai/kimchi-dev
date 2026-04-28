@@ -1,5 +1,48 @@
 import { describe, expect, it } from "vitest"
-import { filterOutputTags } from "./output-tag-filter.js"
+import { filterOutputTags, stripOutputTagWrappers } from "./output-tag-filter.js"
+
+describe("stripOutputTagWrappers", () => {
+	const cases: Record<string, { input: string; expected: string }> = {
+		"strips tags from complete think block": {
+			input: "<think>some reasoning</think>answer",
+			expected: "some reasoninganswer",
+		},
+		"strips tags from multiline think block": {
+			input: "<think>\nline one\nline two\n</think>answer",
+			expected: "\nline one\nline two\nanswer",
+		},
+		"strips tags from multiple think blocks": {
+			input: "<think>first</think>middle<think>second</think>end",
+			expected: "firstmiddlesecondend",
+		},
+		"strips incomplete opening tag": {
+			input: "prefix<think>incomplete reasoning",
+			expected: "prefixincomplete reasoning",
+		},
+		"strips opening tag and closing tag separately": {
+			input: "<think>done</think>visible<think>incomplete",
+			expected: "donevisibleincomplete",
+		},
+		"leaves text without think tags unchanged": {
+			input: "plain text without tags",
+			expected: "plain text without tags",
+		},
+		"leaves empty string unchanged": {
+			input: "",
+			expected: "",
+		},
+		"leaves unrelated tags unchanged": {
+			input: "<b>bold</b> and <i>italic</i>",
+			expected: "<b>bold</b> and <i>italic</i>",
+		},
+	}
+
+	for (const [name, { input, expected }] of Object.entries(cases)) {
+		it(name, () => {
+			expect(stripOutputTagWrappers(input)).toBe(expected)
+		})
+	}
+})
 
 describe("filterOutputTags", () => {
 	const cases: Record<string, { input: string; expected: string }> = {

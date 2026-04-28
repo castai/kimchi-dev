@@ -31,7 +31,7 @@ import {
 	SettingsManager,
 	createAgentSession,
 } from "@mariozechner/pi-coding-agent"
-import { filterOutputTags } from "../../extensions/output-tag-filter.js"
+import { filterOutputTags, stripOutputTagWrappers } from "../../extensions/output-tag-filter.js"
 
 /**
  * Produces a ready-to-use AgentSession for a newSession request. The returned
@@ -250,16 +250,19 @@ export class KimchiAcpAgent implements Agent {
 				turn.turnActive = true
 				const ame = event.assistantMessageEvent
 				if (ame.type === "text_delta" && ame.delta) {
+					const hideThinkingBlock = entry.session.settingsManager.getHideThinkingBlock()
 					turn.streamState.rawAccumulated += ame.delta
-					const newFiltered = filterOutputTags(turn.streamState.rawAccumulated)
-					if (newFiltered.length > turn.streamState.emittedFiltered.length) {
-						const filteredDelta = newFiltered.slice(turn.streamState.emittedFiltered.length)
-						turn.streamState.emittedFiltered = newFiltered
+					const newProcessed = hideThinkingBlock
+						? filterOutputTags(turn.streamState.rawAccumulated)
+						: stripOutputTagWrappers(turn.streamState.rawAccumulated)
+					if (newProcessed.length > turn.streamState.emittedFiltered.length) {
+						const processedDelta = newProcessed.slice(turn.streamState.emittedFiltered.length)
+						turn.streamState.emittedFiltered = newProcessed
 						this.send({
 							sessionId,
 							update: {
 								sessionUpdate: "agent_message_chunk",
-								content: { type: "text", text: filteredDelta },
+								content: { type: "text", text: processedDelta },
 							},
 						})
 					}

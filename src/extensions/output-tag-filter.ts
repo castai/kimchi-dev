@@ -1,5 +1,15 @@
 const FILTERED_OUTPUT_TAGS = ["think"]
 
+export function stripOutputTagWrappers(text: string): string {
+	let result = text
+	for (const tag of FILTERED_OUTPUT_TAGS) {
+		result = result.replace(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "g"), "$1")
+		result = result.replace(new RegExp(`<${tag}>`, "g"), "")
+		result = result.replace(new RegExp(`<\\/${tag}>`, "g"), "")
+	}
+	return result
+}
+
 export function filterOutputTags(text: string): string {
 	let result = text
 	for (const tag of FILTERED_OUTPUT_TAGS) {
