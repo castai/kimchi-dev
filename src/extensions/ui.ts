@@ -38,21 +38,25 @@ function runScript(scriptPath: string, payload: object, tui: TUI, footer: Script
 	child.stdin.write(JSON.stringify(payload))
 	child.stdin.end()
 
-	child.on("error", (err) => {
-		footer.setLines([`\x1b[31m[statusline error] ${err.message}\x1b[0m`])
+	let settled = false
+	const settle = (lines: string[] | null) => {
+		if (settled) return
+		settled = true
+		if (lines) footer.setLines(lines)
 		tui.requestRender()
 		onDone()
-	})
+	}
+
+	child.on("error", (err) => settle([`\x1b[31m[statusline error] ${err.message}\x1b[0m`]))
 
 	child.on("close", (code) => {
 		if (code === 0 && stdout) {
-			const lines = stdout.split("\n").filter((l) => l.trim() !== "")
-			footer.setLines(lines)
+			settle(stdout.split("\n").filter((l) => l.trim() !== ""))
 		} else if (stderr) {
-			footer.setLines([`\x1b[31m[statusline error] ${stderr.trim()}\x1b[0m`])
+			settle([`\x1b[31m[statusline error] ${stderr.trim()}\x1b[0m`])
+		} else {
+			settle(null)
 		}
-		tui.requestRender()
-		onDone()
 	})
 }
 
@@ -64,6 +68,7 @@ export default function uiExtension(pi: ExtensionAPI) {
 	let scriptTui: TUI | null = null
 	let scriptCmd: string | null = null
 	let scriptPending = false
+	let scriptGeneration = 0
 	let currentCtx: ExtensionContext | null = null
 	let sessionStartMs = 0
 	let linesAdded = 0
@@ -73,12 +78,13 @@ export default function uiExtension(pi: ExtensionAPI) {
 		if (!currentCtx?.hasUI || !scriptFooter || !scriptTui || !scriptCmd) return
 		if (scriptPending) return
 		scriptPending = true
+		const gen = scriptGeneration
 		runScript(
 			scriptCmd,
 			buildScriptPayload(currentCtx, status, sessionStartMs, linesAdded, linesRemoved),
 			scriptTui,
 			scriptFooter,
-			() => { scriptPending = false },
+			() => { if (scriptGeneration === gen) scriptPending = false },
 		)
 	}
 
@@ -88,6 +94,8 @@ export default function uiExtension(pi: ExtensionAPI) {
 		sessionStartMs = Date.now()
 		linesAdded = 0
 		linesRemoved = 0
+		scriptGeneration++
+		scriptPending = false
 
 		const isSplash = event.reason === "startup"
 		splashActive = isSplash
@@ -103,7 +111,8 @@ export default function uiExtension(pi: ExtensionAPI) {
 			scriptFooter = new ScriptFooter()
 			scriptTui = tui
 			scriptPending = true
-			runScript(cmd, buildScriptPayload(ctx, "idle", sessionStartMs, linesAdded, linesRemoved), tui, scriptFooter, () => { scriptPending = false })
+			const gen = scriptGeneration
+			runScript(cmd, buildScriptPayload(ctx, "idle", sessionStartMs, linesAdded, linesRemoved), tui, scriptFooter, () => { if (scriptGeneration === gen) scriptPending = false })
 			return scriptFooter
 		})
 
