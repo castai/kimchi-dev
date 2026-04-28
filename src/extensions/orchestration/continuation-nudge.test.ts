@@ -1,13 +1,6 @@
-import type { AssistantMessage, ToolResultMessage, UserMessage } from "@mariozechner/pi-ai"
+import type { AssistantMessage, UserMessage } from "@mariozechner/pi-ai"
 import { describe, expect, it } from "vitest"
-import {
-	ContinuationNudge,
-	EMPTY_TURN_NUDGE_TEXT,
-	EmptyTurnNudge,
-	type OrchestratorMessages,
-	buildEmptyTurnNudgedMessages,
-	stripStaleNudges,
-} from "./continuation-nudge.js"
+import { ContinuationNudge, type OrchestratorMessages, stripStaleNudges } from "./continuation-nudge.js"
 
 function makeAssistant(content: AssistantMessage["content"]): AssistantMessage {
 	return {
@@ -133,17 +126,6 @@ function makeUser(text: string): UserMessage {
 	return { role: "user", content: [{ type: "text", text }], timestamp: Date.now() }
 }
 
-function makeToolResult(toolCallId: string, text: string): ToolResultMessage {
-	return {
-		role: "toolResult",
-		toolCallId,
-		toolName: "subagent",
-		content: [{ type: "text", text }],
-		isError: false,
-		timestamp: Date.now(),
-	}
-}
-
 function makeNudge(): OrchestratorMessages[number] {
 	return {
 		role: "custom" as const,
@@ -152,10 +134,6 @@ function makeNudge(): OrchestratorMessages[number] {
 		display: false,
 		timestamp: Date.now(),
 	}
-}
-
-function lastMessage(messages: OrchestratorMessages): OrchestratorMessages[number] {
-	return messages[messages.length - 1]
 }
 
 describe("stripStaleNudges", () => {
@@ -198,109 +176,5 @@ describe("stripStaleNudges", () => {
 		const messages: OrchestratorMessages = [makeUser("q"), other, textOnlyMessage]
 		const result = stripStaleNudges(messages)
 		expect(result).toContainEqual(other)
-	})
-})
-
-describe("buildEmptyTurnNudgedMessages", () => {
-	it("returns undefined when there is no assistant message yet", () => {
-		expect(buildEmptyTurnNudgedMessages([makeUser("start")])).toBeUndefined()
-	})
-
-	it("returns undefined when the last assistant message has text", () => {
-		const messages: OrchestratorMessages = [makeUser("q"), textOnlyMessage]
-		expect(buildEmptyTurnNudgedMessages(messages)).toBeUndefined()
-	})
-
-	it("returns undefined when the last assistant message has both text and a tool call", () => {
-		const messages: OrchestratorMessages = [makeUser("q"), textAndToolCallMessage, makeToolResult("call_2", "ok")]
-		expect(buildEmptyTurnNudgedMessages(messages)).toBeUndefined()
-	})
-
-	it("returns undefined when tool calls are present but no tool results have arrived yet", () => {
-		const messages: OrchestratorMessages = [makeUser("q"), toolCallMessage]
-		expect(buildEmptyTurnNudgedMessages(messages)).toBeUndefined()
-	})
-
-	it("appends a custom-role nudge when tool-call-only assistant is followed by tool results", () => {
-		const messages: OrchestratorMessages = [makeUser("q"), toolCallMessage, makeToolResult("call_1", "done")]
-		const nudged = buildEmptyTurnNudgedMessages(messages)
-		expect(nudged).toBeDefined()
-		expect(nudged?.length).toBe(messages.length + 1)
-		const appended = lastMessage(nudged as OrchestratorMessages)
-		expect(appended.role).toBe("custom")
-	})
-
-	it("does not mutate the caller's messages array", () => {
-		const messages: OrchestratorMessages = [makeUser("q"), toolCallMessage, makeToolResult("call_1", "done")]
-		const originalLength = messages.length
-		buildEmptyTurnNudgedMessages(messages)
-		expect(messages.length).toBe(originalLength)
-	})
-
-	it("uses the most recent assistant message (ignores older ones)", () => {
-		const messages: OrchestratorMessages = [
-			makeUser("q1"),
-			textOnlyMessage,
-			makeUser("q2"),
-			toolCallMessage,
-			makeToolResult("call_1", "done"),
-		]
-		expect(buildEmptyTurnNudgedMessages(messages)).toBeDefined()
-	})
-})
-
-describe("EmptyTurnNudge", () => {
-	const emptyMessage = makeAssistant([])
-	const whitespaceOnlyMessage = makeAssistant([{ type: "text", text: "   \n  " }])
-
-	it("arms after an empty assistant turn", () => {
-		const guard = new EmptyTurnNudge()
-		guard.evaluateTurn(emptyMessage)
-		expect(guard.shouldNudge()).toBe(true)
-	})
-
-	it("does not arm after a turn with text", () => {
-		const guard = new EmptyTurnNudge()
-		guard.evaluateTurn(textOnlyMessage)
-		expect(guard.shouldNudge()).toBe(false)
-	})
-
-	it("does not arm after a turn with tool calls", () => {
-		const guard = new EmptyTurnNudge()
-		guard.evaluateTurn(toolCallMessage)
-		expect(guard.shouldNudge()).toBe(false)
-	})
-
-	it("does not arm after a turn with both text and tool calls", () => {
-		const guard = new EmptyTurnNudge()
-		guard.evaluateTurn(textAndToolCallMessage)
-		expect(guard.shouldNudge()).toBe(false)
-	})
-
-	it("treats whitespace-only text as empty", () => {
-		const guard = new EmptyTurnNudge()
-		guard.evaluateTurn(whitespaceOnlyMessage)
-		expect(guard.shouldNudge()).toBe(true)
-	})
-
-	it("disarms after shouldNudge returns true", () => {
-		const guard = new EmptyTurnNudge()
-		guard.evaluateTurn(emptyMessage)
-		expect(guard.shouldNudge()).toBe(true)
-		expect(guard.shouldNudge()).toBe(false)
-	})
-
-	it("disarms after a non-empty turn follows an empty one", () => {
-		const guard = new EmptyTurnNudge()
-		guard.evaluateTurn(emptyMessage)
-		guard.evaluateTurn(textOnlyMessage)
-		expect(guard.shouldNudge()).toBe(false)
-	})
-
-	it("resets on new user input", () => {
-		const guard = new EmptyTurnNudge()
-		guard.evaluateTurn(emptyMessage)
-		guard.resetForNewUserInput()
-		expect(guard.shouldNudge()).toBe(false)
 	})
 })

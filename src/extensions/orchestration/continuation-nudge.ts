@@ -2,18 +2,16 @@
  * Two complementary nudges for Kimi K2.x tool-calling quirks that each
  * leave the agent loop in a stuck-looking state. Both target the same failure
  * class (model said one thing, didn't follow through in the next tool-use
- * step) but fire at different points in the turn lifecycle:
+ * step) and are delivered as `followUp` messages from the `turn_end` handler
+ * so the agent loop restarts:
  *
- *   1. Continuation nudge — post-turn. The orchestrator reasons in prose,
- *      announces it will delegate, and ends its turn without emitting the
- *      `subagent` tool call. Delivered as a `followUp` via `pi.sendMessage`
- *      so the agent loop restarts. Mirrors AISI Inspect's `on_continue`.
+ *   1. Continuation nudge — the orchestrator reasons in prose, announces it
+ *      will delegate, and ends its turn without emitting the `subagent` tool
+ *      call. Mirrors AISI Inspect's `on_continue`.
  *
- *   2. Empty-turn nudge — reactive. Some Kimi deployments return an empty
- *      response (no text, no tool calls) after receiving tool results. When
- *      detected on `turn_end`, the nudge is armed and injected into the next
- *      LLM context via the `context` event so it doesn't pollute the session
- *      history.
+ *   2. Empty-turn nudge — some Kimi deployments return an empty response
+ *      (no text, no tool calls) after receiving tool results. Detected
+ *      inline in the `turn_end` handler.
  *
  * Both are delivered as custom messages with `display: false` so they
  * never appear in the conversation. Stale nudges (those the model has
@@ -24,7 +22,6 @@
  * inside the `if (!subagentMode)` guard.
  */
 
-import type { AssistantMessage } from "@mariozechner/pi-ai"
 import type { ContextEvent } from "@mariozechner/pi-coding-agent"
 
 /**
@@ -72,42 +69,6 @@ export class ContinuationNudge {
 	}
 }
 
-/**
- * Reactive state machine for the "empty follow-up" nudge.
- *
- * Some model deployments (notably Kimi K2.x) return an empty response — no text, no tool calls — after receiving tool results from a tool-call-only turn. The agent loop stalls because there is nothing to execute or display. This class detects that failure and arms a one-shot nudge that is injected into the next LLM context to prompt the model to continue.
- *
- * The nudge is reactive: it only fires after an empty response has actually occurred, not preemptively on every tool-result → LLM-call transition. Models that never produce empty responses never see the nudge at all.
- */
-export class EmptyTurnNudge {
-	private armed = false
-
-	evaluateTurn(message: AssistantMessage): void {
-		const hasText = message.content.some((c) => c.type === "text" && c.text.trim().length > 0)
-		const hasToolCalls = message.content.some((c) => c.type === "toolCall")
-		this.armed = !hasText && !hasToolCalls
-	}
-
-	shouldNudge(): boolean {
-		if (!this.armed) return false
-		this.armed = false
-		return true
-	}
-
-	resetForNewUserInput(): void {
-		this.armed = false
-	}
-}
-
-/**
- * Pre-LLM-call nudge for the "tool-call-only assistant, tool results pending"
- * pattern. Returns a new messages array with a custom-role nudge appended if
- * the pattern matches, otherwise `undefined` (signal for the caller to leave
- * the context untouched).
- *
- * Injected via the `context` event so it is transient — visible only to the
- * targeted LLM call, not persisted in the session history.
- */
 export const NUDGE_CUSTOM_TYPE = "nudge"
 
 function isNudgeMessage(m: OrchestratorMessages[number]): boolean {
@@ -124,28 +85,4 @@ export function stripStaleNudges(messages: OrchestratorMessages): OrchestratorMe
 	if (lastAssistantIdx === -1) return messages
 	const stripped = messages.filter((m, i) => i > lastAssistantIdx || !isNudgeMessage(m))
 	return stripped.length === messages.length ? messages : stripped
-}
-
-export function buildEmptyTurnNudgedMessages(messages: OrchestratorMessages): OrchestratorMessages | undefined {
-	const lastAssistant = [...messages].reverse().find((m): m is AssistantMessage => m.role === "assistant")
-	if (!lastAssistant) return undefined
-
-	const hasToolCalls = lastAssistant.content.some((c) => c.type === "toolCall")
-	const hasText = lastAssistant.content.some((c) => c.type === "text")
-	if (!hasToolCalls || hasText) return undefined
-
-	const lastAssistantIndex = messages.lastIndexOf(lastAssistant)
-	const hasToolResultsAfter = messages.slice(lastAssistantIndex + 1).some((m) => m.role === "toolResult")
-	if (!hasToolResultsAfter) return undefined
-
-	return [
-		...messages,
-		{
-			role: "custom" as const,
-			customType: NUDGE_CUSTOM_TYPE,
-			content: [{ type: "text" as const, text: EMPTY_TURN_NUDGE_TEXT }],
-			display: false,
-			timestamp: Date.now(),
-		},
-	]
 }

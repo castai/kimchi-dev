@@ -32,9 +32,8 @@ import { getGitBranch } from "../../utils.js"
 import {
 	CONTINUATION_NUDGE_TEXT,
 	ContinuationNudge,
-	EmptyTurnNudge,
+	EMPTY_TURN_NUDGE_TEXT,
 	NUDGE_CUSTOM_TYPE,
-	buildEmptyTurnNudgedMessages,
 	stripStaleNudges,
 } from "./continuation-nudge.js"
 import { ModelRegistry } from "./model-registry/index.js"
@@ -154,12 +153,10 @@ export default function (skillPaths: string[]) {
 			// that one returns `{action: "handled"}` in interactive mode, which short-
 			// circuits the input-handler chain.
 			const continuationNudge = new ContinuationNudge()
-			const emptyTurnNudge = new EmptyTurnNudge()
 
 			pi.on("input", async (event) => {
 				if (event.source === "extension") return
 				continuationNudge.resetForNewUserInput()
-				emptyTurnNudge.resetForNewUserInput()
 			})
 
 			pi.on("tool_execution_start", async () => {
@@ -168,7 +165,18 @@ export default function (skillPaths: string[]) {
 
 			pi.on("turn_end", async (event) => {
 				if (event.message.role !== "assistant") return
-				emptyTurnNudge.evaluateTurn(event.message)
+
+				const hasText = event.message.content.some((c) => c.type === "text" && c.text.trim().length > 0)
+				const hasToolCalls = event.message.content.some((c) => c.type === "toolCall")
+
+				if (!hasText && !hasToolCalls) {
+					pi.sendMessage(
+						{ customType: NUDGE_CUSTOM_TYPE, content: EMPTY_TURN_NUDGE_TEXT, display: false },
+						{ deliverAs: "followUp" },
+					)
+					return
+				}
+
 				if (!continuationNudge.evaluateTurn(event.message)) return
 				pi.sendMessage(
 					{ customType: NUDGE_CUSTOM_TYPE, content: CONTINUATION_NUDGE_TEXT, display: false },
@@ -217,19 +225,8 @@ export default function (skillPaths: string[]) {
 				return { action: "handled" as const }
 			})
 
-			// Pre-LLM-call complement of the turn_end nudge above. Reactive: only injects
-			// the nudge after the model actually produced an empty response (no text, no
-			// tool calls) on the previous turn, rather than preemptively on every
-			// tool-result → LLM-call transition. Models that never produce empty responses
-			// never see the nudge.
 			pi.on("context", async (event) => {
 				const cleaned = stripStaleNudges(event.messages)
-				if (!emptyTurnNudge.shouldNudge()) {
-					if (cleaned !== event.messages) return { messages: cleaned }
-					return
-				}
-				const nudged = buildEmptyTurnNudgedMessages(cleaned)
-				if (nudged) return { messages: nudged }
 				if (cleaned !== event.messages) return { messages: cleaned }
 			})
 		}
