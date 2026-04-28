@@ -1,5 +1,5 @@
 import type { TextContent, ToolResultMessage } from "@mariozechner/pi-ai"
-import type { AgentMessage } from "@mariozechner/pi-coding-agent"
+import type { ContextEvent } from "@mariozechner/pi-coding-agent"
 import { describe, expect, it } from "vitest"
 import { computeCutoff, pruneToolResult } from "./context-compactor.js"
 
@@ -16,14 +16,14 @@ function makeToolResult(toolName: string, text: string, isError = false): ToolRe
 	}
 }
 
-function makeUser(): AgentMessage {
-	return { role: "user", content: [{ type: "text", text: "hi" }], timestamp: 0 } as AgentMessage
+function makeUser() {
+	return { role: "user" as const, content: [{ type: "text" as const, text: "hi" }], timestamp: 0 }
 }
 
-function makeAssistant(): AgentMessage {
+function makeAssistant() {
 	return {
-		role: "assistant",
-		content: [{ type: "text", text: "ok" }],
+		role: "assistant" as const,
+		content: [{ type: "text" as const, text: "ok" }],
 		usage: {
 			input: 0,
 			output: 0,
@@ -34,7 +34,7 @@ function makeAssistant(): AgentMessage {
 		},
 		model: "test",
 		timestamp: 0,
-	} as AgentMessage
+	}
 }
 
 // ── computeCutoff ────────────────────────────────────────────────────────────
@@ -44,46 +44,41 @@ describe("computeCutoff", () => {
 	const MAX_PROTECTED_CHARS = 100
 
 	it("returns 0 when messages fit within protected budget", () => {
-		const messages: AgentMessage[] = [
-			makeUser(),
-			makeAssistant(),
-			makeToolResult("bash", "small") as AgentMessage,
-			makeUser(),
-		]
-		expect(computeCutoff(messages, PROTECT_WINDOW, MAX_PROTECTED_CHARS)).toBe(0)
+		const messages = [makeUser(), makeAssistant(), makeToolResult("bash", "small"), makeUser()]
+		expect(computeCutoff(messages as ContextEvent["messages"], PROTECT_WINDOW, MAX_PROTECTED_CHARS)).toBe(0)
 	})
 
 	it("returns 0 when array length <= PROTECT_WINDOW", () => {
-		const messages: AgentMessage[] = [makeToolResult("bash", "x".repeat(200)) as AgentMessage]
-		expect(computeCutoff(messages, PROTECT_WINDOW, MAX_PROTECTED_CHARS)).toBe(0)
+		const messages = [makeToolResult("bash", "x".repeat(200))]
+		expect(computeCutoff(messages as ContextEvent["messages"], PROTECT_WINDOW, MAX_PROTECTED_CHARS)).toBe(0)
 	})
 
 	it("cuts at PROTECT_WINDOW boundary when chars are small", () => {
 		// 6 messages, PROTECT_WINDOW=4 → cutoff should be 2
-		const messages: AgentMessage[] = [
-			makeToolResult("bash", "a") as AgentMessage,
-			makeToolResult("bash", "b") as AgentMessage,
+		const messages = [
+			makeToolResult("bash", "a"),
+			makeToolResult("bash", "b"),
 			makeUser(),
 			makeAssistant(),
-			makeToolResult("bash", "c") as AgentMessage,
+			makeToolResult("bash", "c"),
 			makeUser(),
 		]
-		expect(computeCutoff(messages, PROTECT_WINDOW, MAX_PROTECTED_CHARS)).toBe(2)
+		expect(computeCutoff(messages as ContextEvent["messages"], PROTECT_WINDOW, MAX_PROTECTED_CHARS)).toBe(2)
 	})
 
 	it("cuts earlier when recent tool results exceed MAX_PROTECTED_CHARS", () => {
 		// large output in the last 4 messages exceeds budget → cutoff forced earlier
 		const bigOutput = "x".repeat(150) // > MAX_PROTECTED_CHARS=100
-		const messages: AgentMessage[] = [
-			makeToolResult("bash", "old") as AgentMessage,
+		const messages = [
+			makeToolResult("bash", "old"),
 			makeUser(),
 			makeAssistant(),
-			makeToolResult("bash", bigOutput) as AgentMessage, // index 3 — in protect zone, but exceeds budget
+			makeToolResult("bash", bigOutput), // index 3 — in protect zone, but exceeds budget
 			makeUser(),
 		]
 		// walking back: index 4 (user, 0 chars), index 3 (toolResult, 150 chars → exceeds 100)
 		// → cutoff = 4 (message at index 3 pushed out of protected zone)
-		expect(computeCutoff(messages, PROTECT_WINDOW, MAX_PROTECTED_CHARS)).toBe(4)
+		expect(computeCutoff(messages as ContextEvent["messages"], PROTECT_WINDOW, MAX_PROTECTED_CHARS)).toBe(4)
 	})
 })
 

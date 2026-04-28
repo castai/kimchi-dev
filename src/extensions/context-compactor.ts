@@ -1,5 +1,5 @@
 import type { AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai"
-import type { AgentMessage, ExtensionAPI } from "@mariozechner/pi-coding-agent"
+import type { ContextEvent, ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { isSubagent } from "./orchestration/prompt-transformer/prompt-transformer.js"
 
 const PRUNE_THRESHOLD = 35_000
@@ -17,7 +17,11 @@ const MIN_PRUNE_CHARS = 500
  *
  * Returns 0 if everything fits within the protected budget (nothing to prune).
  */
-export function computeCutoff(messages: AgentMessage[], protectWindow: number, maxProtectedChars: number): number {
+export function computeCutoff(
+	messages: ContextEvent["messages"],
+	protectWindow: number,
+	maxProtectedChars: number,
+): number {
 	let cutoff = 0
 	let protectedChars = 0
 
