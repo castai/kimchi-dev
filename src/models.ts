@@ -60,7 +60,7 @@ interface PiModelConfig {
 }
 
 function metadataToModel(m: ModelMetadata): PiModelConfig {
-	// TODO: our LiteLLM gateway does not support `thinking.type.enabled` for Antrhopic >Opus 4.6 models
+	// TODO: our LiteLLM gateway does not support `thinking.type.enabled` for Anthropic >Opus 4.6 models
 	// Therefore, we disable it for now. Revisit, once we upgrade our LiteLLM version.
 	const compat = m.provider === "anthropic" ? { supportsReasoningEffort: false } : undefined
 	return {
@@ -135,7 +135,10 @@ export async function validateApiKey(apiKey: string): Promise<void> {
  * the cached models with a warning. Throws only when a key is present but
  * there is no cache to fall back on.
  */
-export async function updateModelsConfig(modelsJsonPath: string, apiKey: string): Promise<ModelsConfigResult> {
+export async function updateModelsConfig(
+	modelsJsonPath: string,
+	apiKey: string,
+): Promise<ModelsConfigResult> {
 	const dir = dirname(modelsJsonPath)
 	mkdirSync(dir, { recursive: true })
 
