@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
 IMPROVEMENT_DIR = Path(__file__).parent
@@ -119,13 +120,12 @@ def analyze_jsonl(path):
             "sub_tokens": subs.get("input", 0) + subs.get("output", 0),
             "subagent_count": subagent_count,
             "orch_tool_calls": orch_tool_calls,
-            "terminated": False,
+            "terminated": terminated,
         }
 
     if not start_ts or not end_ts or (orch_input + orch_output) == 0:
         return None
 
-    from datetime import datetime
     t1 = datetime.fromisoformat(start_ts.replace("Z", "+00:00"))
     t2 = datetime.fromisoformat(end_ts.replace("Z", "+00:00"))
     duration_s = (t2 - t1).total_seconds()
