@@ -173,12 +173,19 @@ export default function (skillPaths: string[]) {
 				const message = event.message as AssistantMessage
 				const content = message.content[ame.contentIndex]
 				if (content?.type === "text") {
+					continuationNudge.accumulateResponse(content.text)
 					content.text = ""
 				}
 			})
 
 			pi.on("turn_end", async (event) => {
 				if (event.message.role !== "assistant") return
+
+				if (continuationNudge.isNudgeResponsePending()) {
+					if (continuationNudge.isDoneSignalReceived()) {
+						return
+					}
+				}
 
 				if (emptyTurnNudge.evaluateTurn(event.message)) {
 					pi.sendMessage(

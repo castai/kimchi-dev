@@ -1,6 +1,12 @@
 import type { AssistantMessage, UserMessage } from "@mariozechner/pi-ai"
 import { describe, expect, it } from "vitest"
-import { ContinuationNudge, EmptyTurnNudge, type OrchestratorMessages, stripStaleNudges } from "./continuation-nudge.js"
+import {
+	ContinuationNudge,
+	DONE_SIGNAL,
+	EmptyTurnNudge,
+	type OrchestratorMessages,
+	stripStaleNudges,
+} from "./continuation-nudge.js"
 
 function makeAssistant(content: AssistantMessage["content"]): AssistantMessage {
 	return {
@@ -145,6 +151,47 @@ describe("ContinuationNudge.evaluateTurn", () => {
 		guard.resetForNewUserInput()
 		const thinkingOnly = makeAssistant([{ type: "thinking", thinking: "Let me reason..." }])
 		expect(guard.evaluateTurn(thinkingOnly)).toBe(false)
+	})
+})
+
+describe("ContinuationNudge.isDoneSignalReceived", () => {
+	it("returns false when no response has been accumulated", () => {
+		const guard = new ContinuationNudge()
+		expect(guard.isDoneSignalReceived()).toBe(false)
+	})
+
+	it("returns true when accumulated text equals the done signal", () => {
+		const guard = new ContinuationNudge()
+		guard.accumulateResponse(DONE_SIGNAL)
+		expect(guard.isDoneSignalReceived()).toBe(true)
+	})
+
+	it("returns true when accumulated text equals done signal with surrounding whitespace", () => {
+		const guard = new ContinuationNudge()
+		guard.accumulateResponse("  ")
+		guard.accumulateResponse(DONE_SIGNAL)
+		guard.accumulateResponse("\n")
+		expect(guard.isDoneSignalReceived()).toBe(true)
+	})
+
+	it("returns false when accumulated text is not the done signal", () => {
+		const guard = new ContinuationNudge()
+		guard.accumulateResponse("I am done.")
+		expect(guard.isDoneSignalReceived()).toBe(false)
+	})
+
+	it("clears accumulated response on reset", () => {
+		const guard = new ContinuationNudge()
+		guard.accumulateResponse(DONE_SIGNAL)
+		guard.resetForNewUserInput()
+		expect(guard.isDoneSignalReceived()).toBe(false)
+	})
+
+	it("clears accumulated response when a tool call is recorded", () => {
+		const guard = new ContinuationNudge()
+		guard.accumulateResponse(DONE_SIGNAL)
+		guard.recordToolCall()
+		expect(guard.isDoneSignalReceived()).toBe(false)
 	})
 })
 
