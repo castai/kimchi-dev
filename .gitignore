@@ -27,3 +27,4 @@ coverage/
 
 # Kimchi docs directory
 .kimchi/
+.worktrees
