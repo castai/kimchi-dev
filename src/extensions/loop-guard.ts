@@ -4,7 +4,7 @@ import type { ExtensionAPI, ToolResultEvent } from "@mariozechner/pi-coding-agen
 export interface ToolHistoryRecord {
 	toolName: string
 	toolArgs: string
-	statusCode: number
+	isError: boolean
 	outputFingerprint: string
 }
 
@@ -15,17 +15,24 @@ export interface LoopGuardResult {
 	reason?: string
 }
 
-const WINDOW_SIZE = 30
-const CONSECUTIVE_IDENTICAL_THRESHOLD = 3
-const FUZZY_2GRAM_THRESHOLD = 6
-const FUZZY_3GRAM_THRESHOLD = 4
-const EXACT_2GRAM_THRESHOLD = 5
-const EXACT_3GRAM_THRESHOLD = 3
+// Detection thresholds. Exact detectors (which require matching output) can
+// fire sooner because a true output match is strong evidence of a loop;
+// fuzzy detectors (name+args only) are deliberately laxer to avoid flagging
+// productive edit-rerun cycles that happen to reuse the same commands. All
+// "> N" checks fire on the (N+1)th repetition. Tuned by feel against
+// observed agent traces; revisit if real loops slip past or productive
+// workflows trip the guard.
+const WINDOW_SIZE = 30 // upper bound on detectable loop period
+const CONSECUTIVE_IDENTICAL_THRESHOLD = 3 // 3 calls in a row with identical output
+const FUZZY_2GRAM_THRESHOLD = 6 // 7× repeat of a 2-gram, output may vary
+const FUZZY_3GRAM_THRESHOLD = 4 // 5× repeat of a 3-gram, output may vary
+const EXACT_2GRAM_THRESHOLD = 5 // 6× repeat of a 2-gram with identical output
+const EXACT_3GRAM_THRESHOLD = 3 // 4× repeat of a 3-gram with identical output
 const FINGERPRINT_TAIL_LINES = 20
 const REASON_ARG_PREVIEW = 80
 
 const STEERING_MESSAGE =
-	"Loop guard: your recent tool calls show a repeating pattern. Step back, summarize what isn't working, and try a substantively different approach. Repeating the same pattern will halt tool use for this turn."
+	"Loop guard warning: your recent tool calls show a repeating pattern. Step back, summarize what isn't working, and try a substantively different approach. Repeating the same pattern will halt tool use for this turn."
 
 const TERMINATION_MESSAGE =
 	"Loop guard halted tool use. Do not make any more tool calls. Respond with plain text only: summarize what was attempted, what failed, and what you would need to make progress."
@@ -38,8 +45,8 @@ const TERMINATION_MESSAGE =
  *
  * Detectors:
  *   1. Consecutive identical calls — N calls in a row with matching tool
- *      name, args, status code, and output fingerprint. Status code is not
- *      special-cased: an agent re-running the same successful query and
+ *      name, args, isError flag, and output fingerprint. The error flag is
+ *      not special-cased: an agent re-running the same successful query and
  *      getting the same answer is just as stuck as one retrying a failure.
  *   2. Exact n-gram repetition — a contiguous block of N calls (matching all
  *      four fields) repeats more times than the threshold allows.
@@ -88,13 +95,15 @@ export class LoopGuard {
 
 	/**
 	 * Predicts whether running `call` next would extend an active loop. Only
-	 * meaningful after a warning has been issued. To run the detectors we need
-	 * a status code and output fingerprint for the hypothetical record; we
-	 * borrow them from the most recent historical record with matching tool
-	 * name + args (so the hypo lands in the same slot of any repeating
-	 * pattern), falling back to the last record otherwise. Sets `triggered`
-	 * when prediction fires so subsequent calls short-circuit through
-	 * `isTriggered`.
+	 * meaningful after a warning has been issued. Detectors need an
+	 * isError flag and output fingerprint for the hypothetical record; we borrow
+	 * them from the most recent historical record with matching tool name +
+	 * args (so the hypo lands in the same slot of any repeating pattern).
+	 * If no such record exists, no detector can fire on a tail ending in
+	 * this hypo (any matching n-gram or consecutive run would require the
+	 * hypo's name + args to appear earlier), so we short-circuit. Sets
+	 * `triggered` when prediction fires so subsequent calls short-circuit
+	 * through `isTriggered`.
 	 */
 	wouldLoop(call: { toolName: string; toolArgs: string }): boolean {
 		if (!this.warned || this.history.length === 0) return false
@@ -106,11 +115,11 @@ export class LoopGuard {
 				break
 			}
 		}
-		if (!proxy) proxy = this.history[this.history.length - 1]
+		if (!proxy) return false
 		const hypo: ToolHistoryRecord = {
 			toolName: call.toolName,
 			toolArgs: call.toolArgs,
-			statusCode: proxy.statusCode,
+			isError: proxy.isError,
 			outputFingerprint: proxy.outputFingerprint,
 		}
 		const saved = this.history
@@ -165,7 +174,7 @@ export class LoopGuard {
 // escaped) and is unused in tool names / hex fingerprints, so it is a
 // collision-free field separator.
 function exactKey(r: ToolHistoryRecord): string {
-	return `${r.toolName}\u0000${r.toolArgs}\u0000${r.statusCode}\u0000${r.outputFingerprint}`
+	return `${r.toolName}\u0000${r.toolArgs}\u0000${r.isError}\u0000${r.outputFingerprint}`
 }
 
 function fuzzyKey(r: ToolHistoryRecord): string {
@@ -251,16 +260,6 @@ function extractOutputText(content: ToolResultEvent["content"]): string {
 	return parts.join("\n")
 }
 
-function extractStatusCode(event: ToolResultEvent): number {
-	if (event.toolName === "bash") {
-		if (!event.isError) return 0
-		const text = extractOutputText(event.content)
-		const match = text.match(/Command exited with code (\d+)\s*$/)
-		return match ? Number.parseInt(match[1], 10) : 1
-	}
-	return event.isError ? 1 : 0
-}
-
 type PendingMessage = {
 	customType: string
 	content: [{ type: "text"; text: string }]
@@ -290,14 +289,14 @@ export default function loopGuardExtension(pi: ExtensionAPI) {
 		const record: ToolHistoryRecord = {
 			toolName: event.toolName,
 			toolArgs: stableStringify(event.input),
-			statusCode: extractStatusCode(event),
+			isError: event.isError,
 			outputFingerprint: fingerprint(extractOutputText(event.content)),
 		}
 		const result = guard.record(record)
-		if (result.state === "warn") {
+		if (result.state === "warn" && result.reason) {
 			pendingMessage = {
 				customType: "loop-guard-steer",
-				content: [{ type: "text", text: STEERING_MESSAGE }],
+				content: [{ type: "text", text: result.reason }],
 				display: true,
 			}
 		}

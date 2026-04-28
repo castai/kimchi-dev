@@ -9,7 +9,7 @@ function rec(overrides: Partial<ToolHistoryRecord> = {}): ToolHistoryRecord {
 	return {
 		toolName: "bash",
 		toolArgs: '{"command":"ls"}',
-		statusCode: 0,
+		isError: false,
 		outputFingerprint: FP_A,
 		...overrides,
 	}
@@ -26,15 +26,15 @@ function repeat<T>(value: T, n: number): T[] {
 describe("LoopGuard.reset", () => {
 	it("clears history so n-gram detection restarts", () => {
 		const guard = new LoopGuard()
-		feed(guard, repeat(rec({ toolArgs: '{"command":"a"}', statusCode: 1, outputFingerprint: FP_A }), 6))
+		feed(guard, repeat(rec({ toolArgs: '{"command":"a"}', isError: true, outputFingerprint: FP_A }), 6))
 		guard.reset()
-		const states = feed(guard, repeat(rec({ toolArgs: '{"command":"a"}', statusCode: 1, outputFingerprint: FP_A }), 2))
+		const states = feed(guard, repeat(rec({ toolArgs: '{"command":"a"}', isError: true, outputFingerprint: FP_A }), 2))
 		expect(states.every((s) => s.state === "ok")).toBe(true)
 	})
 
 	it("clears warning fuse", () => {
 		const guard = new LoopGuard()
-		feed(guard, repeat(rec({ statusCode: 1 }), 3))
+		feed(guard, repeat(rec({ isError: true }), 3))
 		expect(guard.isWarned()).toBe(true)
 		guard.reset()
 		expect(guard.isWarned()).toBe(false)
@@ -42,7 +42,7 @@ describe("LoopGuard.reset", () => {
 
 	it("clears triggered flag", () => {
 		const guard = new LoopGuard()
-		feed(guard, repeat(rec({ statusCode: 1 }), 4))
+		feed(guard, repeat(rec({ isError: true }), 4))
 		expect(guard.isTriggered()).toBe(true)
 		guard.reset()
 		expect(guard.isTriggered()).toBe(false)
@@ -52,11 +52,11 @@ describe("LoopGuard.reset", () => {
 describe("LoopGuard window of 30 records", () => {
 	it("evicts oldest entries beyond 30 so old patterns cannot trigger detectors", () => {
 		const guard = new LoopGuard()
-		feed(guard, repeat(rec({ toolArgs: '{"command":"old"}', statusCode: 1, outputFingerprint: FP_A }), 4))
+		feed(guard, repeat(rec({ toolArgs: '{"command":"old"}', isError: true, outputFingerprint: FP_A }), 4))
 		for (let i = 0; i < 30; i++) {
 			guard.record(rec({ toolArgs: `{"command":"unique-${i}"}`, outputFingerprint: `u${i}` }))
 		}
-		const next = guard.record(rec({ toolArgs: '{"command":"old"}', statusCode: 1, outputFingerprint: FP_A }))
+		const next = guard.record(rec({ toolArgs: '{"command":"old"}', isError: true, outputFingerprint: FP_A }))
 		expect(next.state).toBe("ok")
 	})
 
@@ -102,10 +102,10 @@ describe("fingerprint", () => {
 	})
 })
 
-describe("Detector 1 — consecutive identical errors", () => {
+describe("Consecutive identical errors detector", () => {
 	it("warns on the 3rd consecutive identical failing call", () => {
 		const guard = new LoopGuard()
-		const r = rec({ statusCode: 1, outputFingerprint: FP_A })
+		const r = rec({ isError: true, outputFingerprint: FP_A })
 		expect(guard.record(r).state).toBe("ok")
 		expect(guard.record(r).state).toBe("ok")
 		expect(guard.record(r).state).toBe("warn")
@@ -113,7 +113,7 @@ describe("Detector 1 — consecutive identical errors", () => {
 
 	it("terminates on the 4th consecutive identical failing call", () => {
 		const guard = new LoopGuard()
-		const r = rec({ statusCode: 1, outputFingerprint: FP_A })
+		const r = rec({ isError: true, outputFingerprint: FP_A })
 		feed(guard, repeat(r, 3))
 		expect(guard.record(r).state).toBe("terminate")
 		expect(guard.isTriggered()).toBe(true)
@@ -121,8 +121,8 @@ describe("Detector 1 — consecutive identical errors", () => {
 
 	it("breaks the streak on a successful call", () => {
 		const guard = new LoopGuard()
-		const fail = rec({ statusCode: 1, outputFingerprint: FP_A })
-		feed(guard, [fail, fail, rec({ statusCode: 0, outputFingerprint: FP_A }), fail, fail])
+		const fail = rec({ isError: true, outputFingerprint: FP_A })
+		feed(guard, [fail, fail, rec({ isError: false, outputFingerprint: FP_A }), fail, fail])
 		expect(guard.isWarned()).toBe(false)
 		expect(guard.isTriggered()).toBe(false)
 	})
@@ -130,9 +130,9 @@ describe("Detector 1 — consecutive identical errors", () => {
 	it("breaks the streak when output fingerprint differs", () => {
 		const guard = new LoopGuard()
 		const states = feed(guard, [
-			rec({ statusCode: 1, outputFingerprint: FP_A }),
-			rec({ statusCode: 1, outputFingerprint: FP_B }),
-			rec({ statusCode: 1, outputFingerprint: FP_A }),
+			rec({ isError: true, outputFingerprint: FP_A }),
+			rec({ isError: true, outputFingerprint: FP_B }),
+			rec({ isError: true, outputFingerprint: FP_A }),
 		])
 		expect(states.every((s) => s.state === "ok")).toBe(true)
 	})
@@ -140,15 +140,15 @@ describe("Detector 1 — consecutive identical errors", () => {
 	it("breaks the streak when toolArgs differ", () => {
 		const guard = new LoopGuard()
 		const states = feed(guard, [
-			rec({ statusCode: 1, toolArgs: '{"command":"a"}' }),
-			rec({ statusCode: 1, toolArgs: '{"command":"b"}' }),
-			rec({ statusCode: 1, toolArgs: '{"command":"a"}' }),
+			rec({ isError: true, toolArgs: '{"command":"a"}' }),
+			rec({ isError: true, toolArgs: '{"command":"b"}' }),
+			rec({ isError: true, toolArgs: '{"command":"a"}' }),
 		])
 		expect(states.every((s) => s.state === "ok")).toBe(true)
 	})
 })
 
-describe("Detector 2 — fuzzy ngram (toolName + toolArgs only)", () => {
+describe("Fuzzy ngram detector (toolName + toolArgs only)", () => {
 	it("does not fire at exactly 5 reps of a 2-gram (10 records)", () => {
 		const guard = new LoopGuard()
 		const a = rec({ toolArgs: '{"command":"a"}', outputFingerprint: FP_A })
@@ -205,20 +205,20 @@ describe("Detector 2 — fuzzy ngram (toolName + toolArgs only)", () => {
 		expect(last.state === "warn" || last.state === "terminate").toBe(true)
 	})
 
-	it("ignores statusCode and outputFingerprint differences", () => {
+	it("ignores isError and outputFingerprint differences", () => {
 		const guard = new LoopGuard()
 		for (let i = 0; i < 7; i++) {
 			guard.record(
 				rec({
 					toolArgs: '{"command":"a"}',
-					statusCode: i % 2,
+					isError: i % 2 === 1,
 					outputFingerprint: `out-${i}`,
 				}),
 			)
 			guard.record(
 				rec({
 					toolArgs: '{"command":"b"}',
-					statusCode: (i + 1) % 2,
+					isError: (i + 1) % 2 === 1,
 					outputFingerprint: `outb-${i}`,
 				}),
 			)
@@ -241,11 +241,11 @@ describe("Detector 2 — fuzzy ngram (toolName + toolArgs only)", () => {
 	})
 })
 
-describe("Detector 3 — exact ngram (all 4 fields)", () => {
+describe("Exact ngram detector (all 4 fields)", () => {
 	it("does not fire at exactly 5 reps of an exact 2-gram (10 records)", () => {
 		const guard = new LoopGuard()
-		const a = rec({ toolArgs: '{"command":"a"}', statusCode: 1, outputFingerprint: FP_A })
-		const b = rec({ toolArgs: '{"command":"b"}', statusCode: 1, outputFingerprint: FP_B })
+		const a = rec({ toolArgs: '{"command":"a"}', isError: true, outputFingerprint: FP_A })
+		const b = rec({ toolArgs: '{"command":"b"}', isError: true, outputFingerprint: FP_B })
 		const states: Array<ReturnType<LoopGuard["record"]>> = []
 		for (let i = 0; i < 5; i++) {
 			states.push(guard.record(a))
@@ -256,8 +256,8 @@ describe("Detector 3 — exact ngram (all 4 fields)", () => {
 
 	it("fires above 5 reps of an exact 2-gram", () => {
 		const guard = new LoopGuard()
-		const a = rec({ toolArgs: '{"command":"a"}', statusCode: 1, outputFingerprint: FP_A })
-		const b = rec({ toolArgs: '{"command":"b"}', statusCode: 1, outputFingerprint: FP_B })
+		const a = rec({ toolArgs: '{"command":"a"}', isError: true, outputFingerprint: FP_A })
+		const b = rec({ toolArgs: '{"command":"b"}', isError: true, outputFingerprint: FP_B })
 		for (let i = 0; i < 5; i++) {
 			guard.record(a)
 			guard.record(b)
@@ -297,10 +297,10 @@ describe("Detector 3 — exact ngram (all 4 fields)", () => {
 		expect(last.state === "warn" || last.state === "terminate").toBe(true)
 	})
 
-	it("requires statusCode and outputFingerprint to match (not just toolArgs)", () => {
+	it("requires isError and outputFingerprint to match (not just toolArgs)", () => {
 		const guard = new LoopGuard()
 		for (let i = 0; i < 6; i++) {
-			guard.record(rec({ toolArgs: '{"command":"a"}', statusCode: i % 2, outputFingerprint: `fp-${i}` }))
+			guard.record(rec({ toolArgs: '{"command":"a"}', isError: i % 2 === 1, outputFingerprint: `fp-${i}` }))
 		}
 		expect(guard.isWarned()).toBe(false)
 	})
@@ -309,7 +309,7 @@ describe("Detector 3 — exact ngram (all 4 fields)", () => {
 describe("Shared warning fuse", () => {
 	it("warn from one detector + fire from another → terminate", () => {
 		const guard = new LoopGuard()
-		feed(guard, repeat(rec({ statusCode: 1, outputFingerprint: FP_A }), 3))
+		feed(guard, repeat(rec({ isError: true, outputFingerprint: FP_A }), 3))
 		expect(guard.isWarned()).toBe(true)
 		expect(guard.isTriggered()).toBe(false)
 
@@ -328,15 +328,15 @@ describe("Shared warning fuse", () => {
 
 	it("two near-misses below threshold stay ok", () => {
 		const guard = new LoopGuard()
-		const a = rec({ toolArgs: '{"command":"a"}', statusCode: 1, outputFingerprint: FP_A })
-		const b = rec({ toolArgs: '{"command":"b"}', statusCode: 1, outputFingerprint: FP_B })
+		const a = rec({ toolArgs: '{"command":"a"}', isError: true, outputFingerprint: FP_A })
+		const b = rec({ toolArgs: '{"command":"b"}', isError: true, outputFingerprint: FP_B })
 		for (let i = 0; i < 4; i++) {
 			guard.record(a)
 			guard.record(b)
 		}
 		guard.record(rec({ toolArgs: '{"command":"reset"}', outputFingerprint: "r1" }))
-		const c = rec({ toolArgs: '{"command":"c"}', statusCode: 1, outputFingerprint: FP_C })
-		const d = rec({ toolArgs: '{"command":"d"}', statusCode: 1, outputFingerprint: "fp_d" })
+		const c = rec({ toolArgs: '{"command":"c"}', isError: true, outputFingerprint: FP_C })
+		const d = rec({ toolArgs: '{"command":"d"}', isError: true, outputFingerprint: "fp_d" })
 		for (let i = 0; i < 4; i++) {
 			guard.record(c)
 			guard.record(d)
@@ -347,10 +347,10 @@ describe("Shared warning fuse", () => {
 
 	it("warn → next ok call → next detector fire still terminates (fuse does not reset)", () => {
 		const guard = new LoopGuard()
-		feed(guard, repeat(rec({ statusCode: 1, outputFingerprint: FP_A }), 3))
+		feed(guard, repeat(rec({ isError: true, outputFingerprint: FP_A }), 3))
 		expect(guard.isWarned()).toBe(true)
 		guard.record(rec({ toolArgs: '{"command":"recover"}', outputFingerprint: "r1" }))
-		const r = rec({ statusCode: 1, outputFingerprint: "fp_r" })
+		const r = rec({ isError: true, outputFingerprint: "fp_r" })
 		feed(guard, repeat(r, 2))
 		const last = guard.record(r)
 		expect(last.state).toBe("terminate")
@@ -360,28 +360,28 @@ describe("Shared warning fuse", () => {
 describe("LoopGuard.wouldLoop (pre-execution prediction)", () => {
 	it("returns false before any warning", () => {
 		const guard = new LoopGuard()
-		feed(guard, repeat(rec({ statusCode: 1, outputFingerprint: FP_A }), 2))
+		feed(guard, repeat(rec({ isError: true, outputFingerprint: FP_A }), 2))
 		expect(guard.wouldLoop({ toolName: "bash", toolArgs: '{"command":"ls"}' })).toBe(false)
 	})
 
 	it("fires and sets triggered when next call would complete a consecutive-identical loop", () => {
 		const guard = new LoopGuard()
-		feed(guard, repeat(rec({ statusCode: 1, outputFingerprint: FP_A }), 3))
+		feed(guard, repeat(rec({ isError: true, outputFingerprint: FP_A }), 3))
 		expect(guard.wouldLoop({ toolName: "bash", toolArgs: '{"command":"ls"}' })).toBe(true)
 		expect(guard.isTriggered()).toBe(true)
 	})
 
 	it("returns false for a clearly different next call", () => {
 		const guard = new LoopGuard()
-		feed(guard, repeat(rec({ statusCode: 1, outputFingerprint: FP_A }), 3))
+		feed(guard, repeat(rec({ isError: true, outputFingerprint: FP_A }), 3))
 		expect(guard.wouldLoop({ toolName: "bash", toolArgs: '{"command":"different"}' })).toBe(false)
 	})
 
 	it("does not mutate history on a non-firing prediction", () => {
 		const guard = new LoopGuard()
-		feed(guard, repeat(rec({ statusCode: 1, outputFingerprint: FP_A }), 3))
+		feed(guard, repeat(rec({ isError: true, outputFingerprint: FP_A }), 3))
 		guard.wouldLoop({ toolName: "bash", toolArgs: '{"command":"different"}' })
-		expect(guard.record(rec({ statusCode: 1, outputFingerprint: FP_A })).state).toBe("terminate")
+		expect(guard.record(rec({ isError: true, outputFingerprint: FP_A })).state).toBe("terminate")
 	})
 
 	it("returns true when next call would extend an alternating 2-gram", () => {
@@ -407,13 +407,13 @@ describe("Edit-then-rerun cycle must NOT fire", () => {
 			guard.record({
 				toolName: "edit",
 				toolArgs: `{"file_path":"a.py","new_string":"v${i}"}`,
-				statusCode: 0,
+				isError: false,
 				outputFingerprint: `edit-${i}`,
 			})
 			guard.record({
 				toolName: "bash",
 				toolArgs: bashArgs,
-				statusCode: 1,
+				isError: true,
 				outputFingerprint: `out-${i}`,
 			})
 		}
@@ -430,12 +430,12 @@ describe("Edit-then-rerun cycle must NOT fire", () => {
 			guard.record({
 				toolName: "edit",
 				toolArgs: `{"file_path":"src.c","new_string":"v${i}"}`,
-				statusCode: 0,
+				isError: false,
 				outputFingerprint: `edit-${i}`,
 			})
-			guard.record({ toolName: "bash", toolArgs: build, statusCode: 0, outputFingerprint: `build-${i}` })
-			guard.record({ toolName: "bash", toolArgs: run, statusCode: 0, outputFingerprint: `run-${i}` })
-			guard.record({ toolName: "bash", toolArgs: check, statusCode: 1, outputFingerprint: `check-${i}` })
+			guard.record({ toolName: "bash", toolArgs: build, isError: false, outputFingerprint: `build-${i}` })
+			guard.record({ toolName: "bash", toolArgs: run, isError: false, outputFingerprint: `run-${i}` })
+			guard.record({ toolName: "bash", toolArgs: check, isError: true, outputFingerprint: `check-${i}` })
 		}
 		expect(guard.isWarned()).toBe(false)
 		expect(guard.isTriggered()).toBe(false)
