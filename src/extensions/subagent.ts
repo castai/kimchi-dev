@@ -4,10 +4,10 @@ import { dirname, isAbsolute, join, resolve } from "node:path"
 import type { AssistantMessage, ToolCall } from "@mariozechner/pi-ai"
 import {
 	CURRENT_SESSION_VERSION,
-	SettingsManager,
 	type ExtensionAPI,
 	type SessionEntry,
 	type SessionHeader,
+	SettingsManager,
 	type Theme,
 } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
@@ -671,7 +671,14 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			return {
-				content: [{ type: "text", text: (hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated)) || "(no output)" }],
+				content: [
+					{
+						type: "text",
+						text:
+							(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated)) ||
+							"(no output)",
+					},
+				],
 				details: stats,
 			}
 		},
