@@ -33,8 +33,12 @@ function runScript(scriptPath: string, payload: object, tui: TUI, footer: Script
 
 	let stdout = ""
 	let stderr = ""
-	child.stdout.on("data", (d: Buffer) => { stdout += d.toString() })
-	child.stderr.on("data", (d: Buffer) => { stderr += d.toString() })
+	child.stdout.on("data", (d: Buffer) => {
+		stdout += d.toString()
+	})
+	child.stderr.on("data", (d: Buffer) => {
+		stderr += d.toString()
+	})
 	child.stdin.write(JSON.stringify(payload))
 	child.stdin.end()
 
@@ -84,7 +88,9 @@ export default function uiExtension(pi: ExtensionAPI) {
 			buildScriptPayload(currentCtx, status, sessionStartMs, linesAdded, linesRemoved),
 			scriptTui,
 			scriptFooter,
-			() => { if (scriptGeneration === gen) scriptPending = false },
+			() => {
+				if (scriptGeneration === gen) scriptPending = false
+			},
 		)
 	}
 
@@ -112,7 +118,15 @@ export default function uiExtension(pi: ExtensionAPI) {
 			scriptTui = tui
 			scriptPending = true
 			const gen = scriptGeneration
-			runScript(cmd, buildScriptPayload(ctx, "idle", sessionStartMs, linesAdded, linesRemoved), tui, scriptFooter, () => { if (scriptGeneration === gen) scriptPending = false })
+			runScript(
+				cmd,
+				buildScriptPayload(ctx, "idle", sessionStartMs, linesAdded, linesRemoved),
+				tui,
+				scriptFooter,
+				() => {
+					if (scriptGeneration === gen) scriptPending = false
+				},
+			)
 			return scriptFooter
 		})
 
