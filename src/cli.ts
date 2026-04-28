@@ -19,6 +19,7 @@ import loginExtension from "./extensions/login/index.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
+import outputFilterExtension from "./extensions/output-filter-extension.js"
 import permissionsExtension from "./extensions/permissions/index.js"
 import { reserveShiftTabForPermissions } from "./extensions/permissions/keybindings.js"
 import promptSummaryExtension from "./extensions/prompt-summary.js"
@@ -181,6 +182,7 @@ try {
 
 		const extensionFactories = [
 			sessionIdCaptureExtension,
+			outputFilterExtension,
 			shutdownMarkerExtension,
 			terminalColorsExtension,
 			bashCollapseExtension,

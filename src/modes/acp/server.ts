@@ -31,6 +31,7 @@ import {
 	SettingsManager,
 	createAgentSession,
 } from "@mariozechner/pi-coding-agent"
+import { filterOutputTags, stripOutputTagWrappers } from "../../extensions/output-tag-filter.js"
 
 /**
  * Produces a ready-to-use AgentSession for a newSession request. The returned
@@ -58,6 +59,7 @@ type TurnContext = {
 	turnActive: boolean
 	resolve: (res: PromptResponse) => void
 	reject: (err: unknown) => void
+	streamState: { rawAccumulated: string; emittedFiltered: string }
 }
 
 type SessionEntry = {
@@ -153,7 +155,13 @@ export class KimchiAcpAgent implements Agent {
 			turnResolve = resolve
 			turnReject = reject
 		})
-		entry.turn = { cancelled: false, turnActive: false, resolve: turnResolve, reject: turnReject }
+		entry.turn = {
+			cancelled: false,
+			turnActive: false,
+			resolve: turnResolve,
+			reject: turnReject,
+			streamState: { rawAccumulated: "", emittedFiltered: "" },
+		}
 		// Kick off session.prompt but don't await inside the async function body —
 		// shutdown() needs to be able to reject `result` and have the caller's await
 		// on prompt() settle immediately, which can't happen while this body is
@@ -242,13 +250,22 @@ export class KimchiAcpAgent implements Agent {
 				turn.turnActive = true
 				const ame = event.assistantMessageEvent
 				if (ame.type === "text_delta" && ame.delta) {
-					this.send({
-						sessionId,
-						update: {
-							sessionUpdate: "agent_message_chunk",
-							content: { type: "text", text: ame.delta },
-						},
-					})
+					const hideThinkingBlock = entry.session.settingsManager.getHideThinkingBlock()
+					turn.streamState.rawAccumulated += ame.delta
+					const newProcessed = hideThinkingBlock
+						? filterOutputTags(turn.streamState.rawAccumulated)
+						: stripOutputTagWrappers(turn.streamState.rawAccumulated)
+					if (newProcessed.length > turn.streamState.emittedFiltered.length) {
+						const processedDelta = newProcessed.slice(turn.streamState.emittedFiltered.length)
+						turn.streamState.emittedFiltered = newProcessed
+						this.send({
+							sessionId,
+							update: {
+								sessionUpdate: "agent_message_chunk",
+								content: { type: "text", text: processedDelta },
+							},
+						})
+					}
 				} else if (ame.type === "thinking_delta" && ame.delta) {
 					this.send({
 						sessionId,
