@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
-const KIMCHI_CONFIG_PATH = resolve(homedir(), ".config", "kimchi", "config.json")
+export const KIMCHI_CONFIG_PATH = resolve(homedir(), ".config", "kimchi", "config.json")
 const AGENT_CONFIG_DIR = resolve(homedir(), ".config", "kimchi", "harness")
 const CAST_AI_LLM_ENDPOINT = "https://llm.cast.ai/openai/v1"
 const DEFAULT_TELEMETRY_ENDPOINT = "https://api.cast.ai/ai-optimizer/v1beta/logs:ingest"
@@ -50,7 +50,7 @@ export interface KimchiConfig {
  * Read the Cast AI API key from the kimchi CLI config file.
  * Returns undefined if the file doesn't exist or the field is missing.
  */
-function readApiKeyFromConfigFile(configPath: string): string | undefined {
+export function readApiKeyFromConfigFile(configPath: string): string | undefined {
 	try {
 		const raw = readFileSync(configPath, "utf-8")
 		const parsed = JSON.parse(raw)
