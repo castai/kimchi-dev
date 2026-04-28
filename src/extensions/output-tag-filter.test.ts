@@ -58,13 +58,25 @@ describe("filterOutputTags", () => {
 			input: "<think>first</think>middle<think>second</think>end",
 			expected: "middleend",
 		},
-		"removes incomplete think block at end": {
-			input: "prefix<think>incomplete reasoning",
-			expected: "prefix",
+		"removes incomplete think block at start": {
+			input: "<think>incomplete reasoning",
+			expected: "",
 		},
-		"removes incomplete think block with preceding complete block": {
+		"removes incomplete think block when at start after complete block": {
+			input: "<think>done</think><think>incomplete",
+			expected: "",
+		},
+		"does not truncate when incomplete think block follows visible text": {
+			input: "prefix<think>incomplete reasoning",
+			expected: "prefix<think>incomplete reasoning",
+		},
+		"does not truncate literal think tag mention": {
+			input: "look for <think> tags in the output",
+			expected: "look for <think> tags in the output",
+		},
+		"does not truncate visible text when second incomplete think block follows": {
 			input: "<think>done</think>visible<think>incomplete",
-			expected: "visible",
+			expected: "visible<think>incomplete",
 		},
 		"leaves text without think tags unchanged": {
 			input: "plain text without tags",

@@ -508,7 +508,8 @@ export default function (pi: ExtensionAPI) {
 	const sessionCounts = new Map<string, number>()
 	activeSessionCounts = sessionCounts
 
-	pi.on("session_start", (event, ctx) => {
+	pi.on("session_start", async (event, ctx) => {
+		await settingsManager.reload()
 		if (ctx.hasUI) {
 			sessionCounts.clear()
 			ctx.ui.setStatus(FOOTER_STATUS_KEY, undefined)
