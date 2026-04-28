@@ -86,6 +86,44 @@ export class LoopGuard {
 		return { state: "terminate", reason: TERMINATION_MESSAGE }
 	}
 
+	/**
+	 * Predicts whether running `call` next would extend an active loop. Only
+	 * meaningful after a warning has been issued. To run the detectors we need
+	 * a status code and output fingerprint for the hypothetical record; we
+	 * borrow them from the most recent historical record with matching tool
+	 * name + args (so the hypo lands in the same slot of any repeating
+	 * pattern), falling back to the last record otherwise. Sets `triggered`
+	 * when prediction fires so subsequent calls short-circuit through
+	 * `isTriggered`.
+	 */
+	wouldLoop(call: { toolName: string; toolArgs: string }): boolean {
+		if (!this.warned || this.history.length === 0) return false
+		let proxy: ToolHistoryRecord | undefined
+		for (let i = this.history.length - 1; i >= 0; i--) {
+			const r = this.history[i]
+			if (r.toolName === call.toolName && r.toolArgs === call.toolArgs) {
+				proxy = r
+				break
+			}
+		}
+		if (!proxy) proxy = this.history[this.history.length - 1]
+		const hypo: ToolHistoryRecord = {
+			toolName: call.toolName,
+			toolArgs: call.toolArgs,
+			statusCode: proxy.statusCode,
+			outputFingerprint: proxy.outputFingerprint,
+		}
+		const saved = this.history
+		this.history = [...saved.slice(-(WINDOW_SIZE - 1)), hypo]
+		try {
+			if (this.detect() === undefined) return false
+			this.triggered = true
+			return true
+		} finally {
+			this.history = saved
+		}
+	}
+
 	private detect(): string | undefined {
 		return this.detectConsecutiveIdenticalCalls() ?? this.detectExactNgram() ?? this.detectFuzzyNgram()
 	}
@@ -238,8 +276,12 @@ export default function loopGuardExtension(pi: ExtensionAPI) {
 		pendingMessage = undefined
 	})
 
-	pi.on("tool_call", () => {
+	pi.on("tool_call", (event) => {
 		if (guard.isTriggered()) {
+			return { block: true, reason: TERMINATION_MESSAGE }
+		}
+		const call = { toolName: event.toolName, toolArgs: stableStringify(event.input) }
+		if (guard.wouldLoop(call)) {
 			return { block: true, reason: TERMINATION_MESSAGE }
 		}
 	})
@@ -256,12 +298,6 @@ export default function loopGuardExtension(pi: ExtensionAPI) {
 			pendingMessage = {
 				customType: "loop-guard-steer",
 				content: [{ type: "text", text: STEERING_MESSAGE }],
-				display: true,
-			}
-		} else if (result.state === "terminate") {
-			pendingMessage = {
-				customType: "loop-guard-stop",
-				content: [{ type: "text", text: TERMINATION_MESSAGE }],
 				display: true,
 			}
 		}

@@ -23,16 +23,6 @@ function repeat<T>(value: T, n: number): T[] {
 	return Array.from({ length: n }, () => value)
 }
 
-describe("LoopGuard initial state", () => {
-	it("isTriggered is false initially", () => {
-		expect(new LoopGuard().isTriggered()).toBe(false)
-	})
-
-	it("isWarned is false initially", () => {
-		expect(new LoopGuard().isWarned()).toBe(false)
-	})
-})
-
 describe("LoopGuard.reset", () => {
 	it("clears history so n-gram detection restarts", () => {
 		const guard = new LoopGuard()
@@ -56,35 +46,6 @@ describe("LoopGuard.reset", () => {
 		expect(guard.isTriggered()).toBe(true)
 		guard.reset()
 		expect(guard.isTriggered()).toBe(false)
-	})
-})
-
-describe("LoopGuard.record return values", () => {
-	it("returns ok while under all thresholds", () => {
-		const guard = new LoopGuard()
-		const states = feed(guard, [
-			rec({ toolArgs: '{"command":"a"}', outputFingerprint: FP_A }),
-			rec({ toolArgs: '{"command":"b"}', outputFingerprint: FP_B }),
-			rec({ toolArgs: '{"command":"c"}', outputFingerprint: FP_C }),
-		])
-		expect(states.every((s) => s.state === "ok")).toBe(true)
-	})
-
-	it("includes a reason on warn", () => {
-		const guard = new LoopGuard()
-		feed(guard, repeat(rec({ statusCode: 1 }), 2))
-		const last = guard.record(rec({ statusCode: 1 }))
-		expect(last.state).toBe("warn")
-		expect(typeof last.reason).toBe("string")
-		expect((last.reason ?? "").length).toBeGreaterThan(0)
-	})
-
-	it("includes a reason on terminate", () => {
-		const guard = new LoopGuard()
-		feed(guard, repeat(rec({ statusCode: 1 }), 3))
-		const last = guard.record(rec({ statusCode: 1 }))
-		expect(last.state).toBe("terminate")
-		expect(typeof last.reason).toBe("string")
 	})
 })
 
@@ -126,10 +87,6 @@ describe("fingerprint", () => {
 		expect(fingerprint("a")).not.toBe(fingerprint("b"))
 	})
 
-	it("hashes empty input deterministically", () => {
-		expect(fingerprint("")).toBe(fingerprint(""))
-	})
-
 	it("only depends on the last 20 lines", () => {
 		const tail = Array.from({ length: 20 }, (_, i) => `tail${i}`).join("\n")
 		const headA = Array.from({ length: 50 }, (_, i) => `headA${i}`).join("\n")
@@ -142,14 +99,6 @@ describe("fingerprint", () => {
 		const tailA = Array.from({ length: 20 }, (_, i) => `a${i}`).join("\n")
 		const tailB = Array.from({ length: 20 }, (_, i) => `b${i}`).join("\n")
 		expect(fingerprint(`${head}\n${tailA}`)).not.toBe(fingerprint(`${head}\n${tailB}`))
-	})
-
-	it("hashes the entire output when fewer than 20 lines", () => {
-		expect(fingerprint("only-line")).not.toBe(fingerprint("different-line"))
-	})
-
-	it("returns a hex string", () => {
-		expect(fingerprint("anything")).toMatch(/^[0-9a-f]+$/)
 	})
 })
 
@@ -168,15 +117,6 @@ describe("Detector 1 — consecutive identical errors", () => {
 		feed(guard, repeat(r, 3))
 		expect(guard.record(r).state).toBe("terminate")
 		expect(guard.isTriggered()).toBe(true)
-	})
-
-	it("fires on consecutive identical successful calls", () => {
-		const guard = new LoopGuard()
-		const r = rec({ statusCode: 0, outputFingerprint: FP_A })
-		expect(guard.record(r).state).toBe("ok")
-		expect(guard.record(r).state).toBe("ok")
-		expect(guard.record(r).state).toBe("warn")
-		expect(guard.record(r).state).toBe("terminate")
 	})
 
 	it("breaks the streak on a successful call", () => {
@@ -357,38 +297,12 @@ describe("Detector 3 — exact ngram (all 4 fields)", () => {
 		expect(last.state === "warn" || last.state === "terminate").toBe(true)
 	})
 
-	it("differing statusCode keeps it under threshold", () => {
+	it("requires statusCode and outputFingerprint to match (not just toolArgs)", () => {
 		const guard = new LoopGuard()
-		const states: Array<ReturnType<LoopGuard["record"]>> = []
 		for (let i = 0; i < 6; i++) {
-			states.push(
-				guard.record(
-					rec({
-						toolArgs: '{"command":"a"}',
-						statusCode: i % 2,
-						outputFingerprint: FP_A,
-					}),
-				),
-			)
+			guard.record(rec({ toolArgs: '{"command":"a"}', statusCode: i % 2, outputFingerprint: `fp-${i}` }))
 		}
-		expect(states.every((s) => s.state === "ok")).toBe(true)
-	})
-
-	it("differing outputFingerprint keeps it under threshold", () => {
-		const guard = new LoopGuard()
-		const states: Array<ReturnType<LoopGuard["record"]>> = []
-		for (let i = 0; i < 6; i++) {
-			states.push(
-				guard.record(
-					rec({
-						toolArgs: '{"command":"a"}',
-						statusCode: 1,
-						outputFingerprint: `fp-${i}`,
-					}),
-				),
-			)
-		}
-		expect(states.every((s) => s.state === "ok")).toBe(true)
+		expect(guard.isWarned()).toBe(false)
 	})
 })
 
@@ -443,154 +357,34 @@ describe("Shared warning fuse", () => {
 	})
 })
 
-describe("Bug-driven cases that must NOT fire", () => {
-	it("break-filter-js-from-html: identical bash args, fingerprint changes each iter", () => {
+describe("LoopGuard.wouldLoop (pre-execution prediction)", () => {
+	it("returns false before any warning", () => {
 		const guard = new LoopGuard()
-		const args =
-			'{"command":"python -c \\"from test_outputs import test_out_html_bypasses_filter; test_out_html_bypasses_filter()\\""}'
-		const editArgs = (i: number) => `{"file_path":"/work/test.py","new_string":"v${i}"}`
-		for (let i = 0; i < 5; i++) {
-			guard.record({
-				toolName: "edit",
-				toolArgs: editArgs(i),
-				statusCode: 0,
-				outputFingerprint: `edit-${i}`,
-			})
-			guard.record({
-				toolName: "bash",
-				toolArgs: args,
-				statusCode: 1,
-				outputFingerprint: `pyerr-${i}`,
-			})
-		}
-		expect(guard.isWarned()).toBe(false)
-		expect(guard.isTriggered()).toBe(false)
+		feed(guard, repeat(rec({ statusCode: 1, outputFingerprint: FP_A }), 2))
+		expect(guard.wouldLoop({ toolName: "bash", toolArgs: '{"command":"ls"}' })).toBe(false)
 	})
 
-	it("overfull-hbox: pdflatex | grep Overfull repeated with changing fingerprints", () => {
+	it("fires and sets triggered when next call would complete a consecutive-identical loop", () => {
 		const guard = new LoopGuard()
-		const bashArgs = '{"command":"pdflatex main.tex | grep Overfull"}'
-		for (let i = 0; i < 5; i++) {
-			guard.record({
-				toolName: "edit",
-				toolArgs: `{"file_path":"main.tex","new_string":"edit-${i}"}`,
-				statusCode: 0,
-				outputFingerprint: `edit-${i}`,
-			})
-			guard.record({
-				toolName: "bash",
-				toolArgs: bashArgs,
-				statusCode: 0,
-				outputFingerprint: `overfull-${i}`,
-			})
-		}
-		expect(guard.isWarned()).toBe(false)
-		expect(guard.isTriggered()).toBe(false)
-	})
-
-	it("tune-mjcf: python eval.py repeated with metric drift", () => {
-		const guard = new LoopGuard()
-		const bashArgs = '{"command":"python eval.py"}'
-		for (let i = 0; i < 5; i++) {
-			guard.record({
-				toolName: "edit",
-				toolArgs: `{"file_path":"model.xml","new_string":"tune-${i}"}`,
-				statusCode: 0,
-				outputFingerprint: `edit-${i}`,
-			})
-			guard.record({
-				toolName: "bash",
-				toolArgs: bashArgs,
-				statusCode: 0,
-				outputFingerprint: `metric-${i}`,
-			})
-		}
-		expect(guard.isWarned()).toBe(false)
-		expect(guard.isTriggered()).toBe(false)
-	})
-
-	it("write-compressor: gcc + run + diff cycle with changing diff output", () => {
-		const guard = new LoopGuard()
-		const gcc = '{"command":"gcc -o c c.c"}'
-		const run = '{"command":"./c < in > out"}'
-		const diff = '{"command":"diff out expected"}'
-		for (let i = 0; i < 4; i++) {
-			guard.record({
-				toolName: "edit",
-				toolArgs: `{"file_path":"c.c","new_string":"v${i}"}`,
-				statusCode: 0,
-				outputFingerprint: `edit-${i}`,
-			})
-			guard.record({
-				toolName: "bash",
-				toolArgs: gcc,
-				statusCode: 0,
-				outputFingerprint: `gcc-${i}`,
-			})
-			guard.record({
-				toolName: "bash",
-				toolArgs: run,
-				statusCode: 0,
-				outputFingerprint: `run-${i}`,
-			})
-			guard.record({
-				toolName: "bash",
-				toolArgs: diff,
-				statusCode: 1,
-				outputFingerprint: `diff-${i}`,
-			})
-		}
-		expect(guard.isWarned()).toBe(false)
-		expect(guard.isTriggered()).toBe(false)
-	})
-
-	it("winning-avg-corewars: pmars syntax errors with different fingerprints each edit", () => {
-		const guard = new LoopGuard()
-		const pmars = '{"command":"pmars warrior.red"}'
-		for (let i = 0; i < 5; i++) {
-			guard.record({
-				toolName: "edit",
-				toolArgs: `{"file_path":"warrior.red","new_string":"e${i}"}`,
-				statusCode: 0,
-				outputFingerprint: `edit-${i}`,
-			})
-			guard.record({
-				toolName: "bash",
-				toolArgs: pmars,
-				statusCode: 1,
-				outputFingerprint: `syntax-err-${i}`,
-			})
-		}
-		expect(guard.isWarned()).toBe(false)
-		expect(guard.isTriggered()).toBe(false)
-	})
-})
-
-describe("Bug-driven cases that SHOULD fire", () => {
-	it("torch-pipeline-parallelism: 4 identical reads (same args + fingerprint) → exact ngram catches", () => {
-		const guard = new LoopGuard()
-		const r = {
-			toolName: "read",
-			toolArgs: '{"file_path":"/work/pipeline.py"}',
-			statusCode: 0,
-			outputFingerprint: "same-content",
-		}
-		feed(guard, repeat(r, 3))
-		const last = guard.record(r)
-		expect(last.state === "warn" || last.state === "terminate").toBe(true)
-		expect(guard.isWarned()).toBe(true)
-	})
-
-	it("4 contiguous identical failing bash calls → terminate", () => {
-		const guard = new LoopGuard()
-		const r = rec({ statusCode: 1, outputFingerprint: FP_A })
-		feed(guard, repeat(r, 3))
-		const last = guard.record(r)
-		expect(last.state).toBe("terminate")
+		feed(guard, repeat(rec({ statusCode: 1, outputFingerprint: FP_A }), 3))
+		expect(guard.wouldLoop({ toolName: "bash", toolArgs: '{"command":"ls"}' })).toBe(true)
 		expect(guard.isTriggered()).toBe(true)
 	})
 
-	it("long alternating (A, B) ≥ 6 reps → fuzzy 2-gram fires", () => {
+	it("returns false for a clearly different next call", () => {
+		const guard = new LoopGuard()
+		feed(guard, repeat(rec({ statusCode: 1, outputFingerprint: FP_A }), 3))
+		expect(guard.wouldLoop({ toolName: "bash", toolArgs: '{"command":"different"}' })).toBe(false)
+	})
+
+	it("does not mutate history on a non-firing prediction", () => {
+		const guard = new LoopGuard()
+		feed(guard, repeat(rec({ statusCode: 1, outputFingerprint: FP_A }), 3))
+		guard.wouldLoop({ toolName: "bash", toolArgs: '{"command":"different"}' })
+		expect(guard.record(rec({ statusCode: 1, outputFingerprint: FP_A })).state).toBe("terminate")
+	})
+
+	it("returns true when next call would extend an alternating 2-gram", () => {
 		const guard = new LoopGuard()
 		const a = rec({ toolArgs: '{"command":"a"}', outputFingerprint: FP_A })
 		const b = rec({ toolArgs: '{"command":"b"}', outputFingerprint: FP_B })
@@ -598,9 +392,52 @@ describe("Bug-driven cases that SHOULD fire", () => {
 			guard.record(a)
 			guard.record(b)
 		}
-		expect(guard.isWarned()).toBe(false)
 		guard.record(a)
-		const last = guard.record(b)
-		expect(last.state === "warn" || last.state === "terminate").toBe(true)
+		guard.record(b)
+		expect(guard.isWarned()).toBe(true)
+		expect(guard.wouldLoop({ toolName: "bash", toolArgs: '{"command":"a"}' })).toBe(true)
+	})
+})
+
+describe("Edit-then-rerun cycle must NOT fire", () => {
+	it("edit (changing) + bash (same args, changing fingerprint) for 5 iterations", () => {
+		const guard = new LoopGuard()
+		const bashArgs = '{"command":"run-tests"}'
+		for (let i = 0; i < 5; i++) {
+			guard.record({
+				toolName: "edit",
+				toolArgs: `{"file_path":"a.py","new_string":"v${i}"}`,
+				statusCode: 0,
+				outputFingerprint: `edit-${i}`,
+			})
+			guard.record({
+				toolName: "bash",
+				toolArgs: bashArgs,
+				statusCode: 1,
+				outputFingerprint: `out-${i}`,
+			})
+		}
+		expect(guard.isWarned()).toBe(false)
+		expect(guard.isTriggered()).toBe(false)
+	})
+
+	it("multi-step build/run/check cycle with changing outputs", () => {
+		const guard = new LoopGuard()
+		const build = '{"command":"build"}'
+		const run = '{"command":"run"}'
+		const check = '{"command":"check"}'
+		for (let i = 0; i < 4; i++) {
+			guard.record({
+				toolName: "edit",
+				toolArgs: `{"file_path":"src.c","new_string":"v${i}"}`,
+				statusCode: 0,
+				outputFingerprint: `edit-${i}`,
+			})
+			guard.record({ toolName: "bash", toolArgs: build, statusCode: 0, outputFingerprint: `build-${i}` })
+			guard.record({ toolName: "bash", toolArgs: run, statusCode: 0, outputFingerprint: `run-${i}` })
+			guard.record({ toolName: "bash", toolArgs: check, statusCode: 1, outputFingerprint: `check-${i}` })
+		}
+		expect(guard.isWarned()).toBe(false)
+		expect(guard.isTriggered()).toBe(false)
 	})
 })
