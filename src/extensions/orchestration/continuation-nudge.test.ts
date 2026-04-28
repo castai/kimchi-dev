@@ -1,6 +1,12 @@
 import type { AssistantMessage, UserMessage } from "@mariozechner/pi-ai"
 import { describe, expect, it } from "vitest"
-import { ContinuationNudge, EmptyTurnNudge, type OrchestratorMessages, stripStaleNudges } from "./continuation-nudge.js"
+import {
+	ContinuationNudge,
+	DONE_SIGNAL,
+	EmptyTurnNudge,
+	type OrchestratorMessages,
+	stripStaleNudges,
+} from "./continuation-nudge.js"
 
 function makeAssistant(content: AssistantMessage["content"]): AssistantMessage {
 	return {
@@ -114,11 +120,78 @@ describe("ContinuationNudge.evaluateTurn", () => {
 		expect(guard.evaluateTurn(textOnlyMessage)).toBe(true)
 	})
 
+	it("sets nudge response pending after nudging", () => {
+		const guard = new ContinuationNudge()
+		guard.resetForNewUserInput()
+		expect(guard.isNudgeResponsePending()).toBe(false)
+		guard.evaluateTurn(textOnlyMessage)
+		expect(guard.isNudgeResponsePending()).toBe(true)
+	})
+
+	it("clears nudge response pending when a tool call is recorded", () => {
+		const guard = new ContinuationNudge()
+		guard.resetForNewUserInput()
+		guard.evaluateTurn(textOnlyMessage)
+		expect(guard.isNudgeResponsePending()).toBe(true)
+		guard.recordToolCall()
+		expect(guard.isNudgeResponsePending()).toBe(false)
+	})
+
+	it("clears nudge response pending on reset", () => {
+		const guard = new ContinuationNudge()
+		guard.resetForNewUserInput()
+		guard.evaluateTurn(textOnlyMessage)
+		expect(guard.isNudgeResponsePending()).toBe(true)
+		guard.resetForNewUserInput()
+		expect(guard.isNudgeResponsePending()).toBe(false)
+	})
+
 	it("ignores thinking-only turns (no text, no tool call)", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
 		const thinkingOnly = makeAssistant([{ type: "thinking", thinking: "Let me reason..." }])
 		expect(guard.evaluateTurn(thinkingOnly)).toBe(false)
+	})
+})
+
+describe("ContinuationNudge.isDoneSignalReceived", () => {
+	it("returns false when no response has been accumulated", () => {
+		const guard = new ContinuationNudge()
+		expect(guard.isDoneSignalReceived()).toBe(false)
+	})
+
+	it("returns true when accumulated text equals the done signal", () => {
+		const guard = new ContinuationNudge()
+		guard.accumulateResponse(DONE_SIGNAL)
+		expect(guard.isDoneSignalReceived()).toBe(true)
+	})
+
+	it("returns true when accumulated text equals done signal with surrounding whitespace", () => {
+		const guard = new ContinuationNudge()
+		guard.accumulateResponse("  ")
+		guard.accumulateResponse(DONE_SIGNAL)
+		guard.accumulateResponse("\n")
+		expect(guard.isDoneSignalReceived()).toBe(true)
+	})
+
+	it("returns false when accumulated text is not the done signal", () => {
+		const guard = new ContinuationNudge()
+		guard.accumulateResponse("I am done.")
+		expect(guard.isDoneSignalReceived()).toBe(false)
+	})
+
+	it("clears accumulated response on reset", () => {
+		const guard = new ContinuationNudge()
+		guard.accumulateResponse(DONE_SIGNAL)
+		guard.resetForNewUserInput()
+		expect(guard.isDoneSignalReceived()).toBe(false)
+	})
+
+	it("clears accumulated response when a tool call is recorded", () => {
+		const guard = new ContinuationNudge()
+		guard.accumulateResponse(DONE_SIGNAL)
+		guard.recordToolCall()
+		expect(guard.isDoneSignalReceived()).toBe(false)
 	})
 })
 
