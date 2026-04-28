@@ -2,10 +2,14 @@
 set -e
 
 IMPROVEMENT_DIR="${0:A:h}"
-BENCHMARK_JSON="$IMPROVEMENT_DIR/benchmark.json"
 
-if [[ ! -f "$BENCHMARK_JSON" ]]; then
-  echo "benchmark.json not found at $BENCHMARK_JSON"
+# Check for local override first, then fall back to default config
+if [[ -f "$IMPROVEMENT_DIR/benchmark.local.json" ]]; then
+  BENCHMARK_JSON="$IMPROVEMENT_DIR/benchmark.local.json"
+elif [[ -f "$IMPROVEMENT_DIR/benchmark.json" ]]; then
+  BENCHMARK_JSON="$IMPROVEMENT_DIR/benchmark.json"
+else
+  echo "benchmark.json not found at $IMPROVEMENT_DIR/benchmark.json"
   echo "Create it with: {\"binary\": \"path/to/binary\", \"models\": [\"model-id\", ...]}"
   exit 1
 fi
