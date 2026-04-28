@@ -9,10 +9,10 @@
  *      `subagent` tool call. Delivered as a `followUp` via `pi.sendMessage`
  *      so the agent loop restarts. Mirrors AISI Inspect's `on_continue`.
  *
- *   2. Empty-turn nudge — pre-LLM-call. The model returned a tool-call-only
- *      response (no text) and tool results are ready. Some Kimi deployments
- *      return an empty response on the next call. Injected transiently into
- *      the context via the `context` event so it doesn't pollute the session
+ *   2. Empty-turn nudge — reactive. Some Kimi deployments return an empty
+ *      response (no text, no tool calls) after receiving tool results. When
+ *      detected on `turn_end`, the nudge is armed and injected into the next
+ *      LLM context via the `context` event so it doesn't pollute the session
  *      history.
  *
  * Both are delivered as custom messages with `display: false` so they
@@ -41,10 +41,6 @@ export const CONTINUATION_NUDGE_TEXT =
 export const EMPTY_TURN_NUDGE_TEXT =
 	"If you have finished, please summarize the result for the user. Otherwise, continue with the next tool call."
 
-export interface NudgeDecision {
-	shouldNudge: boolean
-}
-
 /**
  * Post-turn state machine for the "text-only drift" nudge.
  *
@@ -65,14 +61,41 @@ export class ContinuationNudge {
 		this.toolsCalledSinceLastUserInput = true
 	}
 
-	evaluateTurn(message: AssistantMessage): NudgeDecision {
-		if (this.nudgedSinceLastUserInput) return { shouldNudge: false }
-		if (this.toolsCalledSinceLastUserInput) return { shouldNudge: false }
+	evaluateTurn(message: AssistantMessage): boolean {
+		if (this.nudgedSinceLastUserInput) return false
+		if (this.toolsCalledSinceLastUserInput) return false
 		const hasToolCalls = message.content.some((c) => c.type === "toolCall")
 		const hasText = message.content.some((c) => c.type === "text" && c.text.trim().length > 0)
-		if (hasToolCalls || !hasText) return { shouldNudge: false }
+		if (hasToolCalls || !hasText) return false
 		this.nudgedSinceLastUserInput = true
-		return { shouldNudge: true }
+		return true
+	}
+}
+
+/**
+ * Reactive state machine for the "empty follow-up" nudge.
+ *
+ * Some model deployments (notably Kimi K2.x) return an empty response — no text, no tool calls — after receiving tool results from a tool-call-only turn. The agent loop stalls because there is nothing to execute or display. This class detects that failure and arms a one-shot nudge that is injected into the next LLM context to prompt the model to continue.
+ *
+ * The nudge is reactive: it only fires after an empty response has actually occurred, not preemptively on every tool-result → LLM-call transition. Models that never produce empty responses never see the nudge at all.
+ */
+export class EmptyTurnNudge {
+	private armed = false
+
+	evaluateTurn(message: AssistantMessage): void {
+		const hasText = message.content.some((c) => c.type === "text" && c.text.trim().length > 0)
+		const hasToolCalls = message.content.some((c) => c.type === "toolCall")
+		this.armed = !hasText && !hasToolCalls
+	}
+
+	shouldNudge(): boolean {
+		if (!this.armed) return false
+		this.armed = false
+		return true
+	}
+
+	resetForNewUserInput(): void {
+		this.armed = false
 	}
 }
 

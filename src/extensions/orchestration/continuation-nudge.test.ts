@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
 	ContinuationNudge,
 	EMPTY_TURN_NUDGE_TEXT,
+	EmptyTurnNudge,
 	type OrchestratorMessages,
 	buildEmptyTurnNudgedMessages,
 	stripStaleNudges,
@@ -56,75 +57,75 @@ describe("ContinuationNudge.evaluateTurn", () => {
 	it("nudges a text-only first turn after user input", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
-		expect(guard.evaluateTurn(textOnlyMessage).shouldNudge).toBe(true)
+		expect(guard.evaluateTurn(textOnlyMessage)).toBe(true)
 	})
 
 	it("does not nudge when the turn contains a tool call", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
-		expect(guard.evaluateTurn(toolCallMessage).shouldNudge).toBe(false)
+		expect(guard.evaluateTurn(toolCallMessage)).toBe(false)
 	})
 
 	it("does not nudge when the turn has both text and a tool call", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
-		expect(guard.evaluateTurn(textAndToolCallMessage).shouldNudge).toBe(false)
+		expect(guard.evaluateTurn(textAndToolCallMessage)).toBe(false)
 	})
 
 	it("does not nudge when the turn has no text at all", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
-		expect(guard.evaluateTurn(makeAssistant([])).shouldNudge).toBe(false)
+		expect(guard.evaluateTurn(makeAssistant([]))).toBe(false)
 	})
 
 	it("treats empty-string text as no text", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
-		expect(guard.evaluateTurn(emptyTextMessage).shouldNudge).toBe(false)
+		expect(guard.evaluateTurn(emptyTextMessage)).toBe(false)
 	})
 
 	it("treats whitespace-only text as no text", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
-		expect(guard.evaluateTurn(whitespaceTextMessage).shouldNudge).toBe(false)
+		expect(guard.evaluateTurn(whitespaceTextMessage)).toBe(false)
 	})
 
 	it("nudges at most once per user-input cycle", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
-		expect(guard.evaluateTurn(textOnlyMessage).shouldNudge).toBe(true)
-		expect(guard.evaluateTurn(textOnlyMessage).shouldNudge).toBe(false)
+		expect(guard.evaluateTurn(textOnlyMessage)).toBe(true)
+		expect(guard.evaluateTurn(textOnlyMessage)).toBe(false)
 	})
 
 	it("does not nudge when any tool has already been called this cycle", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
 		guard.recordToolCall()
-		expect(guard.evaluateTurn(textOnlyMessage).shouldNudge).toBe(false)
+		expect(guard.evaluateTurn(textOnlyMessage)).toBe(false)
 	})
 
 	it("re-arms after a new user input", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
-		expect(guard.evaluateTurn(textOnlyMessage).shouldNudge).toBe(true)
+		expect(guard.evaluateTurn(textOnlyMessage)).toBe(true)
 		guard.resetForNewUserInput()
-		expect(guard.evaluateTurn(textOnlyMessage).shouldNudge).toBe(true)
+		expect(guard.evaluateTurn(textOnlyMessage)).toBe(true)
 	})
 
 	it("re-arms tool-call tracking on reset", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
 		guard.recordToolCall()
-		expect(guard.evaluateTurn(textOnlyMessage).shouldNudge).toBe(false)
+		expect(guard.evaluateTurn(textOnlyMessage)).toBe(false)
 		guard.resetForNewUserInput()
-		expect(guard.evaluateTurn(textOnlyMessage).shouldNudge).toBe(true)
+		expect(guard.evaluateTurn(textOnlyMessage)).toBe(true)
 	})
 
 	it("ignores thinking-only turns (no text, no tool call)", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
 		const thinkingOnly = makeAssistant([{ type: "thinking", thinking: "Let me reason..." }])
-		expect(guard.evaluateTurn(thinkingOnly).shouldNudge).toBe(false)
+		expect(guard.evaluateTurn(thinkingOnly)).toBe(false)
 	})
 })
 
@@ -245,5 +246,61 @@ describe("buildEmptyTurnNudgedMessages", () => {
 			makeToolResult("call_1", "done"),
 		]
 		expect(buildEmptyTurnNudgedMessages(messages)).toBeDefined()
+	})
+})
+
+describe("EmptyTurnNudge", () => {
+	const emptyMessage = makeAssistant([])
+	const whitespaceOnlyMessage = makeAssistant([{ type: "text", text: "   \n  " }])
+
+	it("arms after an empty assistant turn", () => {
+		const guard = new EmptyTurnNudge()
+		guard.evaluateTurn(emptyMessage)
+		expect(guard.shouldNudge()).toBe(true)
+	})
+
+	it("does not arm after a turn with text", () => {
+		const guard = new EmptyTurnNudge()
+		guard.evaluateTurn(textOnlyMessage)
+		expect(guard.shouldNudge()).toBe(false)
+	})
+
+	it("does not arm after a turn with tool calls", () => {
+		const guard = new EmptyTurnNudge()
+		guard.evaluateTurn(toolCallMessage)
+		expect(guard.shouldNudge()).toBe(false)
+	})
+
+	it("does not arm after a turn with both text and tool calls", () => {
+		const guard = new EmptyTurnNudge()
+		guard.evaluateTurn(textAndToolCallMessage)
+		expect(guard.shouldNudge()).toBe(false)
+	})
+
+	it("treats whitespace-only text as empty", () => {
+		const guard = new EmptyTurnNudge()
+		guard.evaluateTurn(whitespaceOnlyMessage)
+		expect(guard.shouldNudge()).toBe(true)
+	})
+
+	it("disarms after shouldNudge returns true", () => {
+		const guard = new EmptyTurnNudge()
+		guard.evaluateTurn(emptyMessage)
+		expect(guard.shouldNudge()).toBe(true)
+		expect(guard.shouldNudge()).toBe(false)
+	})
+
+	it("disarms after a non-empty turn follows an empty one", () => {
+		const guard = new EmptyTurnNudge()
+		guard.evaluateTurn(emptyMessage)
+		guard.evaluateTurn(textOnlyMessage)
+		expect(guard.shouldNudge()).toBe(false)
+	})
+
+	it("resets on new user input", () => {
+		const guard = new EmptyTurnNudge()
+		guard.evaluateTurn(emptyMessage)
+		guard.resetForNewUserInput()
+		expect(guard.shouldNudge()).toBe(false)
 	})
 })
