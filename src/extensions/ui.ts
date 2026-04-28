@@ -25,7 +25,7 @@ function patchTuiPadding(tui: TUI) {
 	}
 }
 
-function runScript(scriptPath: string, payload: object, tui: TUI, footer: ScriptFooter): void {
+function runScript(scriptPath: string, payload: object, tui: TUI, footer: ScriptFooter, onDone: () => void): void {
 	const child = spawn(scriptPath, [], {
 		env: process.env,
 		timeout: 1000,
@@ -33,15 +33,16 @@ function runScript(scriptPath: string, payload: object, tui: TUI, footer: Script
 
 	let stdout = ""
 	let stderr = ""
-	child.stdout.on("data", (d: Buffer) => {
-		stdout += d.toString()
-	})
-	child.stderr.on("data", (d: Buffer) => {
-		stderr += d.toString()
-	})
-
+	child.stdout.on("data", (d: Buffer) => { stdout += d.toString() })
+	child.stderr.on("data", (d: Buffer) => { stderr += d.toString() })
 	child.stdin.write(JSON.stringify(payload))
 	child.stdin.end()
+
+	child.on("error", (err) => {
+		footer.setLines([`\x1b[31m[statusline error] ${err.message}\x1b[0m`])
+		tui.requestRender()
+		onDone()
+	})
 
 	child.on("close", (code) => {
 		if (code === 0 && stdout) {
@@ -51,6 +52,7 @@ function runScript(scriptPath: string, payload: object, tui: TUI, footer: Script
 			footer.setLines([`\x1b[31m[statusline error] ${stderr.trim()}\x1b[0m`])
 		}
 		tui.requestRender()
+		onDone()
 	})
 }
 
@@ -61,6 +63,7 @@ export default function uiExtension(pi: ExtensionAPI) {
 	let scriptFooter: ScriptFooter | null = null
 	let scriptTui: TUI | null = null
 	let scriptCmd: string | null = null
+	let scriptPending = false
 	let currentCtx: ExtensionContext | null = null
 	let sessionStartMs = 0
 	let linesAdded = 0
@@ -68,11 +71,14 @@ export default function uiExtension(pi: ExtensionAPI) {
 
 	const refresh = (status: "idle" | "generating") => {
 		if (!currentCtx?.hasUI || !scriptFooter || !scriptTui || !scriptCmd) return
+		if (scriptPending) return
+		scriptPending = true
 		runScript(
 			scriptCmd,
 			buildScriptPayload(currentCtx, status, sessionStartMs, linesAdded, linesRemoved),
 			scriptTui,
 			scriptFooter,
+			() => { scriptPending = false },
 		)
 	}
 
@@ -96,7 +102,8 @@ export default function uiExtension(pi: ExtensionAPI) {
 			scriptCmd = cmd
 			scriptFooter = new ScriptFooter()
 			scriptTui = tui
-			runScript(cmd, buildScriptPayload(ctx, "idle", sessionStartMs, linesAdded, linesRemoved), tui, scriptFooter)
+			scriptPending = true
+			runScript(cmd, buildScriptPayload(ctx, "idle", sessionStartMs, linesAdded, linesRemoved), tui, scriptFooter, () => { scriptPending = false })
 			return scriptFooter
 		})
 

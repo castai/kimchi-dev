@@ -24,7 +24,6 @@ export function readStatusLineCommand(): string | null {
 		const parsed = JSON.parse(raw)
 		const cmd = parsed?.statusLine?.command
 		if (typeof cmd !== "string" || cmd.length === 0) return null
-		if (cmd === "~") return homedir()
 		if (cmd.startsWith("~/")) return resolve(homedir(), cmd.slice(2))
 		return cmd
 	} catch {
