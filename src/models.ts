@@ -135,10 +135,7 @@ export async function validateApiKey(apiKey: string): Promise<void> {
  * the cached models with a warning. Throws only when a key is present but
  * there is no cache to fall back on.
  */
-export async function updateModelsConfig(
-	modelsJsonPath: string,
-	apiKey: string,
-): Promise<ModelsConfigResult> {
+export async function updateModelsConfig(modelsJsonPath: string, apiKey: string): Promise<ModelsConfigResult> {
 	const dir = dirname(modelsJsonPath)
 	mkdirSync(dir, { recursive: true })
 

@@ -1,7 +1,7 @@
+import { spawn } from "node:child_process"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
 import { isEditToolResult, isWriteToolResult } from "@mariozechner/pi-coding-agent"
 import type { TUI } from "@mariozechner/pi-tui"
-import { spawn } from "node:child_process"
 import { PromptEditor } from "../components/editor.js"
 import { ScriptFooter, StatsFooter, buildScriptPayload, readStatusLineCommand } from "../components/footer.js"
 import { LogoHeader } from "../components/logo.js"
@@ -25,12 +25,7 @@ function patchTuiPadding(tui: TUI) {
 	}
 }
 
-function runScript(
-	scriptPath: string,
-	payload: object,
-	tui: TUI,
-	footer: ScriptFooter,
-): void {
+function runScript(scriptPath: string, payload: object, tui: TUI, footer: ScriptFooter): void {
 	const child = spawn(scriptPath, [], {
 		env: process.env,
 		timeout: 1000,
@@ -38,8 +33,12 @@ function runScript(
 
 	let stdout = ""
 	let stderr = ""
-	child.stdout.on("data", (d: Buffer) => { stdout += d.toString() })
-	child.stderr.on("data", (d: Buffer) => { stderr += d.toString() })
+	child.stdout.on("data", (d: Buffer) => {
+		stdout += d.toString()
+	})
+	child.stderr.on("data", (d: Buffer) => {
+		stderr += d.toString()
+	})
 
 	child.stdin.write(JSON.stringify(payload))
 	child.stdin.end()
@@ -69,7 +68,12 @@ export default function uiExtension(pi: ExtensionAPI) {
 
 	const refresh = (status: "idle" | "generating") => {
 		if (!currentCtx?.hasUI || !scriptFooter || !scriptTui || !scriptCmd) return
-		runScript(scriptCmd, buildScriptPayload(currentCtx, status, sessionStartMs, linesAdded, linesRemoved), scriptTui, scriptFooter)
+		runScript(
+			scriptCmd,
+			buildScriptPayload(currentCtx, status, sessionStartMs, linesAdded, linesRemoved),
+			scriptTui,
+			scriptFooter,
+		)
 	}
 
 	pi.on("session_start", (event, ctx) => {
@@ -126,9 +130,18 @@ export default function uiExtension(pi: ExtensionAPI) {
 		currentEditor?.setSplashMode(false)
 	})
 
-	pi.on("turn_start", (_, ctx) => { currentCtx = ctx; refresh("generating") })
-	pi.on("turn_end",   (_, ctx) => { currentCtx = ctx; refresh("idle") })
-	pi.on("model_select", (_, ctx) => { currentCtx = ctx; refresh("idle") })
+	pi.on("turn_start", (_, ctx) => {
+		currentCtx = ctx
+		refresh("generating")
+	})
+	pi.on("turn_end", (_, ctx) => {
+		currentCtx = ctx
+		refresh("idle")
+	})
+	pi.on("model_select", (_, ctx) => {
+		currentCtx = ctx
+		refresh("idle")
+	})
 
 	pi.on("tool_result", (event) => {
 		if (isEditToolResult(event) && event.details?.diff) {
