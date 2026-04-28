@@ -5,18 +5,26 @@
  * WAL mode, and schema initialization.
  */
 
+// Bun's built-in SQLite module - only available at runtime under Bun
+// We use dynamic require to avoid TypeScript errors during Node.js builds
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { Database } = require("bun:sqlite")
 import { SESSIONS_TABLE_SQL, EVENTS_TABLE_SQL, PROJECT_HASH_INDEX_SQL, SESSION_ID_INDEX_SQL } from "./schema.js"
 
-// bun:sqlite is a built-in Bun module - we use a relaxed type for runtime
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type BunDatabase = any
+// Minimal type for Database at build time
+type DatabaseInstance = {
+	exec(sql: string): void
+	run(sql: string, params?: (string | number | null)[]): void
+	query(sql: string): { all(...params: (string | number | null)[]): unknown[] }
+	close(): void
+}
 
 /**
  * Non-fatal database wrapper for HITL metrics.
  * All operations catch errors, log warnings, and return safe defaults.
  */
 export class HitlDatabase {
-	private db: BunDatabase | null = null
+	private db: DatabaseInstance | null = null
 	private dbPath: string
 	private isClosed = false
 
@@ -33,9 +41,7 @@ export class HitlDatabase {
 	 */
 	open(): boolean {
 		try {
-			// eslint-disable-next-line @typescript-eslint/no-var-requires
-			const sqlite = require("bun:sqlite")
-			this.db = new sqlite.Database(this.dbPath)
+			this.db = new Database(this.dbPath) as DatabaseInstance
 			this.db.exec("PRAGMA journal_mode=WAL")
 			this.db.exec("PRAGMA busy_timeout=3000")
 			return true
@@ -82,7 +88,7 @@ export class HitlDatabase {
 	 * @param params - Bound parameters
 	 * @returns true if executed successfully, false otherwise
 	 */
-	run(sql: string, params: unknown[] = []): boolean {
+	run(sql: string, params: (string | number | null)[] = []): boolean {
 		if (!this.db) {
 			console.warn("[HitlDatabase] Cannot run: database not open")
 			return false
@@ -109,7 +115,7 @@ export class HitlDatabase {
 	 * @param params - Bound parameters
 	 * @returns Array of results (empty on error)
 	 */
-	query<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): T[] {
+	query<T extends Record<string, unknown>>(sql: string, params: (string | number | null)[] = []): T[] {
 		if (!this.db) {
 			console.warn("[HitlDatabase] Cannot query: database not open")
 			return []
@@ -157,7 +163,7 @@ export class HitlDatabase {
 	 * Get the underlying Database instance for advanced operations.
 	 * Returns null if closed or not open.
 	 */
-	get raw(): BunDatabase | null {
+	get raw(): DatabaseInstance | null {
 		return this.isClosed ? null : this.db
 	}
 }

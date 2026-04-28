@@ -7,27 +7,7 @@
 import { describe, it, expect } from "vitest"
 import { buildTimeline, renderTimeline } from "./timeline.js"
 import type { HitlSession, HitlEvent, TimelineSegment } from "./types.js"
-import type { Theme } from "@mariozechner/pi-coding-agent"
-
-// Mock theme for testing (no ANSI colors) — implements Theme interface
-function createMockTheme(): Theme {
-	const noOp = (text: string) => text
-	return {
-		name: "mock",
-		fg: (_c, text) => text,
-		bg: (_c, text) => text,
-		bold: noOp,
-		italic: noOp,
-		underline: noOp,
-		inverse: noOp,
-		strikethrough: noOp,
-		getFgAnsi: () => "",
-		getBgAnsi: () => "",
-		getColorMode: () => "truecolor",
-		getThinkingBorderColor: () => noOp,
-		getBashModeBorderColor: () => noOp,
-	} as unknown as Theme
-}
+import { createMockTheme } from "./test-helpers/mock-theme.js"
 
 const mockTheme = createMockTheme()
 

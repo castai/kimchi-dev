@@ -5,30 +5,7 @@
 import { describe, it, expect } from "vitest"
 import { formatDuration, formatMetrics, formatSessionRow, formatTimelineSection } from "./formatters.js"
 import type { HitlStats, HitlSession, TimelineSegment } from "./types.js"
-import type { Theme } from "@mariozechner/pi-coding-agent"
-
-/**
- * Minimal mock theme that returns plain strings (no ANSI codes)
- * — suitable for deterministic unit tests
- */
-function createMockTheme(): Theme {
-	const noOp = (text: string) => text
-	return {
-		name: "mock",
-		fg: (_c, text) => text,
-		bg: (_c, text) => text,
-		bold: noOp,
-		italic: noOp,
-		underline: noOp,
-		inverse: noOp,
-		strikethrough: noOp,
-		getFgAnsi: () => "",
-		getBgAnsi: () => "",
-		getColorMode: () => "truecolor",
-		getThinkingBorderColor: () => noOp,
-		getBashModeBorderColor: () => noOp,
-	} as unknown as Theme
-}
+import { createMockTheme } from "./test-helpers/mock-theme.js"
 
 describe("formatDuration", () => {
 	it("formats 0ms as 0s", () => {

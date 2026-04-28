@@ -12,40 +12,44 @@ import type { ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-age
 import { homedir } from "node:os"
 import { resolve } from "node:path"
 import { mkdtempSync, rmSync } from "node:fs"
-
-// --- Mock Theme ---
-function createMockTheme(): Theme {
-	const noOp = (text: string) => text
-	return {
-		name: "mock",
-		fg: (_c, text) => `[color:${text}]`,
-		bg: (_c, text) => text,
-		bold: (text) => `<b>${text}</b>`,
-		italic: noOp,
-		underline: noOp,
-		inverse: noOp,
-		strikethrough: noOp,
-		getFgAnsi: () => "",
-		getBgAnsi: () => "",
-		getColorMode: () => "truecolor",
-		getThinkingBorderColor: () => noOp,
-		getBashModeBorderColor: () => noOp,
-	} as unknown as Theme
-}
+import { createMockTheme } from "../test-helpers/mock-theme.js"
 
 const mockTheme: Theme = createMockTheme()
 
 // --- Mock ExtensionCommandContext ---
 function createMockCtx(overrides: Partial<ExtensionCommandContext> = {}): ExtensionCommandContext {
+	const noOp = () => undefined
 	return {
 		cwd: "/tmp/test",
 		hasUI: true,
 		ui: {
 			notify: vi.fn(),
 			theme: mockTheme,
-		},
+			select: vi.fn(),
+			confirm: vi.fn(),
+			input: vi.fn(),
+			onTerminalInput: () => () => {},
+			setStatus: vi.fn(),
+			setWorkingMessage: vi.fn(),
+			setHiddenThinkingLabel: vi.fn(),
+			setWidget: vi.fn(),
+			setFooter: vi.fn(),
+			setHeader: vi.fn(),
+			setTitle: vi.fn(),
+			custom: vi.fn(),
+			autocomplete: vi.fn(),
+			editor: vi.fn(),
+			setEditor: vi.fn(),
+			setEditorComponent: vi.fn(),
+			focusEditor: vi.fn(),
+			setInputKeybindings: vi.fn(),
+			setSessionInputKeybindings: vi.fn(),
+			setExpandHandler: vi.fn(),
+			keybindings: {} as any,
+			tui: {} as any,
+		} as unknown as ExtensionCommandContext["ui"],
 		...overrides,
-	}
+	} as unknown as ExtensionCommandContext
 }
 
 // --- Setup Helpers ---
@@ -307,15 +311,7 @@ describe("timeline integration", () => {
 
 		db.close()
 
-		const mockTheme = {
-			fg: (_c: string, t: string) => t,
-			bg: (_c: string, t: string) => t,
-			bold: (t: string) => t, inverse: (t: string) => t,
-			dim: (t: string) => t,
-			italic: (t: string) => t,
-			underline: (t: string) => t,
-			strikethrough: (t: string) => t,
-		}
+		const mockTheme = createMockTheme()
 
 		const output = await getMetricsOutput(tempDir, mockTheme as Theme)
 
@@ -353,15 +349,7 @@ describe("timeline integration", () => {
 
 		db.close()
 
-		const mockTheme = {
-			fg: (_c: string, t: string) => t,
-			bg: (_c: string, t: string) => t,
-			bold: (t: string) => t, inverse: (t: string) => t,
-			dim: (t: string) => t,
-			italic: (t: string) => t,
-			underline: (t: string) => t,
-			strikethrough: (t: string) => t,
-		}
+		const mockTheme = createMockTheme()
 
 		const output = await getMetricsOutput(tempDir, mockTheme as Theme)
 

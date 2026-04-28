@@ -9,6 +9,6 @@
 		"declaration": true,
 		"outDir": "./dist"
 	},
-	"include": ["**/*.ts"],
+	"include": ["**/*.ts", "types/**/*.d.ts"],
 	"exclude": ["**/*.test.ts", "dist"]
 }

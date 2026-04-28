@@ -11,30 +11,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { SessionManager } from "./session-manager.js"
 import { getMetricsOutput } from "./commands/metrics.js"
-
-import type { Theme } from "@mariozechner/pi-coding-agent"
-
-/**
- * Create a mock theme for testing (no-op formatting)
- */
-function createMockTheme(): Theme {
-	const noOp = (text: string) => text
-	return {
-		name: "mock",
-		fg: (_c, text) => text,
-		bg: (_c, text) => text,
-		bold: noOp,
-		italic: noOp,
-		underline: noOp,
-		inverse: noOp,
-		strikethrough: noOp,
-		getFgAnsi: () => "",
-		getBgAnsi: () => "",
-		getColorMode: () => "truecolor",
-		getThinkingBorderColor: () => noOp,
-		getBashModeBorderColor: () => noOp,
-	} as unknown as Theme
-}
+import { createMockTheme } from "./test-helpers/mock-theme.js"
 
 /**
  * Helper to create a unique temp directory for each test
