@@ -1,0 +1,7 @@
+{
+  "binary": "~/_dev/kimchi-dev/dist/bin/kimchi-code",
+  "models": [
+    "kimi-k2.5",
+    "minimax-m2.7"
+  ]
+}
