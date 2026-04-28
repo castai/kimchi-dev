@@ -10,8 +10,9 @@
  *      call. Mirrors AISI Inspect's `on_continue`.
  *
  *   2. Empty-turn nudge — some Kimi deployments return an empty response
- *      (no text, no tool calls) after receiving tool results. Detected
- *      inline in the `turn_end` handler.
+ *      (no text, no tool calls) after receiving tool results from a
+ *      tool-call-only turn. `EmptyTurnNudge` tracks whether the previous
+ *      turn was tool-call-only so the `turn_end` handler can decide.
  *
  * Both are delivered as custom messages with `display: false` so they
  * never appear in the conversation. Stale nudges (those the model has
@@ -22,6 +23,7 @@
  * inside the `if (!subagentMode)` guard.
  */
 
+import type { AssistantMessage } from "@mariozechner/pi-ai"
 import type { ContextEvent } from "@mariozechner/pi-coding-agent"
 
 /**
@@ -66,6 +68,32 @@ export class ContinuationNudge {
 		if (hasToolCalls || !hasText) return false
 		this.nudgedSinceLastUserInput = true
 		return true
+	}
+}
+
+/**
+ * Tracks whether the previous assistant turn was tool-call-only so the `turn_end` handler can send a followUp nudge only when the empty response follows a tool-result → LLM-call sequence. Models that never produce empty responses never see the nudge.
+ *
+ * Some model deployments (notably Kimi K2.x) return an empty response — no text, no tool calls — after receiving tool results from a tool-call-only turn. The agent loop stalls because there is nothing to execute or display.
+ */
+export class EmptyTurnNudge {
+	private previousTurnWasToolCallOnly = false
+
+	evaluateTurn(message: AssistantMessage): boolean {
+		const hasText = message.content.some((c) => c.type === "text" && c.text.trim().length > 0)
+		const hasToolCalls = message.content.some((c) => c.type === "toolCall")
+
+		if (!hasText && !hasToolCalls && this.previousTurnWasToolCallOnly) {
+			this.previousTurnWasToolCallOnly = false
+			return true
+		}
+
+		this.previousTurnWasToolCallOnly = hasToolCalls && !hasText
+		return false
+	}
+
+	resetForNewUserInput(): void {
+		this.previousTurnWasToolCallOnly = false
 	}
 }
 

@@ -33,6 +33,7 @@ import {
 	CONTINUATION_NUDGE_TEXT,
 	ContinuationNudge,
 	EMPTY_TURN_NUDGE_TEXT,
+	EmptyTurnNudge,
 	NUDGE_CUSTOM_TYPE,
 	stripStaleNudges,
 } from "./continuation-nudge.js"
@@ -153,10 +154,12 @@ export default function (skillPaths: string[]) {
 			// that one returns `{action: "handled"}` in interactive mode, which short-
 			// circuits the input-handler chain.
 			const continuationNudge = new ContinuationNudge()
+			const emptyTurnNudge = new EmptyTurnNudge()
 
 			pi.on("input", async (event) => {
 				if (event.source === "extension") return
 				continuationNudge.resetForNewUserInput()
+				emptyTurnNudge.resetForNewUserInput()
 			})
 
 			pi.on("tool_execution_start", async () => {
@@ -166,10 +169,7 @@ export default function (skillPaths: string[]) {
 			pi.on("turn_end", async (event) => {
 				if (event.message.role !== "assistant") return
 
-				const hasText = event.message.content.some((c) => c.type === "text" && c.text.trim().length > 0)
-				const hasToolCalls = event.message.content.some((c) => c.type === "toolCall")
-
-				if (!hasText && !hasToolCalls) {
+				if (emptyTurnNudge.evaluateTurn(event.message)) {
 					pi.sendMessage(
 						{ customType: NUDGE_CUSTOM_TYPE, content: EMPTY_TURN_NUDGE_TEXT, display: false },
 						{ deliverAs: "followUp" },
