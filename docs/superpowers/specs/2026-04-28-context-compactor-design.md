@@ -37,12 +37,15 @@ Skips subagents via `isSubagent()` guard. Subagent sessions are short (11–55 e
 ### Constants
 
 ```ts
-const PRUNE_THRESHOLD = 35_000  // input tokens — trigger prune
-const PROTECT_WINDOW  = 30      // messages — keep last N untouched
-const MIN_PRUNE_CHARS = 500     // chars — skip tiny tool outputs
+const PRUNE_THRESHOLD       = 35_000   // input tokens — trigger prune
+const PROTECT_WINDOW        = 30       // messages — max to protect (upper bound)
+const MAX_PROTECTED_CHARS   = 100_000  // chars ≈ 25K tokens — protected zone budget
+const MIN_PRUNE_CHARS       = 500      // chars — skip tiny tool outputs
 ```
 
-`PRUNE_THRESHOLD = 35_000` targets a 50K ceiling with a 15K buffer for whatever the current turn generates. `PROTECT_WINDOW = 30` protects approximately the last 5–6 turns (a turn = ~5 messages: user + assistant + 1–3 tool results).
+`PRUNE_THRESHOLD = 35_000` targets a 50K ceiling with a 15K buffer for the current turn. The 15K buffer is validated: bash outputs are capped at 50KB ≈ 12K tokens by the framework, so `35K + 12K = 47K < 50K` even in the worst one-turn lag case.
+
+`PROTECT_WINDOW` and `MAX_PROTECTED_CHARS` together define a **dynamic cutoff** — see the `context` handler below. A static message count is insufficient for an unattended harness: if recent turns contain large bash outputs, 30 messages could hold 70K+ tokens, making the protected zone itself the source of bloat.
 
 ### State
 
@@ -72,26 +75,45 @@ Using `lastInputTokens` (previous turn) rather than estimating from `event.messa
 pi.on("context", async (event) => {
     if (lastInputTokens < PRUNE_THRESHOLD) return
     const { messages } = event
-    if (messages.length <= PROTECT_WINDOW) return
 
-    const cutoff = messages.length - PROTECT_WINDOW
+    // Dynamic cutoff: walk backwards, protect up to PROTECT_WINDOW messages
+    // but stop early if accumulated tool-result chars exceed MAX_PROTECTED_CHARS.
+    // This prevents recent large bash outputs from making the protected zone itself
+    // the source of bloat in an unattended harness.
+    let cutoff = 0
+    let protectedChars = 0
+    for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages.length - i > PROTECT_WINDOW) { cutoff = i + 1; break }
+        const m = messages[i] as ToolResultMessage
+        if (m.role === "toolResult") {
+            for (const block of m.content) {
+                if (block.type === "text") protectedChars += block.text.length
+            }
+        }
+        if (protectedChars > MAX_PROTECTED_CHARS) { cutoff = i + 1; break }
+    }
+
+    if (cutoff === 0) return  // everything fits within protected budget — nothing to prune
 
     return {
         messages: messages.map((msg, i) => {
             if (i >= cutoff) return msg
-            if (msg.role !== "toolResult") return msg
+            // Cast required: AgentMessage is Message | CustomAgentMessages union;
+            // role check alone may not narrow to ToolResultMessage in TS.
+            const m = msg as ToolResultMessage
+            if (m.role !== "toolResult") return msg
 
             return {
-                ...msg,
-                content: msg.content.map(block => {
+                ...m,
+                content: m.content.map(block => {
                     if (block.type !== "text") return block
                     if (block.text.length < MIN_PRUNE_CHARS) return block
-                    if (msg.isError) {
-                        // keep last 2000 chars of error output — tail contains the actual crash reason
+                    if (m.isError) {
+                        // keep last 2000 chars — tail contains the actual crash reason
                         const tail = block.text.slice(-2000)
-                        return { ...block, text: `[compacted: ${msg.toolName} error, ${block.text.length} chars]\n...\n${tail}` }
+                        return { ...block, text: `[compacted: ${m.toolName} error, ${block.text.length} chars]\n...\n${tail}` }
                     }
-                    return { ...block, text: `[compacted: ${msg.toolName} output, ${block.text.length} chars]` }
+                    return { ...block, text: `[compacted: ${m.toolName} output, ${block.text.length} chars]` }
                 }),
             }
         }),
@@ -101,11 +123,12 @@ pi.on("context", async (event) => {
 
 Key design points:
 - Returns a **new array** — never mutates `event.messages` in-place
-- Maps over individual content blocks — preserves `ImageContent` and any future block types
-- Error tool results are **truncated, not skipped** — keeps last 2000 chars (the tail contains the actual crash reason). Full exemption would cause loop-of-errors sessions (e.g., crack-7z-hash's 155-turn loop) to grow unbounded.
-- Shallow-clones messages with `{ ...msg }` — preserves all fields (`toolCallId`, `toolName`, `details`, `isError`, `timestamp`)
-- No cooldown needed: prune self-regulates. After pruning, `message_end` reports lower tokens and the handler goes quiet until accumulation climbs back above 35K.
-- **PROTECT_WINDOW limitation:** If the last 30 messages themselves contain large bash outputs (e.g., 50KB × 6 recent turns ≈ 72K tokens), prune cannot help since those messages are in the protected zone. In that case reduce `PROTECT_WINDOW` to 10. The primary case (accumulated old history) is fully covered by 30.
+- **Dynamic cutoff** — walks backwards accumulating chars, stops at whichever bound is hit first (30 messages or 100K chars). Makes the compactor fully autonomous; no human tuning needed when recent turns are large.
+- `AgentMessage` cast to `ToolResultMessage` explicit — required because `AgentMessage = Message | CustomAgentMessages[...]` and `CustomAgentMessages` may not share the `role` discriminant, so TS won't narrow on `role` alone.
+- Maps over individual content blocks — preserves `ImageContent` and any future block types.
+- Error tool results are **truncated, not skipped** — keeps last 2000 chars (tail contains the actual crash reason). Full exemption would cause loop-of-errors sessions (crack-7z-hash: 155 turns) to grow unbounded.
+- Shallow-clones with `{ ...m }` — preserves all `ToolResultMessage` fields (`toolCallId`, `toolName`, `details`, `isError`, `timestamp`).
+- No cooldown needed: prune self-regulates via the `lastInputTokens` feedback loop.
 
 ### Registration: `src/cli.ts`
 
