@@ -35,7 +35,7 @@ import type { ContextEvent } from "@mariozechner/pi-coding-agent"
 export type OrchestratorMessages = ContextEvent["messages"]
 
 export const CONTINUATION_NUDGE_TEXT =
-	"You ended your turn without calling a tool. Did this task actually require a tool call? If not, end your turn now with NO output. If yes, call the appropriate tool immediately."
+	"You ended your turn without calling a tool. If this task is complete, respond with <done>. If a tool call is still needed, call it now."
 
 export const EMPTY_TURN_NUDGE_TEXT =
 	"If you have finished, please summarize the result for the user. Otherwise, continue with the next tool call."
