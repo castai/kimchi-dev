@@ -10,7 +10,7 @@ from harbor.agents.installed.base import (
 from pydantic import ValidationError
 
 from kimchi_agent.config import KimchiAgentConfig
-from kimchi_agent.messages import MessageEndEvent
+from kimchi_agent.messages import SessionEntry
 from kimchi_agent.release import BINARY_RELPATH, SHARE_RELPATH, GitHubClient
 
 if TYPE_CHECKING:
@@ -45,8 +45,6 @@ class KimchiCode(BaseInstalledAgent):
     no provider-specific keys are needed.
     """
 
-    _OUTPUT_FILENAME = "kimchi.txt"
-
     CLI_FLAGS: ClassVar[list[CliFlag]] = [
         CliFlag(
             "thinking",
@@ -56,7 +54,12 @@ class KimchiCode(BaseInstalledAgent):
         ),
         CliFlag("tools", cli="--tools", type="str"),
         CliFlag("yolo", cli="--yolo", type="bool"),
-        CliFlag("dangerously-skip-permissions", cli="--dangerously-skip-permissions", type="bool"),
+        CliFlag(
+            "dangerously-skip-permissions",
+            cli="--dangerously-skip-permissions",
+            type="bool",
+            default=True,
+        ),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -170,10 +173,9 @@ class KimchiCode(BaseInstalledAgent):
                 f"mkdir -p {CONTAINER_SESSIONS_DIR} && "
                 f"printf '%s' {shlex.quote(instruction)} | "
                 f"{shlex.quote(BINARY_PATH)} "
-                f"--print --mode json --session {CONTAINER_MAIN_SESSION} "
+                f"--print --session {CONTAINER_MAIN_SESSION} "
                 f"--model {shlex.quote(self.model_name)} "
                 f"{cli_flags}"
-                f"2>&1 | stdbuf -oL tee {CONTAINER_LOGS_DIR}/{self._OUTPUT_FILENAME}"
             ),
             env={"KIMCHI_API_KEY": self._config.api_key, "PI_PACKAGE_DIR": PI_PACKAGE_DIR},
         )
@@ -215,32 +217,41 @@ class KimchiCode(BaseInstalledAgent):
         return ",".join(merged)
 
     def populate_context_post_run(self, context: AgentContext) -> None:
-        output_file = self.logs_dir / self._OUTPUT_FILENAME
-        if not output_file.exists():
+        sessions_dir = self.logs_dir / "sessions"
+        if not sessions_dir.is_dir():
             return
 
         total_input_tokens = 0
         total_output_tokens = 0
         total_cache_read_tokens = 0
+        total_cache_write_tokens = 0
         total_cost = 0.0
 
-        for line in output_file.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                event = MessageEndEvent.model_validate_json(line)
-            except ValidationError:
-                continue
-            if event.type != "message_end" or event.message.role != "assistant":
-                continue
-            usage = event.message.usage
-            total_input_tokens += usage.input
-            total_output_tokens += usage.output
-            total_cache_read_tokens += usage.cache_read
-            total_cost += usage.cost.total
+        # Aggregate main.jsonl + subagent <timestamp>_<uuid>.jsonl siblings (see
+        # src/extensions/subagent.ts:prepareChildSessionFile). Subagent runs are
+        # separate sessions, so their usage isn't reflected in main.jsonl.
+        for session_file in sorted(sessions_dir.glob("*.jsonl")):
+            for line in session_file.read_text().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = SessionEntry.model_validate_json(line)
+                except ValidationError:
+                    continue
+                if entry.type != "message" or entry.message.role != "assistant":
+                    continue
+                usage = entry.message.usage
+                total_input_tokens += usage.input
+                total_output_tokens += usage.output
+                total_cache_read_tokens += usage.cache_read
+                total_cache_write_tokens += usage.cache_write
+                total_cost += usage.cost.total
 
-        context.n_input_tokens = total_input_tokens + total_cache_read_tokens
+        # pi-ai treats input, cacheRead, cacheWrite as disjoint summing to totalTokens
+        # (see node_modules/.../pi-ai/dist/providers/anthropic.js). Sum all three for
+        # the wire-level prompt total.
+        context.n_input_tokens = total_input_tokens + total_cache_read_tokens + total_cache_write_tokens
         context.n_output_tokens = total_output_tokens
         context.n_cache_tokens = total_cache_read_tokens
         context.cost_usd = total_cost if total_cost > 0 else None
