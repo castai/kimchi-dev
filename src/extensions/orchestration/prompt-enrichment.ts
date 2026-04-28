@@ -24,7 +24,7 @@ import { execSync } from "node:child_process"
 import { existsSync } from "node:fs"
 import { homedir, platform, userInfo } from "node:os"
 import { isAbsolute, join, normalize, resolve } from "node:path"
-import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
+import type { AssistantMessage, ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
 import { ANSI, fg } from "../../ansi.js"
 import { getAvailableModels } from "../../startup-context.js"
@@ -164,6 +164,17 @@ export default function (skillPaths: string[]) {
 
 			pi.on("tool_execution_start", async () => {
 				continuationNudge.recordToolCall()
+			})
+
+			pi.on("message_update", (event) => {
+				if (!continuationNudge.isNudgeResponsePending()) return
+				const ame = event.assistantMessageEvent
+				if (ame.type !== "text_delta") return
+				const message = event.message as AssistantMessage
+				const content = message.content[ame.contentIndex]
+				if (content?.type === "text") {
+					content.text = ""
+				}
 			})
 
 			pi.on("turn_end", async (event) => {

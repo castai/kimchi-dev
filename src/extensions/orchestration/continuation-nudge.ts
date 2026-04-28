@@ -35,7 +35,7 @@ import type { ContextEvent } from "@mariozechner/pi-coding-agent"
 export type OrchestratorMessages = ContextEvent["messages"]
 
 export const CONTINUATION_NUDGE_TEXT =
-	"You ended your turn without calling a tool. If the task is complete, reply with a brief summary. Otherwise, call the appropriate tool now — for any delegated pipeline step, that means invoking the `subagent` tool immediately."
+	"You ended your turn without calling a tool. Did this task actually require a tool call? If not, end your turn now with NO output. If yes, call the appropriate tool immediately."
 
 export const EMPTY_TURN_NUDGE_TEXT =
 	"If you have finished, please summarize the result for the user. Otherwise, continue with the next tool call."
@@ -50,14 +50,21 @@ export const EMPTY_TURN_NUDGE_TEXT =
 export class ContinuationNudge {
 	private toolsCalledSinceLastUserInput = false
 	private nudgedSinceLastUserInput = false
+	private nudgeResponsePending = false
 
 	resetForNewUserInput(): void {
 		this.toolsCalledSinceLastUserInput = false
 		this.nudgedSinceLastUserInput = false
+		this.nudgeResponsePending = false
 	}
 
 	recordToolCall(): void {
 		this.toolsCalledSinceLastUserInput = true
+		this.nudgeResponsePending = false
+	}
+
+	isNudgeResponsePending(): boolean {
+		return this.nudgeResponsePending
 	}
 
 	evaluateTurn(message: AssistantMessage): boolean {
@@ -67,6 +74,7 @@ export class ContinuationNudge {
 		const hasText = message.content.some((c) => c.type === "text" && c.text.trim().length > 0)
 		if (hasToolCalls || !hasText) return false
 		this.nudgedSinceLastUserInput = true
+		this.nudgeResponsePending = true
 		return true
 	}
 }

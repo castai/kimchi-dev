@@ -114,6 +114,32 @@ describe("ContinuationNudge.evaluateTurn", () => {
 		expect(guard.evaluateTurn(textOnlyMessage)).toBe(true)
 	})
 
+	it("sets nudge response pending after nudging", () => {
+		const guard = new ContinuationNudge()
+		guard.resetForNewUserInput()
+		expect(guard.isNudgeResponsePending()).toBe(false)
+		guard.evaluateTurn(textOnlyMessage)
+		expect(guard.isNudgeResponsePending()).toBe(true)
+	})
+
+	it("clears nudge response pending when a tool call is recorded", () => {
+		const guard = new ContinuationNudge()
+		guard.resetForNewUserInput()
+		guard.evaluateTurn(textOnlyMessage)
+		expect(guard.isNudgeResponsePending()).toBe(true)
+		guard.recordToolCall()
+		expect(guard.isNudgeResponsePending()).toBe(false)
+	})
+
+	it("clears nudge response pending on reset", () => {
+		const guard = new ContinuationNudge()
+		guard.resetForNewUserInput()
+		guard.evaluateTurn(textOnlyMessage)
+		expect(guard.isNudgeResponsePending()).toBe(true)
+		guard.resetForNewUserInput()
+		expect(guard.isNudgeResponsePending()).toBe(false)
+	})
+
 	it("ignores thinking-only turns (no text, no tool call)", () => {
 		const guard = new ContinuationNudge()
 		guard.resetForNewUserInput()
