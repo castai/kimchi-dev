@@ -7,7 +7,7 @@ import { ScriptFooter, StatsFooter, buildScriptPayload, readStatusLineCommand } 
 import { LogoHeader } from "../components/logo.js"
 import { SplashHeader } from "../components/splash-header.js"
 import { collapseAll, expandNext, resetState } from "../expand-state.js"
-import { isBareExitAlias, quitApplication } from "./exit-utils.js"
+import { isBareExitAlias } from "./exit-utils.js"
 
 const HORIZONTAL_PADDING = 2
 
@@ -151,7 +151,7 @@ export default function uiExtension(pi: ExtensionAPI) {
 
 	pi.on("input", (event, ctx) => {
 		if (isBareExitAlias(event.text)) {
-			quitApplication()
+			ctx.shutdown()
 		}
 
 		if (!splashActive) return
@@ -187,8 +187,8 @@ export default function uiExtension(pi: ExtensionAPI) {
 
 	pi.registerCommand("exit", {
 		description: "Exit the application (alias for /quit)",
-		handler: async () => {
-			quitApplication()
+		handler: async (_args, ctx) => {
+			ctx.shutdown()
 		},
 	})
 }
