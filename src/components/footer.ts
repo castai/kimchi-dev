@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs"
+import { homedir } from "node:os"
+import { join, resolve } from "node:path"
+import type { AssistantMessage } from "@mariozechner/pi-ai"
 import type { ExtensionContext, ReadonlyFooterDataProvider, Theme } from "@mariozechner/pi-coding-agent"
 import type { Component } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
@@ -10,6 +14,94 @@ import { getActiveTags, getCurrentPhase, parseTag } from "../extensions/tags.js"
 interface FooterSegment {
 	text: string
 	width: number
+}
+
+const HARNESS_SETTINGS_PATH = join(homedir(), ".config", "kimchi", "harness", "settings.json")
+
+export function readStatusLineCommand(): string | null {
+	try {
+		const raw = readFileSync(HARNESS_SETTINGS_PATH, "utf-8")
+		const parsed = JSON.parse(raw)
+		const cmd = parsed?.statusLine?.command
+		if (typeof cmd !== "string" || cmd.length === 0) return null
+		if (cmd.startsWith("~/")) return resolve(homedir(), cmd.slice(2))
+		return cmd
+	} catch {
+		return null
+	}
+}
+
+export function buildScriptPayload(
+	ctx: ExtensionContext,
+	status: "idle" | "generating",
+	sessionStartMs: number,
+	linesAdded: number,
+	linesRemoved: number,
+) {
+	const usage = ctx.getContextUsage()
+
+	let costUsd = 0
+	let totalInput = 0
+	let totalOutput = 0
+	let lastTurn: { input: number; output: number } | null = null
+	for (const entry of ctx.sessionManager.getBranch()) {
+		if (entry.type === "message" && entry.message.role === "assistant") {
+			const u = (entry.message as AssistantMessage).usage
+			costUsd += u.cost.total
+			totalInput += u.input
+			totalOutput += u.output
+			lastTurn = { input: u.input, output: u.output }
+		}
+	}
+
+	return {
+		// kimchi fields
+		model: { id: ctx.model?.id ?? null, name: ctx.model?.name ?? null },
+		context: {
+			used: usage?.tokens ?? null,
+			limit: usage?.contextWindow ?? null,
+			percent: usage?.percent ?? null,
+		},
+		workspace: { cwd: ctx.cwd, current_dir: ctx.cwd },
+		status,
+		session: {
+			cost_usd: costUsd,
+			last_turn: lastTurn,
+			id: ctx.sessionManager.getSessionId(),
+			name: ctx.sessionManager.getSessionName() ?? null,
+			transcript_path: ctx.sessionManager.getSessionFile(),
+		},
+		// claude code compat fields
+		cost: {
+			total_cost_usd: costUsd,
+			total_duration_ms: Date.now() - sessionStartMs,
+			total_lines_added: linesAdded,
+			total_lines_removed: linesRemoved,
+		},
+		context_window: {
+			context_window_size: usage?.contextWindow ?? null,
+			used_percentage: usage?.percent ?? null,
+			remaining_percentage: usage?.percent != null ? 100 - usage.percent : null,
+			current_usage: usage?.tokens != null ? { input_tokens: usage.tokens } : null,
+			total_input_tokens: totalInput,
+			total_output_tokens: totalOutput,
+		},
+		exceeds_200k_tokens: (usage?.tokens ?? 0) > 200_000,
+	}
+}
+
+export class ScriptFooter implements Component {
+	private cachedLines: string[] = []
+
+	setLines(lines: string[]): void {
+		this.cachedLines = lines
+	}
+
+	invalidate(): void {}
+
+	render(width: number): string[] {
+		return this.cachedLines.map((line) => truncateToWidth(line, width))
+	}
 }
 
 const BAR_WIDTH = 16

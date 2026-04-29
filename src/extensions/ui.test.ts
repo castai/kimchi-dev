@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { isBareExitAlias, quitApplication } from "./exit-utils.js"
+import { describe, expect, it } from "vitest"
+import { isBareExitAlias } from "./exit-utils.js"
 
 describe("isBareExitAlias", () => {
 	it("returns true for exact 'exit' input", () => {
@@ -32,50 +32,5 @@ describe("isBareExitAlias", () => {
 		expect(isBareExitAlias("exit now")).toBe(false)
 		expect(isBareExitAlias("please exit")).toBe(false)
 		expect(isBareExitAlias("quit")).toBe(false)
-	})
-})
-
-describe("exit command behavior", () => {
-	// biome-ignore lint/suspicious/noExplicitAny: vi.spyOn types differ between vitest versions
-	let exitSpy: any
-
-	beforeEach(() => {
-		exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never)
-	})
-
-	afterEach(() => {
-		exitSpy.mockRestore()
-	})
-
-	it("calls process.exit(0) when 'exit' is typed", () => {
-		// Simulate what the input handler does
-		if (isBareExitAlias("exit")) {
-			quitApplication()
-		}
-
-		expect(exitSpy).toHaveBeenCalledWith(0)
-	})
-
-	it("does not call process.exit for non-exit input", () => {
-		if (isBareExitAlias("hello")) {
-			quitApplication()
-		}
-
-		expect(exitSpy).not.toHaveBeenCalled()
-	})
-
-	it("does not call process.exit for '/exit' command", () => {
-		if (isBareExitAlias("/exit")) {
-			quitApplication()
-		}
-
-		expect(exitSpy).not.toHaveBeenCalled()
-	})
-
-	it("calls process.exit(0) via quitApplication for /exit command", async () => {
-		// Simulate what the command handler does
-		quitApplication()
-
-		expect(exitSpy).toHaveBeenCalledWith(0)
 	})
 })

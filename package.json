@@ -21,7 +21,9 @@
 		"check": "pnpm run lint && pnpm run typecheck",
 		"test": "vitest run --dir src",
 		"test:smoke": "vitest run --config tests/smoke/vitest.config.ts",
-		"verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:smoke"
+		"prepare": "husky",
+		"verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:smoke",
+		"prepare": "husky"
 	},
 	"piConfig": {
 		"name": "kimchi",
@@ -52,6 +54,7 @@
 		"@types/node": "^22.15.2",
 		"@types/shell-quote": "^1.7.5",
 		"@types/turndown": "^5.0.5",
+		"husky": "^9.1.7",
 		"node-pty": "^1.1.0",
 		"playwright": "^1.52.0",
 		"tsx": "^4.21.0",

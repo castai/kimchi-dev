@@ -50,7 +50,7 @@ export interface KimchiConfig {
  * Read the Cast AI API key from the kimchi CLI config file.
  * Returns undefined if the file doesn't exist or the field is missing.
  */
-function readApiKeyFromConfigFile(configPath: string): string | undefined {
+export function readApiKeyFromConfigFile(configPath: string = KIMCHI_CONFIG_PATH): string | undefined {
 	try {
 		const raw = readFileSync(configPath, "utf-8")
 		const parsed = JSON.parse(raw)

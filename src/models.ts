@@ -60,7 +60,7 @@ interface PiModelConfig {
 }
 
 function metadataToModel(m: ModelMetadata): PiModelConfig {
-	// TODO: our LiteLLM gateway does not support `thinking.type.enabled` for Antrhopic >Opus 4.6 models
+	// TODO: our LiteLLM gateway does not support `thinking.type.enabled` for Anthropic >Opus 4.6 models
 	// Therefore, we disable it for now. Revisit, once we upgrade our LiteLLM version.
 	const compat = m.provider === "anthropic" ? { supportsReasoningEffort: false } : undefined
 	return {

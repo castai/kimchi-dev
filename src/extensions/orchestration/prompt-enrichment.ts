@@ -24,7 +24,7 @@ import { execSync } from "node:child_process"
 import { existsSync } from "node:fs"
 import { homedir, platform, userInfo } from "node:os"
 import { isAbsolute, join, normalize, resolve } from "node:path"
-import type { ImageContent, TextContent } from "@mariozechner/pi-ai"
+import type { AssistantMessage, ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
 import { ANSI, fg } from "../../ansi.js"
 import { getAvailableModels } from "../../startup-context.js"
@@ -32,8 +32,9 @@ import { getGitBranch } from "../../utils.js"
 import {
 	CONTINUATION_NUDGE_TEXT,
 	ContinuationNudge,
+	EMPTY_TURN_NUDGE_TEXT,
+	EmptyTurnNudge,
 	NUDGE_CUSTOM_TYPE,
-	buildEmptyTurnNudgedMessages,
 	stripStaleNudges,
 } from "./continuation-nudge.js"
 import { ModelRegistry } from "./model-registry/index.js"
@@ -153,20 +154,48 @@ export default function (skillPaths: string[]) {
 			// that one returns `{action: "handled"}` in interactive mode, which short-
 			// circuits the input-handler chain.
 			const continuationNudge = new ContinuationNudge()
+			const emptyTurnNudge = new EmptyTurnNudge()
 
 			pi.on("input", async (event) => {
 				if (event.source === "extension") return
 				continuationNudge.resetForNewUserInput()
+				emptyTurnNudge.resetForNewUserInput()
 			})
 
 			pi.on("tool_execution_start", async () => {
 				continuationNudge.recordToolCall()
 			})
 
+			pi.on("message_update", (event) => {
+				if (!continuationNudge.isNudgeResponsePending()) return
+				const ame = event.assistantMessageEvent
+				if (ame.type !== "text_delta") return
+				const message = event.message as AssistantMessage
+				const content = message.content[ame.contentIndex]
+				if (content?.type === "text") {
+					continuationNudge.accumulateResponse(content.text)
+					content.text = ""
+				}
+			})
+
 			pi.on("turn_end", async (event) => {
 				if (event.message.role !== "assistant") return
-				const { shouldNudge } = continuationNudge.evaluateTurn(event.message)
-				if (!shouldNudge) return
+
+				if (continuationNudge.isNudgeResponsePending()) {
+					if (continuationNudge.isDoneSignalReceived()) {
+						return
+					}
+				}
+
+				if (emptyTurnNudge.evaluateTurn(event.message)) {
+					pi.sendMessage(
+						{ customType: NUDGE_CUSTOM_TYPE, content: EMPTY_TURN_NUDGE_TEXT, display: false },
+						{ deliverAs: "followUp" },
+					)
+					return
+				}
+
+				if (!continuationNudge.evaluateTurn(event.message)) return
 				pi.sendMessage(
 					{ customType: NUDGE_CUSTOM_TYPE, content: CONTINUATION_NUDGE_TEXT, display: false },
 					{ deliverAs: "followUp" },
@@ -214,15 +243,8 @@ export default function (skillPaths: string[]) {
 				return { action: "handled" as const }
 			})
 
-			// Pre-LLM-call complement of the turn_end nudge above: the model returned only
-			// tool calls with no text, tool results are queued, and it is about to be
-			// called again. Some Kimi deployments return an empty response on this specific
-			// follow-up; a custom-role nudge injected transiently into the context prevents it
-			// without polluting the session history.
 			pi.on("context", async (event) => {
 				const cleaned = stripStaleNudges(event.messages)
-				const nudged = buildEmptyTurnNudgedMessages(cleaned)
-				if (nudged) return { messages: nudged }
 				if (cleaned !== event.messages) return { messages: cleaned }
 			})
 		}
