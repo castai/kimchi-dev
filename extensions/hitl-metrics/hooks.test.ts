@@ -37,12 +37,12 @@ function createMockPi(): ExtensionAPI & {
 	return {
 		_handlers: handlers,
 		_commands: commands,
-		on: (event, handler) => {
+		on: (event: string, handler: (event: unknown, ctx?: ExtensionContext) => Promise<void>) => {
 			if (!handlers.has(event)) handlers.set(event, [])
-			handlers.get(event)!.push(handler as never)
+			handlers.get(event)!.push(handler)
 		},
-		registerCommand: (name, config) => commands.set(name, config),
-		_trigger: async (event, data, ctx) => {
+		registerCommand: (name: string, config: { description: string; handler: (args: string, ctx: ExtensionContext) => Promise<void> }) => commands.set(name, config),
+		_trigger: async (event: string, data?: unknown, ctx?: ExtensionContext) => {
 			const h = handlers.get(event) || []
 			for (const fn of h) await fn(data, ctx)
 		},
