@@ -94,7 +94,7 @@ export class LoopGuard {
 	}
 
 	/**
-	 * Predicts whether running `call` next would extend an active loop. Only
+	 * Blocks `call` if executing it would extend an active loop. Only
 	 * meaningful after a warning has been issued. Detectors need an
 	 * isError flag and output fingerprint for the hypothetical record; we borrow
 	 * them from the most recent historical record with matching tool name +
@@ -102,10 +102,10 @@ export class LoopGuard {
 	 * If no such record exists, no detector can fire on a tail ending in
 	 * this hypo (any matching n-gram or consecutive run would require the
 	 * hypo's name + args to appear earlier), so we short-circuit. Sets
-	 * `triggered` when prediction fires so subsequent calls short-circuit
+	 * `triggered` when returning true so subsequent calls short-circuit
 	 * through `isTriggered`.
 	 */
-	wouldLoop(call: { toolName: string; toolArgs: string }): boolean {
+	blockIfLoop(call: { toolName: string; toolArgs: string }): boolean {
 		if (!this.warned || this.history.length === 0) return false
 		let proxy: ToolHistoryRecord | undefined
 		for (let i = this.history.length - 1; i >= 0; i--) {
@@ -272,7 +272,7 @@ export default function loopGuardExtension(pi: ExtensionAPI) {
 			return { block: true, reason: TERMINATION_MESSAGE }
 		}
 		const call = { toolName: event.toolName, toolArgs: stableStringify(event.input) }
-		if (guard.wouldLoop(call)) {
+		if (guard.blockIfLoop(call)) {
 			return { block: true, reason: TERMINATION_MESSAGE }
 		}
 	})
