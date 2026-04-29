@@ -7,6 +7,7 @@ export type ApprovalOutcome =
 	| { kind: "allow-remember"; rule: Rule }
 	| { kind: "deny-with-feedback"; feedback: string }
 	| { kind: "deny" }
+	| { kind: "aborted" }
 
 interface PromptOptions {
 	toolName: string
@@ -14,6 +15,8 @@ interface PromptOptions {
 	ctx: ExtensionContext
 	/** Extra context line shown above the choices (e.g. classifier reason). */
 	subtitle?: string
+	/** Signal to programmatically dismiss the prompt (e.g. when permission mode changes). */
+	signal?: AbortSignal
 }
 
 export async function promptForApproval(opts: PromptOptions): Promise<ApprovalOutcome> {
@@ -30,7 +33,11 @@ export async function promptForApproval(opts: PromptOptions): Promise<ApprovalOu
 	const yesRemember = `Yes — don't ask again for ${scope.label} this session`
 	const noWithFeedback = "No — tell the assistant what to do differently"
 
-	const choice = await ctx.ui.select(lines.join("\n"), [yesOnce, yesRemember, noWithFeedback])
+	const choice = await ctx.ui.select(lines.join("\n"), [yesOnce, yesRemember, noWithFeedback], {
+		signal: opts.signal,
+	})
+
+	if (choice === undefined && opts.signal?.aborted) return { kind: "aborted" }
 
 	if (choice === yesOnce) return { kind: "allow-once" }
 
