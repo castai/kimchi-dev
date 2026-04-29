@@ -5,7 +5,7 @@ import type { AssistantMessage } from "@mariozechner/pi-ai"
 import type { ExtensionContext, ReadonlyFooterDataProvider, Theme } from "@mariozechner/pi-coding-agent"
 import type { Component } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
-import { RST_FG, TEAL_FG } from "../ansi.js"
+import { ANSI, RST_FG, TEAL_FG } from "../ansi.js"
 import { formatCount } from "../extensions/format.js"
 import { getMultiModelEnabled } from "../extensions/orchestration/prompt-enrichment.js"
 import { getActiveSubagentCount } from "../extensions/subagent.js"
@@ -110,6 +110,14 @@ function teal(text: string): string {
 	return `${TEAL_FG}${text}${RST_FG}`
 }
 
+// Hardcoded dim grey, decoupled from the theme's `dim` token. Used for the
+// multi-model segment so its labels stay subdued without forcing every other
+// `theme.fg("dim", ...)` callsite (logo version, tool collapse hints,
+// onboarding text, etc.) to take an explicit grey under kimchi-minimal.
+function multiModelDim(text: string): string {
+	return `\x1b[${ANSI.dim}m${text}${RST_FG}`
+}
+
 function seg(text: string): FooterSegment {
 	return { text, width: visibleWidth(text) }
 }
@@ -188,9 +196,9 @@ export class StatsFooter implements Component {
 
 	private multiModelSegment(): FooterSegment {
 		const enabled = getMultiModelEnabled()
-		const label = enabled ? teal("on") : this.dim("off")
+		const label = enabled ? teal("on") : multiModelDim("off")
 		const shortcut = process.platform === "darwin" ? "option+tab" : "alt+tab"
-		return seg(`${this.dim("multi-model:")} ${label} ${this.dim(`→ ${shortcut}`)}`)
+		return seg(`${multiModelDim("multi-model:")} ${label} ${multiModelDim(`→ ${shortcut}`)}`)
 	}
 
 	private subagentSegment(): FooterSegment | null {
