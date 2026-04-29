@@ -7,7 +7,9 @@
 //   node scripts/build-binary.js --target linux-x64     # cross-compile for Linux x86-64
 
 import { execSync } from "node:child_process"
+import { existsSync, symlinkSync, unlinkSync } from "node:fs"
 import { platform } from "node:os"
+import { join } from "node:path"
 
 const TARGET_MAP = {
 	"linux-arm64": "bun-linux-arm64",
@@ -50,3 +52,10 @@ if (!isCrossCompile && platform() === "darwin") {
 }
 
 run("copy resources", "node scripts/copy-resources.js")
+// Create symlink for kimchi
+const kimchiPath = join("dist", "bin", "kimchi")
+if (existsSync(kimchiPath)) {
+	unlinkSync(kimchiPath)
+}
+// Create symlink with relative target (same directory)
+symlinkSync("kimchi-code", kimchiPath)

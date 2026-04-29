@@ -3,7 +3,7 @@
 //
 // Usage: node scripts/install-local.js
 
-import { cpSync, existsSync, mkdirSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, symlinkSync, unlinkSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -27,8 +27,16 @@ const shareDest = join(prefix, "share", "kimchi")
 
 mkdirSync(binDest, { recursive: true })
 cpSync(distBin, join(binDest, "kimchi-code"))
+// Create symlink for kimchi
+const kimchiPath = join(binDest, "kimchi")
+if (existsSync(kimchiPath)) {
+	unlinkSync(kimchiPath)
+}
+// Create symlink with relative target (same directory)
+symlinkSync("kimchi-code", kimchiPath)
 
 cpSync(distShare, shareDest, { recursive: true })
 
 console.log(`Installed binary  → ${join(binDest, "kimchi-code")}`)
+console.log(`Installed symlink → ${join(binDest, "kimchi")}`)
 console.log(`Installed share   → ${shareDest}`)

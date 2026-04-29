@@ -1,78 +1,78 @@
 {
-	"name": "@kimchi-dev/cli",
-	"version": "0.1.0",
-	"description": "kimchi-code — a coding agent CLI powered by Cast AI",
-	"type": "module",
-	"license": "MIT",
-	"bin": {
-		"kimchi-code": "src/entry.ts"
-	},
-	"scripts": {
-		"clean": "rm -rf dist",
-		"build": "tsc --noEmit && node scripts/copy-resources.js --dev",
-		"build:binary": "node scripts/build-binary.js",
-		"install:local": "node scripts/install-local.js",
-		"build:binary-linux-arm64": "node scripts/build-binary.js --target linux-arm64",
-		"build:binary-linux-x64": "node scripts/build-binary.js --target linux-x64",
-		"dev": "bun run --preload ./src/set-package-dir.ts src/entry.ts",
-		"lint": "biome check src/ scripts/",
-		"lint:fix": "biome check --write src/ scripts/",
-		"typecheck": "tsc --noEmit",
-		"check": "pnpm run lint && pnpm run typecheck",
-		"test": "vitest run --dir src",
-		"test:smoke": "vitest run --config tests/smoke/vitest.config.ts",
-		"prepare": "husky",
-		"verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:smoke",
-		"prepare": "husky"
-	},
-	"piConfig": {
-		"name": "kimchi",
-		"configDir": ".config/kimchi/harness"
-	},
-	"dependencies": {
-		"@agentclientprotocol/sdk": "^0.19.0",
-		"@clack/prompts": "^1.2.0",
-		"@mariozechner/pi-coding-agent": "^0.67.68",
-		"@mariozechner/pi-tui": "^0.67.68",
-		"@modelcontextprotocol/ext-apps": "^1.2.2",
-		"@modelcontextprotocol/sdk": "^1.25.1",
-		"micromatch": "^4.0.8",
-		"open": "^10.2.0",
-		"shell-quote": "^1.8.3",
-		"undici": "^8.0.2",
-		"uuid": "^14.0.0",
-		"zod": "^4.0.0"
-	},
-	"peerDependencies": {
-		"@sinclair/typebox": "*"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "^1.9.4",
-		"@mariozechner/pi-ai": "^0.67.68",
-		"@mixmark-io/domino": "^2.2.0",
-		"@types/micromatch": "^4.0.10",
-		"@types/node": "^22.15.2",
-		"@types/shell-quote": "^1.7.5",
-		"@types/turndown": "^5.0.5",
-		"husky": "^9.1.7",
-		"node-pty": "^1.1.0",
-		"playwright": "^1.52.0",
-		"tsx": "^4.21.0",
-		"turndown": "^7.2.0",
-		"typescript": "^5.7.3",
-		"vitest": "^3.1.1"
-	},
-	"engines": {
-		"node": ">=22.0.0"
-	},
-	"packageManager": "pnpm@10.8.1",
-	"pnpm": {
-		"onlyBuiltDependencies": [
-			"@biomejs/biome",
-			"esbuild",
-			"koffi",
-			"node-pty",
-			"protobufjs"
-		]
-	}
+  "name": "@kimchi-dev/cli",
+  "version": "0.1.0",
+  "description": "kimchi-code \u2014 a coding agent CLI powered by Cast AI",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "kimchi-code": "src/entry.ts",
+    "kimchi": "src/entry.ts"
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "tsc --noEmit && node scripts/copy-resources.js --dev",
+    "build:binary": "node scripts/build-binary.js",
+    "install:local": "node scripts/install-local.js",
+    "build:binary-linux-arm64": "node scripts/build-binary.js --target linux-arm64",
+    "build:binary-linux-x64": "node scripts/build-binary.js --target linux-x64",
+    "dev": "bun run --preload ./src/set-package-dir.ts src/entry.ts",
+    "lint": "biome check src/ scripts/",
+    "lint:fix": "biome check --write src/ scripts/",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm run lint && pnpm run typecheck",
+    "test": "vitest run --dir src",
+    "test:smoke": "vitest run --config tests/smoke/vitest.config.ts",
+    "prepare": "husky",
+    "verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:smoke"
+  },
+  "piConfig": {
+    "name": "kimchi",
+    "configDir": ".config/kimchi/harness"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^0.19.0",
+    "@clack/prompts": "^1.2.0",
+    "@mariozechner/pi-coding-agent": "^0.67.68",
+    "@mariozechner/pi-tui": "^0.67.68",
+    "@modelcontextprotocol/ext-apps": "^1.2.2",
+    "@modelcontextprotocol/sdk": "^1.25.1",
+    "micromatch": "^4.0.8",
+    "open": "^10.2.0",
+    "shell-quote": "^1.8.3",
+    "undici": "^8.0.2",
+    "uuid": "^14.0.0",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@sinclair/typebox": "*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@mariozechner/pi-ai": "^0.67.68",
+    "@mixmark-io/domino": "^2.2.0",
+    "@types/micromatch": "^4.0.10",
+    "@types/node": "^22.15.2",
+    "@types/shell-quote": "^1.7.5",
+    "@types/turndown": "^5.0.5",
+    "husky": "^9.1.7",
+    "node-pty": "^1.1.0",
+    "playwright": "^1.52.0",
+    "tsx": "^4.21.0",
+    "turndown": "^7.2.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.1.1"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@10.8.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "esbuild",
+      "koffi",
+      "node-pty",
+      "protobufjs"
+    ]
+  }
 }
