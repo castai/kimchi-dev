@@ -22,64 +22,23 @@ import {
 	detectColorMode,
 	estimateTerminalBackground,
 	getProbedBackground,
+	hexToBgAnsi,
 	tintBackground,
 } from "../terminal-bg-probe.js"
 
+// In truecolor mode the deltas produce visually distinct steps. In 256-color
+// mode (Terminal.app, screen) the 24-step gray ramp (step size 10) limits
+// how many distinct levels are possible — very dark bgs may collapse pending
+// and success onto the same ramp entry. The delta difference (6 vs 12) still
+// helps on medium-dark bgs and guarantees distinction in truecolor.
 const SURFACE_TINTS: ReadonlyArray<[token: string, delta: number, redBias: number]> = [
 	["toolPendingBg", 6, 0],
-	["toolSuccessBg", 6, 0],
+	["toolSuccessBg", 12, 0],
 	["toolErrorBg", 14, 10],
 	["userMessageBg", 14, 0],
 	["customMessageBg", 22, 0],
 	["selectedBg", 30, 0],
 ]
-
-const CUBE = [0, 95, 135, 175, 215, 255]
-const GRAY = Array.from({ length: 24 }, (_, i) => 8 + i * 10)
-
-function findClosest(value: number, candidates: readonly number[]): number {
-	let minDist = Number.POSITIVE_INFINITY
-	let minIdx = 0
-	for (let i = 0; i < candidates.length; i++) {
-		const d = Math.abs(value - candidates[i])
-		if (d < minDist) {
-			minDist = d
-			minIdx = i
-		}
-	}
-	return minIdx
-}
-
-function colorDistance(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
-	const dr = r1 - r2
-	const dg = g1 - g2
-	const db = b1 - b2
-	return dr * dr * 0.299 + dg * dg * 0.587 + db * db * 0.114
-}
-
-function rgbTo256(r: number, g: number, b: number): number {
-	const ri = findClosest(r, CUBE)
-	const gi = findClosest(g, CUBE)
-	const bi = findClosest(b, CUBE)
-	const cubeIdx = 16 + 36 * ri + 6 * gi + bi
-	const cubeDist = colorDistance(r, g, b, CUBE[ri], CUBE[gi], CUBE[bi])
-	const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
-	const gi2 = findClosest(gray, GRAY)
-	const grayValue = GRAY[gi2]
-	const grayIdx = 232 + gi2
-	const grayDist = colorDistance(r, g, b, grayValue, grayValue, grayValue)
-	const spread = Math.max(r, g, b) - Math.min(r, g, b)
-	if (spread < 10 && grayDist < cubeDist) return grayIdx
-	return cubeIdx
-}
-
-function hexToBgAnsi(hex: string, mode: "truecolor" | "256color"): string {
-	const r = Number.parseInt(hex.slice(1, 3), 16)
-	const g = Number.parseInt(hex.slice(3, 5), 16)
-	const b = Number.parseInt(hex.slice(5, 7), 16)
-	if (mode === "truecolor") return `\x1b[48;2;${r};${g};${b}m`
-	return `\x1b[48;5;${rgbTo256(r, g, b)}m`
-}
 
 export default function kimchiMinimalTintsExtension(pi: ExtensionAPI) {
 	const applyTints = (ctx: ExtensionContext) => {
@@ -92,7 +51,7 @@ export default function kimchiMinimalTintsExtension(pi: ExtensionAPI) {
 		const themeWithBg = ctx.ui.theme as unknown as { bgColors?: Map<string, string> }
 		if (!themeWithBg?.bgColors) return
 		for (const [token, delta, redBias] of SURFACE_TINTS) {
-			const hex = tintBackground(baseBg, delta, redBias)
+			const hex = tintBackground(baseBg, delta, redBias, mode)
 			themeWithBg.bgColors.set(token, hexToBgAnsi(hex, mode))
 		}
 	}

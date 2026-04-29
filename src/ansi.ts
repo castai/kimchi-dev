@@ -1,3 +1,5 @@
+import type { Theme } from "@mariozechner/pi-coding-agent"
+
 export const TRUECOLOR = process.env.COLORTERM === "truecolor" || process.env.COLORTERM === "24bit"
 export const RST = "\x1b[0m"
 
@@ -24,6 +26,14 @@ export const RST_FG = "\x1b[39m"
 
 export function semanticFg(c: "success" | "warning" | "error"): string {
 	return c === "success" ? SUCCESS_FG : c === "warning" ? WARNING_FG : ERROR_FG
+}
+
+// Returns the theme's ANSI open-sequence for `c`, or the hardcoded kimchi
+// palette value when the theme has an empty token (e.g. kimchi-minimal).
+// Pi stores `fgAnsi("") = RST_FG` for empty tokens, so that's our sentinel.
+export function resolvedSemanticFg(theme: Theme, c: "success" | "warning" | "error"): string {
+	const ansi = theme.getFgAnsi(c)
+	return ansi === RST_FG ? semanticFg(c) : ansi
 }
 
 export const ANSI = {

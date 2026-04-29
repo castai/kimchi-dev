@@ -65,5 +65,9 @@ export function onThemeChange(listener: ThemeChangeListener): () => void {
 	listeners.add(listener)
 	return () => {
 		listeners.delete(listener)
+		if (listeners.size === 0 && watcher) {
+			watcher.close()
+			watcher = undefined
+		}
 	}
 }

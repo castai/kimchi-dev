@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext, ToolCallEvent } from "@mariozechner/pi-coding-agent"
-import { RST_FG, semanticFg } from "../../ansi.js"
+import { RST_FG, resolvedSemanticFg } from "../../ansi.js"
 import { classifyToolCall } from "./classifier.js"
 import { registerCommands } from "./commands.js"
 import { type LoadedConfig, loadConfig } from "./config.js"
@@ -161,8 +161,10 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		// under kimchi-minimal; unfilled dots + hint use the "text" token to match
 		// editor input/cwd chrome.
 		const text = (s: string): string => ctx.ui.theme.fg("text", s)
-		const dots = MODES.map((m) => (m.mode === mode ? `${semanticFg(m.color)}●${RST_FG}` : text("○"))).join(" ")
-		const name = `${semanticFg(active.color)}${active.label}${RST_FG}`
+		const dots = MODES.map((m) =>
+			m.mode === mode ? `${resolvedSemanticFg(ctx.ui.theme, m.color)}●${RST_FG}` : text("○"),
+		).join(" ")
+		const name = `${resolvedSemanticFg(ctx.ui.theme, active.color)}${active.label}${RST_FG}`
 		const hint = text("→ shift+tab")
 		ctx.ui.setStatus("permissions-mode", `${dots} ${name} ${hint}`)
 	}

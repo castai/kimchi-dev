@@ -1,13 +1,12 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
 import { getActiveThemeName, onThemeChange } from "../settings-watcher.js"
-import { getRawBgPayload } from "../terminal-bg-probe.js"
+import { QUERY_BG, getRawBgPayload } from "../terminal-bg-probe.js"
 
 const FG_COLOR = "rgb:A1/A1/A1"
 const BG_COLOR = "rgb:1A/18/18"
 const SET_FG = `\x1b]10;${FG_COLOR}\x07`
 const SET_BG = `\x1b]11;${BG_COLOR}\x07`
 const QUERY_FG = "\x1b]10;?\x07"
-const QUERY_BG = "\x1b]11;?\x07"
 const QUERY_TIMEOUT_MS = 200
 
 // OSC 10/11 enforce kimchi's branded fg/bg over the terminal's own colors. Only
@@ -24,6 +23,7 @@ export default function terminalColorsExtension(pi: ExtensionAPI) {
 	let active = false
 	let exitHandlersInstalled = false
 	let lastCtx: ExtensionContext | undefined
+	let unsubscribeThemeChange: (() => void) | undefined
 
 	const restore = () => {
 		if (!process.stdout.isTTY) return
@@ -91,6 +91,13 @@ export default function terminalColorsExtension(pi: ExtensionAPI) {
 		const cleanup = () => {
 			process.stdin.removeListener("data", handler)
 			clearTimeout(timeout)
+			// Strip the OSC 10/11 responses from the buffer and push anything
+			// else (keystrokes, paste) back to stdin so pi sees it.
+			// biome-ignore lint/suspicious/noControlCharactersInRegex: OSC terminal escape sequence
+			let leftover = buffer.replace(/\x1b\]10;.+?(?:\x07|\x1b\\)/, "")
+			// biome-ignore lint/suspicious/noControlCharactersInRegex: OSC terminal escape sequence
+			leftover = leftover.replace(/\x1b\]11;.+?(?:\x07|\x1b\\)/, "")
+			if (leftover.length > 0) process.stdin.unshift(Buffer.from(leftover, "utf8"))
 		}
 		const timeout = setTimeout(() => {
 			cleanup()
@@ -119,11 +126,14 @@ export default function terminalColorsExtension(pi: ExtensionAPI) {
 		// when the user later switches away from kimchi mid-session.
 		probeAndSave(() => {
 			if (getActiveThemeName() === "kimchi") apply()
-			onThemeChange(reactToThemeChange)
+			unsubscribeThemeChange?.()
+			unsubscribeThemeChange = onThemeChange(reactToThemeChange)
 		})
 	})
 
 	pi.on("session_shutdown", () => {
 		if (active) restore()
+		unsubscribeThemeChange?.()
+		unsubscribeThemeChange = undefined
 	})
 }

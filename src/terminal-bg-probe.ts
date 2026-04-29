@@ -4,7 +4,7 @@
 // (iTerm2, Terminal.app, Alacritty, Kitty, WezTerm, GNOME Terminal) all
 // support this; we time out after 200ms for ones that don't.
 
-const QUERY_BG = "\x1b]11;?\x07"
+export const QUERY_BG = "\x1b]11;?\x07"
 const QUERY_TIMEOUT_MS = 200
 // OSC 11 response is ~25 bytes. Cap the buffer well above that so a flood of
 // unrelated bytes (paste fragments, mouse events) can't grow it unbounded
@@ -90,7 +90,10 @@ export async function probeTerminalBackground(): Promise<Rgb | undefined> {
 			const re = /\x1b\]11;(rgb:([0-9a-fA-F]+)\/([0-9a-fA-F]+)\/([0-9a-fA-F]+))(?:\x07|\x1b\\)/
 			const match = buffer.match(re)
 			if (match) {
-				const toByte = (h: string) => Number.parseInt(h.padEnd(4, "0").slice(0, 2), 16)
+				// Per X11 spec, a 1-digit channel replicates to fill: "A" → "AA" = 170.
+				// padEnd then slice handles 2-4 digit channels correctly; special-case 1.
+				const toByte = (h: string) =>
+					h.length === 1 ? Number.parseInt(h + h, 16) : Number.parseInt(h.padEnd(4, "0").slice(0, 2), 16)
 				const idx = match.index ?? 0
 				const leftover = buffer.slice(0, idx) + buffer.slice(idx + match[0].length)
 				const rgb = { r: toByte(match[2]), g: toByte(match[3]), b: toByte(match[4]) }
@@ -139,9 +142,9 @@ export function detectColorMode(): "truecolor" | "256color" {
 //      toolPending and userMessage collide on the same slot, looking
 //      identical) — hence the 1.4× scale that keeps the hierarchy spaced.
 // Truecolor mode is unaffected — deltas pass through as-is.
-export function tintBackground(bg: Rgb, delta = 14, redBias = 0): string {
-	const mode = detectColorMode()
-	const effectiveDelta = mode === "256color" ? Math.max(Math.round(delta * 1.4), 10) : delta
+export function tintBackground(bg: Rgb, delta = 14, redBias = 0, mode?: "truecolor" | "256color"): string {
+	const resolvedMode = mode ?? detectColorMode()
+	const effectiveDelta = resolvedMode === "256color" ? Math.max(Math.round(delta * 1.4), 10) : delta
 	const luminance = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b
 	const sign = luminance < 128 ? 1 : -1
 	const dr = effectiveDelta + sign * redBias
@@ -169,4 +172,56 @@ export function estimateTerminalBackground(): Rgb {
 		}
 	}
 	return { r: 0x1a, g: 0x18, b: 0x18 }
+}
+
+// BG ANSI color conversion utilities — used by kimchi-minimal-tints to apply
+// tint hex values as ANSI background codes. Co-located here with the rest of
+// the terminal color math.
+
+// 6×6×6 color cube entry points and 24-step gray ramp (indices 232–255).
+export const CUBE = [0, 95, 135, 175, 215, 255]
+export const GRAY = Array.from({ length: 24 }, (_, i) => 8 + i * 10)
+
+function findClosest(value: number, candidates: readonly number[]): number {
+	let minDist = Number.POSITIVE_INFINITY
+	let minIdx = 0
+	for (let i = 0; i < candidates.length; i++) {
+		const d = Math.abs(value - candidates[i])
+		if (d < minDist) {
+			minDist = d
+			minIdx = i
+		}
+	}
+	return minIdx
+}
+
+function colorDistance(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
+	const dr = r1 - r2
+	const dg = g1 - g2
+	const db = b1 - b2
+	return dr * dr * 0.299 + dg * dg * 0.587 + db * db * 0.114
+}
+
+export function rgbTo256(r: number, g: number, b: number): number {
+	const ri = findClosest(r, CUBE)
+	const gi = findClosest(g, CUBE)
+	const bi = findClosest(b, CUBE)
+	const cubeIdx = 16 + 36 * ri + 6 * gi + bi
+	const cubeDist = colorDistance(r, g, b, CUBE[ri], CUBE[gi], CUBE[bi])
+	const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
+	const gi2 = findClosest(gray, GRAY)
+	const grayValue = GRAY[gi2]
+	const grayIdx = 232 + gi2
+	const grayDist = colorDistance(r, g, b, grayValue, grayValue, grayValue)
+	const spread = Math.max(r, g, b) - Math.min(r, g, b)
+	if (spread < 10 && grayDist < cubeDist) return grayIdx
+	return cubeIdx
+}
+
+export function hexToBgAnsi(hex: string, mode: "truecolor" | "256color"): string {
+	const r = Number.parseInt(hex.slice(1, 3), 16)
+	const g = Number.parseInt(hex.slice(3, 5), 16)
+	const b = Number.parseInt(hex.slice(5, 7), 16)
+	if (mode === "truecolor") return `\x1b[48;2;${r};${g};${b}m`
+	return `\x1b[48;5;${rgbTo256(r, g, b)}m`
 }
