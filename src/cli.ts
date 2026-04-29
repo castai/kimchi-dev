@@ -160,7 +160,7 @@ try {
 		// as `""` placeholders; the kimchi-minimal-tints extension fills them in
 		// per-process at session_start from the OSC 11 probe.
 		const themesDir = resolve(agentDir, "themes")
-		const bundledThemes = ["kimchi.json", "kimchi-minimal.json"]
+		const bundledThemes = ["kimchi.json", "kimchi-minimal.json", "dark.json", "light.json"]
 		const bundledThemesSrcDir = isBunBinary
 			? resolve(process.env.PI_PACKAGE_DIR ?? "", "theme")
 			: resolve(dirname(fileURLToPath(import.meta.url)), "../themes")
@@ -183,7 +183,13 @@ try {
 		for (const file of bundledThemes) {
 			const src = resolve(bundledThemesSrcDir, file)
 			const dest = resolve(themesDir, file)
-			const srcContent = readFileSync(src, "utf-8")
+			let srcContent: string
+			try {
+				srcContent = readFileSync(src, "utf-8")
+			} catch {
+				console.warn(`Warning: bundled theme ${file} not found at ${src}, skipping`)
+				continue
+			}
 			let destContent: string | undefined
 			try {
 				destContent = readFileSync(dest, "utf-8")

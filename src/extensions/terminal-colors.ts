@@ -1,6 +1,5 @@
-import { readFileSync } from "node:fs"
-import { resolve } from "node:path"
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
+import { getActiveThemeName, onThemeChange } from "../settings-watcher.js"
 import { getRawBgPayload } from "../terminal-bg-probe.js"
 
 const FG_COLOR = "rgb:A1/A1/A1"
@@ -11,49 +10,44 @@ const QUERY_FG = "\x1b]10;?\x07"
 const QUERY_BG = "\x1b]11;?\x07"
 const QUERY_TIMEOUT_MS = 200
 
-// OSC 10/11 enforce kimchi's branded fg/bg over the terminal's own colors. Only run
-// when the user has explicitly opted into the rich kimchi theme; for kimchi-minimal
-// (the default) and any other theme the terminal owns its own bg/fg.
+// OSC 10/11 enforce kimchi's branded fg/bg over the terminal's own colors. Only
+// applied when the user has opted into the rich `kimchi` theme. Any other theme
+// (including kimchi-minimal, dark, light) lets the terminal own its bg/fg.
 //
-// This is read once at session_start. Mid-session theme switches via /settings repaint
-// chrome immediately via theme tokens, but the OSC override only re-evaluates on next
-// CLI restart.
-function getActiveThemeName(): string | undefined {
-	const agentDir = process.env.KIMCHI_CODING_AGENT_DIR
-	if (!agentDir) return undefined
-	try {
-		const raw = readFileSync(resolve(agentDir, "settings.json"), "utf-8")
-		const parsed: unknown = JSON.parse(raw)
-		if (parsed && typeof parsed === "object" && "theme" in parsed) {
-			const themeValue = (parsed as { theme: unknown }).theme
-			return typeof themeValue === "string" ? themeValue : undefined
-		}
-		return undefined
-	} catch {
-		return undefined
-	}
-}
+// OSC writes are sticky on the terminal, so when the user toggles themes via
+// /settings we have to actively restore the saved fg/bg — otherwise the kimchi
+// bg lingers under dark/light/kimchi-minimal.
 
 export default function terminalColorsExtension(pi: ExtensionAPI) {
 	let savedFg: string | null = null
 	let savedBg: string | null = null
 	let active = false
 	let exitHandlersInstalled = false
+	let lastCtx: ExtensionContext | undefined
 
 	const restore = () => {
-		if (!active) return
-		active = false
 		if (!process.stdout.isTTY) return
 		process.stdout.write(savedFg ? `\x1b]10;${savedFg}\x07` : "\x1b]110\x07")
 		process.stdout.write(savedBg ? `\x1b]11;${savedBg}\x07` : "\x1b]111\x07")
+		active = false
+	}
+
+	const apply = () => {
+		if (!process.stdout.isTTY) return
+		process.stdout.write(SET_FG)
+		process.stdout.write(SET_BG)
+		active = true
 	}
 
 	const installExitHandlers = () => {
 		if (exitHandlersInstalled) return
 		exitHandlersInstalled = true
-		process.on("exit", restore)
+		const onExit = () => {
+			if (active) restore()
+		}
+		process.on("exit", onExit)
 		const signalRestore = (signal: NodeJS.Signals) => {
-			restore()
+			onExit()
 			process.kill(process.pid, signal)
 		}
 		process.once("SIGINT", () => signalRestore("SIGINT"))
@@ -61,23 +55,9 @@ export default function terminalColorsExtension(pi: ExtensionAPI) {
 		process.once("SIGHUP", () => signalRestore("SIGHUP"))
 	}
 
-	pi.on("session_start", () => {
-		if (!process.stdin.isTTY) return
-		if (getActiveThemeName() !== "kimchi") return
-
-		active = true
-		installExitHandlers()
-
-		if (savedFg !== null || savedBg !== null) {
-			process.stdout.write(SET_FG)
-			process.stdout.write(SET_BG)
-			return
-		}
-
+	const probeAndSave = (then: () => void) => {
 		// cli.ts already probed OSC 11 at startup and cached the raw payload —
-		// reuse it instead of running a second probe (one less stdin grab
-		// window, one less keystroke-loss opportunity). FG still needs probing
-		// since we don't cache OSC 10 yet.
+		// reuse it instead of running a second probe. FG still needs probing.
 		const cachedBg = getRawBgPayload()
 		if (cachedBg) savedBg = cachedBg
 
@@ -105,20 +85,45 @@ export default function terminalColorsExtension(pi: ExtensionAPI) {
 			}
 			if (gotFg && gotBg) {
 				cleanup()
+				then()
 			}
 		}
 		const cleanup = () => {
 			process.stdin.removeListener("data", handler)
 			clearTimeout(timeout)
 		}
-		const timeout = setTimeout(cleanup, QUERY_TIMEOUT_MS)
+		const timeout = setTimeout(() => {
+			cleanup()
+			then()
+		}, QUERY_TIMEOUT_MS)
 
 		process.stdin.on("data", handler)
 		process.stdout.write(QUERY_FG)
 		if (!gotBg) process.stdout.write(QUERY_BG)
-		process.stdout.write(SET_FG)
-		process.stdout.write(SET_BG)
+	}
+
+	const reactToThemeChange = (newName: string | undefined) => {
+		const wantActive = newName === "kimchi"
+		if (wantActive && !active) apply()
+		else if (!wantActive && active) restore()
+		// Nudge pi to repaint chrome that may be stuck on stale bg.
+		lastCtx?.ui.setStatus("kimchi-theme-rerender", undefined)
+	}
+
+	pi.on("session_start", (_event, ctx) => {
+		if (!process.stdin.isTTY) return
+		lastCtx = ctx
+		installExitHandlers()
+
+		// Probe & save terminal-original fg/bg unconditionally so we can restore
+		// when the user later switches away from kimchi mid-session.
+		probeAndSave(() => {
+			if (getActiveThemeName() === "kimchi") apply()
+			onThemeChange(reactToThemeChange)
+		})
 	})
 
-	pi.on("session_shutdown", restore)
+	pi.on("session_shutdown", () => {
+		if (active) restore()
+	})
 }

@@ -15,9 +15,8 @@
 // Hex→ANSI conversion mirrors pi's internal bgAnsi (theme.js): truecolor uses
 // `48;2;R;G;B`, 256-color quantizes to the 6×6×6 cube + 24-step gray ramp.
 
-import { readFileSync } from "node:fs"
-import { resolve } from "node:path"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
+import { getActiveThemeName, onThemeChange } from "../settings-watcher.js"
 import {
 	type Rgb,
 	detectColorMode,
@@ -34,22 +33,6 @@ const SURFACE_TINTS: ReadonlyArray<[token: string, delta: number, redBias: numbe
 	["customMessageBg", 22, 0],
 	["selectedBg", 30, 0],
 ]
-
-function getActiveThemeName(): string | undefined {
-	const agentDir = process.env.KIMCHI_CODING_AGENT_DIR
-	if (!agentDir) return undefined
-	try {
-		const raw = readFileSync(resolve(agentDir, "settings.json"), "utf-8")
-		const parsed: unknown = JSON.parse(raw)
-		if (parsed && typeof parsed === "object" && "theme" in parsed) {
-			const v = (parsed as { theme: unknown }).theme
-			return typeof v === "string" ? v : undefined
-		}
-		return undefined
-	} catch {
-		return undefined
-	}
-}
 
 const CUBE = [0, 95, 135, 175, 215, 255]
 const GRAY = Array.from({ length: 24 }, (_, i) => 8 + i * 10)
@@ -99,20 +82,38 @@ function hexToBgAnsi(hex: string, mode: "truecolor" | "256color"): string {
 }
 
 export default function kimchiMinimalTintsExtension(pi: ExtensionAPI) {
-	pi.on("session_start", (_event, ctx: ExtensionContext) => {
-		if (getActiveThemeName() !== "kimchi-minimal") return
-
+	const applyTints = (ctx: ExtensionContext) => {
 		const baseBg: Rgb = getProbedBackground() ?? estimateTerminalBackground()
 		const mode = detectColorMode()
 
 		// ctx.ui.theme is the live Theme instance. Its `bgColors` is the underlying
 		// Map; mutating it is observed by every later `theme.bg(token, text)` call.
-		// Pi's Theme class declares this field and we rely on its presence —
-		// covered by Tier 2 follow-up to type this properly via an upstream PR.
-		const themeWithBg = ctx.ui.theme as unknown as { bgColors: Map<string, string> }
+		// On theme switch via /settings, pi creates a fresh Theme — we re-apply.
+		const themeWithBg = ctx.ui.theme as unknown as { bgColors?: Map<string, string> }
+		if (!themeWithBg?.bgColors) return
 		for (const [token, delta, redBias] of SURFACE_TINTS) {
 			const hex = tintBackground(baseBg, delta, redBias)
 			themeWithBg.bgColors.set(token, hexToBgAnsi(hex, mode))
 		}
+	}
+
+	let unsubscribeThemeChange: (() => void) | undefined
+
+	pi.on("session_start", (_event, ctx: ExtensionContext) => {
+		if (getActiveThemeName() === "kimchi-minimal") applyTints(ctx)
+
+		unsubscribeThemeChange?.()
+		unsubscribeThemeChange = onThemeChange((newName) => {
+			if (newName === "kimchi-minimal") {
+				applyTints(ctx)
+				// Nudge pi to repaint surfaces with the freshly-mutated bgColors.
+				ctx.ui.setStatus("kimchi-tints-rerender", undefined)
+			}
+		})
+	})
+
+	pi.on("session_shutdown", () => {
+		unsubscribeThemeChange?.()
+		unsubscribeThemeChange = undefined
 	})
 }
