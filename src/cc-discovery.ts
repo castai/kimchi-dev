@@ -32,7 +32,14 @@ function transformServer(raw: CcMcpServerRaw): ServerEntry {
 	if (raw.url !== undefined) entry.url = raw.url
 	const headers = raw.headers ?? raw.header
 	if (headers !== undefined) entry.headers = headers
+	if (raw.url !== undefined && headers !== undefined && hasAuthorizationHeader(headers)) {
+		entry.auth = "bearer"
+	}
 	return entry
+}
+
+function hasAuthorizationHeader(headers: Record<string, string>): boolean {
+	return Object.keys(headers).some((k) => k.toLowerCase() === "authorization")
 }
 
 export function discoverCcConfig(): CcDiscovery {
@@ -49,6 +56,15 @@ export function discoverCcConfig(): CcDiscovery {
 					if (!mcpServers[name]) {
 						mcpServers[name] = transformServer(def)
 					}
+				}
+			}
+		}
+
+		const topLevel = raw?.mcpServers
+		if (topLevel && typeof topLevel === "object") {
+			for (const [name, def] of Object.entries(topLevel as Record<string, CcMcpServerRaw>)) {
+				if (!mcpServers[name]) {
+					mcpServers[name] = transformServer(def)
 				}
 			}
 		}
