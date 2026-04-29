@@ -6,7 +6,7 @@
  */
 
 import { truncateHead, truncateLine } from "@mariozechner/pi-coding-agent"
-import { KIMCHI_CONFIG_PATH, readApiKeyFromConfigFile } from "../../config.js"
+import { readApiKeyFromConfigFile } from "../../config.js"
 
 export const SEARCH_ENDPOINT = "https://llm.kimchi.dev/v1/search"
 export const SEARCH_TIMEOUT_MS = 25_000
@@ -100,7 +100,7 @@ async function fetchSearchResponse(body: object, apiKey: string, signal: AbortSi
 }
 
 export async function executeWebSearch(params: WebSearchParams, signal?: AbortSignal): Promise<WebSearchResult> {
-	const apiKey = readApiKeyFromConfigFile(KIMCHI_CONFIG_PATH)
+	const apiKey = readApiKeyFromConfigFile()
 	if (!apiKey) {
 		throw new Error(
 			"Web search requires an API key. Run 'kimchi' and log in, or visit https://app.kimchi.dev to create a key.",

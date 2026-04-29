@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as config from "../../config.js"
 import { DEFAULT_LIMIT, SEARCH_ENDPOINT, type SearchResponse, executeWebSearch } from "./execute-handler.js"
 
-vi.mock("../../config.js", () => ({ readApiKeyFromConfigFile: vi.fn(), KIMCHI_CONFIG_PATH: "/mock/config.json" }))
+vi.mock("../../config.js", () => ({ readApiKeyFromConfigFile: vi.fn() }))
 
 function mockFetch(status: number, body: unknown, headers: Record<string, string> = {}): void {
 	vi.stubGlobal(
