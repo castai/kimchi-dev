@@ -52,10 +52,9 @@ if (!isCrossCompile && platform() === "darwin") {
 }
 
 run("copy resources", "node scripts/copy-resources.js")
-// Create symlink for kimchi
+
 const kimchiPath = join("dist", "bin", "kimchi")
 if (existsSync(kimchiPath)) {
 	unlinkSync(kimchiPath)
 }
-// Create symlink with relative target (same directory)
 symlinkSync("kimchi-code", kimchiPath)

@@ -27,12 +27,11 @@ const shareDest = join(prefix, "share", "kimchi")
 
 mkdirSync(binDest, { recursive: true })
 cpSync(distBin, join(binDest, "kimchi-code"))
-// Create symlink for kimchi
+
 const kimchiPath = join(binDest, "kimchi")
 if (existsSync(kimchiPath)) {
 	unlinkSync(kimchiPath)
 }
-// Create symlink with relative target (same directory)
 symlinkSync("kimchi-code", kimchiPath)
 
 cpSync(distShare, shareDest, { recursive: true })
