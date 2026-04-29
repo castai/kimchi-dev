@@ -22,8 +22,8 @@ import type { ModelCapabilities } from "./types.js"
 
 const KIMI_K25_DESCRIPTION = `\
 The only model in the pool with vision support — use it when the task involves images, \
-screenshots, or visual input. Most capable and most expensive. \
-Best for complex multi-step tasks, deep reasoning, or anything requiring autonomous multi-tool workflows.`
+screenshots, or visual input. Best for exploration and research tasks, particularly those \
+requiring image understanding or visual context. Excellent for autonomous multi-tool workflows.`
 
 const MINIMAX_M27_DESCRIPTION = `\
 The strongest coding model in the pool. \
@@ -37,8 +37,10 @@ Weakest at coding; not reliable for complex multi-file changes. \
 Best for codebase exploration, research, and simple well-defined tasks.`
 
 const CLAUDE_OPUS_47_DESCRIPTION = `\
-Anthropic's flagship Claude model. Strongest general reasoning, planning, and vision support. \
-Best for complex multi-step tasks requiring deep research and exploration across large codebases.`
+Anthropic's flagship Claude model. Dominates at architectural planning and complex task \
+decomposition — when a hard problem needs a superior plan, this is the model to delegate to. \
+Also excels at deep reasoning, research, and exploration across large codebases. Best for \
+complex multi-step tasks requiring careful analysis and methodical planning.`
 
 // TODO: these capabilities could be returned by our models metadata API.
 /**
