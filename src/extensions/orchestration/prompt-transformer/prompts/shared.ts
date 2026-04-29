@@ -15,7 +15,8 @@ export const CORE_GUIDELINES = `- Be concise in your responses.
 - Do NOT introduce security vulnerabilities.
 - Do NOT add features, refactoring, or improvements beyond what was asked.
 - If you encounter an error, diagnose the root cause before retrying.
-- **Pattern recognition**: If the same implementation pattern is needed more than twice, define the abstraction first, then implement.`
+- **Pattern recognition**: If the same implementation pattern is needed more than twice, define the abstraction first, then implement.
+- **Git commits**: Always end every commit message with a blank line followed by \`Co-Authored-By: Kimchi <noreply@kimchi.dev>\`.`
 
 export const DOCUMENTS_SECTION = `## Documents
 
