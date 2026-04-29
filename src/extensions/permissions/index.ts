@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext, ToolCallEvent } from "@mariozechner/pi-coding-agent"
-import { ANSI, ERROR_FG, RST_FG, SUCCESS_FG, WARNING_FG } from "../../ansi.js"
+import { RST_FG, semanticFg } from "../../ansi.js"
 import { classifyToolCall } from "./classifier.js"
 import { registerCommands } from "./commands.js"
 import { type LoadedConfig, loadConfig } from "./config.js"
@@ -157,17 +157,13 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		if (!ctx.hasUI) return
 		const mode = currentMode()
 		const active = MODES.find((m) => m.mode === mode) ?? MODES[0]
-		// Semantic colors for the permission tier are hardcoded against the
-		// kimchi palette rather than read from theme tokens. kimchi-minimal
-		// intentionally leaves success/warning/error/muted/dim as terminal
-		// default fg, which would flatten the dot/label color coding here —
-		// these constants keep the cue legible across themes.
-		const fgFor = (c: "success" | "warning" | "error"): string =>
-			c === "success" ? SUCCESS_FG : c === "warning" ? WARNING_FG : ERROR_FG
-		const dimEsc = `\x1b[${ANSI.dim}m`
-		const dots = MODES.map((m) => (m.mode === mode ? `${fgFor(m.color)}●${RST_FG}` : `${dimEsc}○${RST_FG}`)).join(" ")
-		const name = `${fgFor(active.color)}${active.label}${RST_FG}`
-		const hint = `${dimEsc}→ shift+tab${RST_FG}`
+		// Filled dot + active label hardcode kimchi palette so the cue stays legible
+		// under kimchi-minimal; unfilled dots + hint use the "text" token to match
+		// editor input/cwd chrome.
+		const text = (s: string): string => ctx.ui.theme.fg("text", s)
+		const dots = MODES.map((m) => (m.mode === mode ? `${semanticFg(m.color)}●${RST_FG}` : text("○"))).join(" ")
+		const name = `${semanticFg(active.color)}${active.label}${RST_FG}`
+		const hint = text("→ shift+tab")
 		ctx.ui.setStatus("permissions-mode", `${dots} ${name} ${hint}`)
 	}
 

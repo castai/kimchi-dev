@@ -22,6 +22,10 @@ export const WARNING_FG = TRUECOLOR ? "\x1b[38;2;239;159;39m" : "\x1b[38;5;214m"
 export const ERROR_FG = TRUECOLOR ? "\x1b[38;2;204;102;102m" : "\x1b[38;5;167m"
 export const RST_FG = "\x1b[39m"
 
+export function semanticFg(c: "success" | "warning" | "error"): string {
+	return c === "success" ? SUCCESS_FG : c === "warning" ? WARNING_FG : ERROR_FG
+}
+
 export const ANSI = {
 	accent: "38;2;138;190;183",
 	dim: tc("102;102;102", "242"),
