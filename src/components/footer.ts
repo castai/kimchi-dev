@@ -199,6 +199,12 @@ export class StatsFooter implements Component {
 		return seg(teal(`${count} subagent${count === 1 ? "" : "s"}`))
 	}
 
+	private permissionsWarning(width: number): string | null {
+		const text = this._footerData.getExtensionStatuses().get("permissions-warning")
+		if (!text) return null
+		return truncateToWidth(this.theme.fg("warning", text), width)
+	}
+
 	render(width: number): string[] {
 		const tags = getActiveTags()
 			.map(parseTag)
@@ -230,6 +236,7 @@ export class StatsFooter implements Component {
 			line = truncateToWidth(left, width)
 		}
 
-		return [line]
+		const warning = this.permissionsWarning(width)
+		return warning ? [warning, line] : [line]
 	}
 }
