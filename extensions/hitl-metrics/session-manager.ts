@@ -68,7 +68,7 @@ export class SessionManager {
 		this.isInitialized = false
 	}
 
-	init(cwd: string, options: { dbPath?: string } = {}): void {
+	init(cwd: string, options: { dbPath?: string; sessionId?: string } = {}): void {
 		// Always reset on init — enables clean re-initialization between sessions
 		// and allows test harnesses to redirect the DB path per-session
 		this.reset()
@@ -100,7 +100,7 @@ export class SessionManager {
 			}
 
 			closeOrphanSessions(this.db)
-			this.session = getOrCreateSession(this.db, this.projectHashValue)
+			this.session = getOrCreateSession(this.db, this.projectHashValue, { sessionId: options.sessionId })
 			if (!this.session) {
 				console.warn("[HITL] Failed to create session, events will be silently dropped")
 				return

@@ -22,23 +22,28 @@ export type EndCause = "complete" | "disconnect" | "signal" | "orphaned"
 export function getOrCreateSession(
 	db: HitlDatabase,
 	projectHash: string,
+	options: { sessionId?: string } = {},
 ): HitlSession | null {
 	try {
-		const cutoffTime = Date.now() - FIVE_MINUTES_MS
-		const existing = db.query<HitlSession>(
-			`SELECT id, project_hash, started_at, ended_at, status, end_cause,
-			        agent_time_ms, hitl_time_ms, idle_time_ms
-			 FROM hitl_sessions
-			 WHERE project_hash = ?
-			   AND status = 'active'
-			   AND started_at >= ?
-			 ORDER BY started_at DESC
-			 LIMIT 1`,
-			[projectHash, cutoffTime],
-		)
-		if (existing.length > 0) return existing[0]
+		// Use provided session ID if given; otherwise try to resume existing active session
+		const sessionId = options.sessionId ?? randomUUID()
+		const useExisting = !options.sessionId
 
-		const sessionId = randomUUID()
+		if (useExisting) {
+			const cutoffTime = Date.now() - FIVE_MINUTES_MS
+			const existing = db.query<HitlSession>(
+				`SELECT id, project_hash, started_at, ended_at, status, end_cause,
+				        agent_time_ms, hitl_time_ms, idle_time_ms
+				 FROM hitl_sessions
+				 WHERE project_hash = ?
+				   AND status = 'active'
+				   AND started_at >= ?
+				 ORDER BY started_at DESC
+				 LIMIT 1`,
+				[projectHash, cutoffTime],
+			)
+			if (existing.length > 0) return existing[0]
+		}
 		const startedAt = Date.now()
 		const inserted = db.run(
 			`INSERT INTO hitl_sessions (id, project_hash, started_at, status, agent_time_ms, hitl_time_ms, idle_time_ms)

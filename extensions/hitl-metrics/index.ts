@@ -49,9 +49,14 @@ export default function hitlMetricsExtension(pi: ExtensionAPI): void {
 				console.warn("[HITL] No cwd provided in session_start, skipping initialization")
 				return
 			}
-			// HITL_DB_PATH overrides the DB path entirely (useful for testing).
-			// When set, the dirname is created if missing and the file is "hitl.db" inside it.
+			// Use the actual kimchi session ID so DB rows match session files.
+			// ctx.sessionId is undefined at session_start, so we read from sessionManager.
+			// ctx.sessionManager.sessionId is available immediately after session creation.
+			const sessionId: string | undefined = (ctx as unknown as { sessionId?: string }).sessionId ?? (ctx as unknown as { sessionManager?: { sessionId: string } }).sessionManager?.sessionId
 			const initOptions = process.env.HITL_DB_PATH ? { dbPath: process.env.HITL_DB_PATH } : {}
+			if (sessionId) {
+				Object.assign(initOptions, { sessionId })
+			}
 			manager.init(cwd, initOptions)
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
