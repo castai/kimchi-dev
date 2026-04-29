@@ -162,7 +162,21 @@ User: "Add user authentication"
 - [corepack](https://nodejs.org/api/corepack.html) enabled (`corepack enable`)
 - pnpm (installed automatically via corepack)
 
-### Setup
+### Quick Setup (Automated)
+
+Use the dev startup script to automatically set up the environment and start the harness:
+
+```bash
+./scripts/dev-startup.sh
+```
+
+This script will:
+- Check and install node, pnpm, and bun (if missing)
+- Install dependencies with `pnpm install`
+- Copy necessary resources
+- Start the harness with `pnpm run dev`
+
+### Manual Setup
 
 ```bash
 git clone git@github.com:castai/kimchi-dev.git
