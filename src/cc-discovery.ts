@@ -32,14 +32,21 @@ function transformServer(raw: CcMcpServerRaw): ServerEntry {
 	if (raw.url !== undefined) entry.url = raw.url
 	const headers = raw.headers ?? raw.header
 	if (headers !== undefined) entry.headers = headers
-	if (raw.url !== undefined && headers !== undefined && hasAuthorizationHeader(headers)) {
+	if (
+		raw.url !== undefined &&
+		headers !== null &&
+		typeof headers === "object" &&
+		hasBearerAuthorizationHeader(headers)
+	) {
 		entry.auth = "bearer"
 	}
 	return entry
 }
 
-function hasAuthorizationHeader(headers: Record<string, string>): boolean {
-	return Object.keys(headers).some((k) => k.toLowerCase() === "authorization")
+function hasBearerAuthorizationHeader(headers: Record<string, string>): boolean {
+	return Object.entries(headers).some(
+		([k, v]) => k.toLowerCase() === "authorization" && typeof v === "string" && v.toLowerCase().startsWith("bearer "),
+	)
 }
 
 export function discoverCcConfig(): CcDiscovery {
@@ -52,9 +59,9 @@ export function discoverCcConfig(): CcDiscovery {
 			for (const project of Object.values(projects)) {
 				const servers = (project as Record<string, unknown>)?.mcpServers
 				if (!servers || typeof servers !== "object") continue
-				for (const [name, def] of Object.entries(servers as Record<string, CcMcpServerRaw>)) {
-					if (!mcpServers[name]) {
-						mcpServers[name] = transformServer(def)
+				for (const [name, def] of Object.entries(servers as Record<string, unknown>)) {
+					if (!mcpServers[name] && def !== null && typeof def === "object" && !Array.isArray(def)) {
+						mcpServers[name] = transformServer(def as CcMcpServerRaw)
 					}
 				}
 			}
@@ -62,9 +69,9 @@ export function discoverCcConfig(): CcDiscovery {
 
 		const topLevel = raw?.mcpServers
 		if (topLevel && typeof topLevel === "object") {
-			for (const [name, def] of Object.entries(topLevel as Record<string, CcMcpServerRaw>)) {
-				if (!mcpServers[name]) {
-					mcpServers[name] = transformServer(def)
+			for (const [name, def] of Object.entries(topLevel as Record<string, unknown>)) {
+				if (!mcpServers[name] && def !== null && typeof def === "object" && !Array.isArray(def)) {
+					mcpServers[name] = transformServer(def as CcMcpServerRaw)
 				}
 			}
 		}
