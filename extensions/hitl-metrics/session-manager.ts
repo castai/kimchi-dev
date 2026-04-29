@@ -8,60 +8,109 @@
 import * as path from "node:path"
 import * as os from "node:os"
 import * as fs from "node:fs"
-import { HitlDatabase, projectHash, getOrCreateSession, closeSession, closeOrphanSessions } from "./storage/index.js"
-import type { HitlSession } from "./types.js"
+import {
+	HitlDatabase,
+	projectHash,
+	getOrCreateSession,
+	closeSession,
+	closeOrphanSessions,
+	recordActivityEvent,
+	recordPermissionEvent,
+	updateSessionTimes,
+	EndCause,
+} from "./storage/index.js"
+import type { HitlSession, HitlPermissionEvent } from "./types.js"
+
+/** HITL tool name — confirmed from pi framework: extensions/ask-user-questions.ts registers "ask_user_questions" */
+export const HITL_TOOL_NAME = "ask_user_questions"
+
+/** Threshold for idle detection; gaps longer than this mark idle periods */
+const IDLE_THRESHOLD_MS = 3000
 
 /**
  * Manages HITL sessions and event recording.
  * Tracks duration via tool execution start times and writes events to database.
+ * Now supports three-category time tracking: agent, HITL, and idle time.
  */
 export class SessionManager {
 	private db: HitlDatabase | null = null
 	private session: HitlSession | null = null
 	private projectHashValue: string = ""
 	private pendingStartTimes: Map<string, number> = new Map()
+	private isInitialized: boolean = false
+
+	// Activity tracking state
+	private lastActivityTimestamp: number = 0
+	private agentTimeAccumulator: number = 0
+	private hitlTimeAccumulator: number = 0
+	private idleTimeAccumulator: number = 0
+	private currentIdleStart: number = 0
+	private isIdle: boolean = false
 
 	/**
-	 * Initialize the session manager for the given project directory.
-	 * Opens database, initializes schema, closes orphans, creates/resumes session.
-	 *
-	 * @param cwd - Project working directory
+	 * Reset all state — used by tests and when cwd changes between sessions.
+	 * Safe to call even when not initialized.
 	 */
-	init(cwd: string): void {
+	reset(): void {
+		if (this.db) {
+			this.db.close()
+			this.db = null
+		}
+		this.session = null
+		this.projectHashValue = ""
+		this.pendingStartTimes.clear()
+		this.lastActivityTimestamp = 0
+		this.agentTimeAccumulator = 0
+		this.hitlTimeAccumulator = 0
+		this.idleTimeAccumulator = 0
+		this.currentIdleStart = 0
+		this.isIdle = false
+		this.isInitialized = false
+	}
+
+	init(cwd: string, options: { dbPath?: string } = {}): void {
+		// Always reset on init — enables clean re-initialization between sessions
+		// and allows test harnesses to redirect the DB path per-session
+		this.reset()
 		try {
-			// Generate project hash from cwd
 			this.projectHashValue = projectHash(cwd)
+			let dbPath: string
+			let dbDir: string
 
-			// Build DB path at ~/.hitl-metrics/<hash>.db
-			const dbDir = path.join(os.homedir(), ".hitl-metrics")
-			const dbPath = path.join(dbDir, `${this.projectHashValue}.db`)
+			if (options.dbPath) {
+				// Test override: write to explicit path
+				dbPath = options.dbPath
+				dbDir = path.dirname(dbPath)
+				if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true })
+			} else {
+				// Production: write to ~/.kimchi/metrics/<hash>/hitl.db
+				dbDir = path.join(os.homedir(), ".kimchi", "metrics", this.projectHashValue)
+				dbPath = path.join(dbDir, "hitl.db")
+				fs.mkdirSync(dbDir, { recursive: true })
+			}
 
-			// Ensure directory exists
-			fs.mkdirSync(dbDir, { recursive: true })
-
-			// Initialize database
 			this.db = new HitlDatabase(dbPath)
-			const opened = this.db.open()
-			if (!opened) {
+			if (!this.db.open()) {
 				console.warn("[HITL] Failed to open database, events will be silently dropped")
 				return
 			}
-
-			// Initialize schema
-			const schemaOk = this.db.initSchema()
-			if (!schemaOk) {
+			if (!this.db.initSchema()) {
 				console.warn("[HITL] Failed to initialize schema, events will be silently dropped")
 				return
 			}
 
-			// Close any orphaned sessions from previous crashes
 			closeOrphanSessions(this.db)
-
-			// Get or create session
 			this.session = getOrCreateSession(this.db, this.projectHashValue)
 			if (!this.session) {
 				console.warn("[HITL] Failed to create session, events will be silently dropped")
+				return
 			}
+
+			// Initialize activity tracking from session
+			this.lastActivityTimestamp = Date.now()
+			this.agentTimeAccumulator = this.session.agent_time_ms
+			this.hitlTimeAccumulator = this.session.hitl_time_ms
+			this.idleTimeAccumulator = this.session.idle_time_ms
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			console.warn(`[HITL] Initialization error: ${message}`)
@@ -70,84 +119,133 @@ export class SessionManager {
 		}
 	}
 
-	/**
-	 * Get the current active session, or null if not initialized.
-	 *
-	 * @returns HitlSession or null
-	 */
 	getSession(): HitlSession | null {
 		return this.session
 	}
 
-	/**
-	 * Record the start time for a tool execution to enable duration tracking.
-	 * Called on tool_execution_start hook.
-	 *
-	 * @param toolCallId - Unique identifier for the tool call
-	 */
-	recordStartTime(toolCallId: string): void {
+	/** Record start of any tool execution */
+	recordToolStart(toolCallId: string, toolName: string): void {
 		if (!toolCallId) return
 		this.pendingStartTimes.set(toolCallId, Date.now())
-	}
 
-	/**
-	 * Get and remove the start time for a tool call.
-	 * Used internally to compute duration.
-	 *
-	 * @param toolCallId - Unique identifier for the tool call
-	 * @returns Start timestamp or undefined if not found
-	 */
-	consumeStartTime(toolCallId: string): number | undefined {
-		const startTime = this.pendingStartTimes.get(toolCallId)
-		if (startTime !== undefined) {
-			this.pendingStartTimes.delete(toolCallId)
+		if (this.db && this.session) {
+			recordActivityEvent(this.db, this.session.id, "tool_start", toolName)
 		}
-		return startTime
+		if (this.isIdle) this.endIdlePeriod()
+		this.lastActivityTimestamp = Date.now()
 	}
 
-	/**
-	 * Record a HITL event to the database.
-	 * Non-fatal: returns false on errors without throwing.
-	 *
-	 * @param toolName - Name of the tool that triggered the interaction
-	 * @param questionCount - Number of questions asked
-	 * @param durationMs - Duration in milliseconds
-	 * @param selectedOptions - Array of user-selected option labels
-	 * @returns true if recorded successfully, false otherwise
-	 */
+	/** Record end of any tool execution and accumulate agent time */
+	recordToolEnd(toolCallId: string, toolName: string, durationMs: number): void {
+		this.pendingStartTimes.delete(toolCallId)
+
+		if (this.db && this.session) {
+			recordActivityEvent(this.db, this.session.id, "tool_end", toolName, durationMs)
+		}
+
+		// Accumulate agent time (exclude HITL tools tracked separately)
+		if (toolName !== HITL_TOOL_NAME) {
+			this.agentTimeAccumulator += durationMs
+		}
+		this.lastActivityTimestamp = Date.now()
+		this.maybeStartIdleTimer()
+	}
+
+	/** Record user input (mark end of idle, reset timers) */
+	recordUserInput(): void {
+		if (this.isIdle) this.endIdlePeriod()
+		if (this.db && this.session) {
+			recordActivityEvent(this.db, this.session.id, "user_input")
+		}
+		this.lastActivityTimestamp = Date.now()
+		// Start idle tracking — next tool start will end it
+		this.startIdlePeriod()
+	}
+
+	/** Check if we should start idle tracking */
+	private maybeStartIdleTimer(): void {
+		// Called after tool execution; if no immediate next action, idle starts
+		// In practice, idle is detected lazily when next activity arrives
+	}
+
+	private startIdlePeriod(): void {
+		if (this.isIdle || !this.session) return
+		this.isIdle = true
+		this.currentIdleStart = Date.now()
+		recordActivityEvent(this.db!, this.session.id, "idle_start")
+	}
+
+	private endIdlePeriod(): void {
+		if (!this.isIdle || !this.session || this.currentIdleStart === 0) return
+		const duration = Date.now() - this.currentIdleStart
+		this.idleTimeAccumulator += duration
+		this.isIdle = false
+		recordActivityEvent(this.db!, this.session.id, "idle_end", undefined, duration)
+	}
+
+	/** Legacy method - kept for backward compatibility */
+	recordStartTime(toolCallId: string): void {
+		this.recordToolStart(toolCallId, "unknown")
+	}
+
+	/** Legacy method - kept for backward compatibility */
+	consumeStartTime(toolCallId: string): number | undefined {
+		const start = this.pendingStartTimes.get(toolCallId)
+		if (start !== undefined) this.pendingStartTimes.delete(toolCallId)
+		return start
+	}
+
+	/** Record permission/approval event */
+	recordPermissionEvent(
+		toolName: string,
+		action: string,
+		outcome: HitlPermissionEvent["outcome"],
+		durationMs: number,
+		reason?: string,
+	): boolean {
+		if (!this.db || !this.session) return false
+		if (this.isIdle) this.endIdlePeriod()
+
+		try {
+			return recordPermissionEvent(
+				this.db,
+				this.session.id,
+				toolName,
+				action,
+				outcome,
+				durationMs,
+				reason,
+			)
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			console.warn(`[HITL] Permission event recording error: ${message}`)
+			return false
+		}
+	}
+
+	/** Record HITL event (ask_user_questions) */
 	recordEvent(
 		toolName: string,
 		questionCount: number,
 		durationMs: number,
 		selectedOptions: string[],
 	): boolean {
-		if (!this.db || !this.session) {
-			// Silently drop events when DB/session unavailable (graceful degradation)
-			return false
-		}
+		if (!this.db || !this.session) return false
+		if (this.isIdle) this.endIdlePeriod()
 
 		try {
 			const createdAt = Date.now()
-			const selectedOptionsJson = JSON.stringify(selectedOptions)
-
-			const sql = `INSERT INTO hitl_events
-				(session_id, tool_name, question_count, duration_ms, selected_options, created_at)
-				VALUES (?, ?, ?, ?, ?, ?)`
-
-			const success = this.db.run(sql, [
-				this.session.id,
-				toolName,
-				questionCount,
-				durationMs,
-				selectedOptionsJson,
-				createdAt,
-			])
-
+			const success = this.db.run(
+				`INSERT INTO hitl_events (session_id, tool_name, question_count, duration_ms, selected_options, created_at)
+				 VALUES (?, ?, ?, ?, ?, ?)`,
+				[this.session.id, toolName, questionCount, durationMs, JSON.stringify(selectedOptions), createdAt],
+			)
 			if (!success) {
 				console.warn("[HITL] Failed to write event to database")
 				return false
 			}
-
+			this.hitlTimeAccumulator += durationMs
+			this.lastActivityTimestamp = Date.now()
 			return true
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
@@ -156,32 +254,24 @@ export class SessionManager {
 		}
 	}
 
-	/**
-	 * Close the session manager and release resources.
-	 * Closes the active session and database connection.
-	 */
-	close(): void {
-		try {
-			if (this.session && this.db) {
-				closeSession(this.db, this.session.id)
-			}
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error)
-			console.warn(`[HITL] Error closing session: ${message}`)
-		}
+	/** Close session with optional end cause */
+	close(endCause: EndCause = "complete"): void {
+		if (this.isIdle) this.endIdlePeriod()
+		this.persistTimeMetrics()
 
-		try {
-			if (this.db) {
-				this.db.close()
-			}
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error)
-			console.warn(`[HITL] Error closing database: ${message}`)
+		if (this.session && this.db) {
+			closeSession(this.db, this.session.id, endCause)
 		}
-
+		if (this.db) this.db.close()
 		this.db = null
 		this.session = null
 		this.pendingStartTimes.clear()
+	}
+
+	/** Persist accumulated time metrics to database */
+	private persistTimeMetrics(): void {
+		if (!this.db || !this.session) return
+		updateSessionTimes(this.db, this.session.id, this.agentTimeAccumulator, this.hitlTimeAccumulator, this.idleTimeAccumulator)
 	}
 }
 

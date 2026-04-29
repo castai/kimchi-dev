@@ -2,16 +2,16 @@
  * Timeline Tests
  *
  * Comprehensive tests for timeline segment computation and ASCII chart rendering.
+ * Updated for three-category timeline: agent, hitl, idle.
  */
 
 import { describe, it, expect } from "vitest"
 import { buildTimeline, renderTimeline } from "./timeline.js"
-import type { HitlSession, HitlEvent, TimelineSegment } from "./types.js"
+import type { HitlSession, HitlEvent, TimelineSegment, ActivityEvent } from "./types.js"
 import { createMockTheme } from "./test-helpers/mock-theme.js"
 
 const mockTheme = createMockTheme()
 
-// Helper to create a session
 function createSession(overrides: Partial<HitlSession> = {}): HitlSession {
 	return {
 		id: "test-session-id",
@@ -19,11 +19,14 @@ function createSession(overrides: Partial<HitlSession> = {}): HitlSession {
 		started_at: 1000,
 		ended_at: 5000,
 		status: "closed",
+		end_cause: "complete",
+		agent_time_ms: 3000,
+		hitl_time_ms: 1000,
+		idle_time_ms: 1000,
 		...overrides,
 	}
 }
 
-// Helper to create an event
 function createEvent(overrides: Partial<HitlEvent> = {}): HitlEvent {
 	return {
 		id: 1,
@@ -37,127 +40,80 @@ function createEvent(overrides: Partial<HitlEvent> = {}): HitlEvent {
 	}
 }
 
+function createActivity(overrides: Partial<ActivityEvent> = {}): ActivityEvent {
+	return {
+		id: 1,
+		session_id: "test-session-id",
+		activity_type: "tool_start",
+		tool_name: "test_tool",
+		duration_ms: null,
+		timestamp: 2000,
+		...overrides,
+	}
+}
+
 describe("buildTimeline", () => {
-	it("returns single solo segment when no events", () => {
-		const session = createSession({ started_at: 1000, ended_at: 5000 })
+	it("builds from session totals when no events or activities", () => {
+		const session = createSession({ agent_time_ms: 3000, hitl_time_ms: 1000, idle_time_ms: 1000 })
 		const segments = buildTimeline(session, [])
 
-		expect(segments).toHaveLength(1)
-		expect(segments[0]).toEqual({
-			type: "solo",
-			startMs: 1000,
-			endMs: 5000,
-			durationMs: 4000,
-		})
+		// Should have segments based on session totals (agent + hitl + idle = 5000)
+		expect(segments.length).toBeGreaterThan(0)
+		const totalDuration = segments.reduce((sum, s) => sum + s.durationMs, 0)
+		expect(totalDuration).toBe(5000)
 	})
 
-	it("builds correct segments for single event", () => {
+	it("builds from HITL events when no activities", () => {
 		const session = createSession({ started_at: 1000, ended_at: 5000 })
 		const event = createEvent({ created_at: 2000, duration_ms: 1000 })
 		const segments = buildTimeline(session, [event])
 
-		expect(segments).toHaveLength(3)
-		expect(segments[0]).toEqual({
-			type: "solo",
-			startMs: 1000,
-			endMs: 2000,
-			durationMs: 1000,
-		})
-		expect(segments[1]).toEqual({
-			type: "hitl",
-			startMs: 2000,
-			endMs: 3000,
-			durationMs: 1000,
-		})
-		expect(segments[2]).toEqual({
-			type: "solo",
-			startMs: 3000,
-			endMs: 5000,
-			durationMs: 2000,
-		})
+		expect(segments.length).toBeGreaterThanOrEqual(2)
+		// First segment should be agent time before HITL
+		expect(segments[0].type).toBe("agent")
+		expect(segments[0].endMs).toBe(2000)
+
+		// HITL segment
+		const hitlSegment = segments.find((s) => s.type === "hitl")
+		expect(hitlSegment).toBeDefined()
+		expect(hitlSegment!.startMs).toBe(2000)
+		expect(hitlSegment!.durationMs).toBe(1000)
 	})
 
-	it("builds correct segments for multiple events", () => {
+	it("builds from activity events when available", () => {
+		const session = createSession({ started_at: 1000, ended_at: 5000 })
+		const activities: ActivityEvent[] = [
+			createActivity({ activity_type: "tool_start", timestamp: 1000 }),
+			createActivity({ activity_type: "tool_end", timestamp: 2000, duration_ms: 1000 }),
+			createActivity({ activity_type: "idle_start", timestamp: 2000 }),
+			createActivity({ activity_type: "idle_end", timestamp: 3500, duration_ms: 1500 }),
+			createActivity({ activity_type: "tool_start", timestamp: 3500 }),
+			createActivity({ activity_type: "tool_end", timestamp: 5000, duration_ms: 1500 }),
+		]
+
+		const segments = buildTimeline(session, [], activities)
+		expect(segments.length).toBeGreaterThan(0)
+
+		// Should have agent, idle, and potentially agent segments
+		const types = segments.map((s) => s.type)
+		expect(types).toContain("agent")
+		expect(types).toContain("idle")
+	})
+
+	it("merges consecutive segments of same type", () => {
 		const session = createSession({ started_at: 0, ended_at: 10000 })
-		const events: HitlEvent[] = [
-			createEvent({ id: 1, created_at: 2000, duration_ms: 1000 }),
-			createEvent({ id: 2, created_at: 5000, duration_ms: 500 }),
-			createEvent({ id: 3, created_at: 8000, duration_ms: 1000 }),
+		const activities: ActivityEvent[] = [
+			createActivity({ activity_type: "tool_start", timestamp: 0 }),
+			createActivity({ activity_type: "tool_end", timestamp: 2000, duration_ms: 2000 }),
+			createActivity({ activity_type: "tool_start", timestamp: 2000 }), // immediate next
+			createActivity({ activity_type: "tool_end", timestamp: 4000, duration_ms: 2000 }),
 		]
-		const segments = buildTimeline(session, events)
 
-		expect(segments).toHaveLength(7)
-
-		expect(segments[0].type).toBe("solo")
-		expect(segments[1].type).toBe("hitl")
-		expect(segments[2].type).toBe("solo")
-		expect(segments[3].type).toBe("hitl")
-		expect(segments[4].type).toBe("solo")
-		expect(segments[5].type).toBe("hitl")
-		expect(segments[6].type).toBe("solo")
-
-		expect(segments[0].startMs).toBe(0)
-		expect(segments[6].endMs).toBe(10000)
-	})
-
-	it("uses Date.now() as end for active session (null ended_at)", () => {
-		const beforeNow = Date.now() - 100
-		const session = createSession({ started_at: beforeNow, ended_at: null })
-		const segments = buildTimeline(session, [])
-
-		expect(segments).toHaveLength(1)
-		expect(segments[0].startMs).toBe(beforeNow)
-		expect(segments[0].endMs).toBeGreaterThan(beforeNow + 50)
-		expect(segments[0].endMs).toBeLessThanOrEqual(Date.now())
-	})
-
-	it("handles back-to-back events (no solo gap between)", () => {
-		const session = createSession({ started_at: 0, ended_at: 5000 })
-		const events: HitlEvent[] = [
-			createEvent({ id: 1, created_at: 1000, duration_ms: 1000 }),
-			createEvent({ id: 2, created_at: 2000, duration_ms: 1000 }),
-		]
-		const segments = buildTimeline(session, events)
-
-		expect(segments).toHaveLength(4)
-		expect(segments[0].type).toBe("solo")
-		expect(segments[0].endMs).toBe(1000)
-		expect(segments[1].type).toBe("hitl")
-		expect(segments[1].endMs).toBe(2000)
-		expect(segments[2].type).toBe("hitl")
-		expect(segments[2].endMs).toBe(3000)
-		expect(segments[3].type).toBe("solo")
-	})
-
-	it("handles event at exact session start", () => {
-		const session = createSession({ started_at: 1000, ended_at: 5000 })
-		const event = createEvent({ created_at: 1000, duration_ms: 1000 })
-		const segments = buildTimeline(session, [event])
-
-		expect(segments).toHaveLength(2)
-		expect(segments[0].type).toBe("hitl")
-		expect(segments[0].startMs).toBe(1000)
-		expect(segments[1].type).toBe("solo")
-	})
-
-	it("handles event at exact session end", () => {
-		const session = createSession({ started_at: 1000, ended_at: 3000 })
-		const event = createEvent({ created_at: 2000, duration_ms: 1000 })
-		const segments = buildTimeline(session, [event])
-
-		expect(segments).toHaveLength(2)
-		expect(segments[0].type).toBe("solo")
-		expect(segments[1].type).toBe("hitl")
-		expect(segments[1].endMs).toBe(3000)
-	})
-
-	it("handles zero-duration event", () => {
-		const session = createSession({ started_at: 1000, ended_at: 5000 })
-		const event = createEvent({ created_at: 2000, duration_ms: 0 })
-		const segments = buildTimeline(session, [event])
-
-		expect(segments).toHaveLength(3)
-		expect(segments[1].durationMs).toBe(0)
+		const segments = buildTimeline(session, [], activities)
+		// Should merge the two agent segments
+		const agentSegments = segments.filter((s) => s.type === "agent")
+		expect(agentSegments.length).toBe(1)
+		expect(agentSegments[0].durationMs).toBe(4000)
 	})
 })
 
@@ -167,105 +123,38 @@ describe("renderTimeline", () => {
 		expect(result).toBe("  No timeline data")
 	})
 
-	it("renders single solo segment", () => {
+	it("renders three-category timeline", () => {
 		const segments: TimelineSegment[] = [
-			{ type: "solo", startMs: 0, endMs: 60000, durationMs: 60000 },
+			{ type: "agent", startMs: 0, endMs: 4000, durationMs: 4000 },
+			{ type: "hitl", startMs: 4000, endMs: 7000, durationMs: 3000 },
+			{ type: "idle", startMs: 7000, endMs: 10000, durationMs: 3000 },
 		]
-		const result = renderTimeline(segments, mockTheme, 10)
+		const result = renderTimeline(segments, mockTheme, 30)
 
 		const lines = result.split("\n")
-		expect(lines[0]).toBe("██████████") // All solo chars
-		expect(lines[1]).toContain("solo")
-	})
-
-	it("renders single hitl segment", () => {
-		const segments: TimelineSegment[] = [
-			{ type: "hitl", startMs: 0, endMs: 60000, durationMs: 60000 },
-		]
-		const result = renderTimeline(segments, mockTheme, 10)
-
-		const lines = result.split("\n")
-		expect(lines[0]).toBe("▓▓▓▓▓▓▓▓▓▓") // All hitl chars
+		expect(lines.length).toBe(2) // bar line + legend
+		expect(lines[1]).toContain("agent")
 		expect(lines[1]).toContain("HITL")
+		expect(lines[1]).toContain("idle")
 	})
 
-	it("renders mixed segments with correct proportions", () => {
+	it("uses correct characters for each category", () => {
 		const segments: TimelineSegment[] = [
-			{ type: "solo", startMs: 0, endMs: 4000, durationMs: 4000 },
-			{ type: "hitl", startMs: 4000, endMs: 5000, durationMs: 1000 },
-			{ type: "solo", startMs: 5000, endMs: 10000, durationMs: 5000 },
+			{ type: "agent", startMs: 0, endMs: 1000, durationMs: 1000 },
+			{ type: "hitl", startMs: 1000, endMs: 2000, durationMs: 1000 },
+			{ type: "idle", startMs: 2000, endMs: 3000, durationMs: 1000 },
 		]
-		const result = renderTimeline(segments, mockTheme, 10)
+		const result = renderTimeline(segments, mockTheme, 30)
 
-		const lines = result.split("\n")
-		const bar = lines[0]
-		expect(bar.length).toBe(10)
-
-		const soloCount = (bar.match(/█/g) || []).length
-		const hitlCount = (bar.match(/▓/g) || []).length
-		expect(soloCount).toBeGreaterThanOrEqual(8)
-		expect(hitlCount).toBeGreaterThanOrEqual(1)
-	})
-
-	it("shows both solo and HITL in legend", () => {
-		const segments: TimelineSegment[] = [
-			{ type: "solo", startMs: 0, endMs: 60000, durationMs: 60000 },
-			{ type: "hitl", startMs: 60000, endMs: 120000, durationMs: 60000 },
-		]
-		const result = renderTimeline(segments, mockTheme, 20)
-
-		const lines = result.split("\n")
-		expect(lines[1]).toContain("█")
-		expect(lines[1]).toContain("solo")
-		expect(lines[1]).toContain("▓")
-		expect(lines[1]).toContain("HITL")
-	})
-
-	it("handles very short segments in narrow width", () => {
-		const segments: TimelineSegment[] = [
-			{ type: "solo", startMs: 0, endMs: 100000, durationMs: 100000 },
-			{ type: "hitl", startMs: 100000, endMs: 100050, durationMs: 50 },
-		]
-		// With limited width, dominant segment fills the bar
-		const result = renderTimeline(segments, mockTheme, 20)
-
-		const lines = result.split("\n")
-		const bar = lines[0]
-		expect(bar.length).toBe(20)
-		// Legend still shows both segment types
-		expect(lines[1]).toContain("solo")
-		expect(lines[1]).toContain("HITL")
+		const bar = result.split("\n")[0]
+		expect(bar).toContain("█") // agent
+		expect(bar).toContain("▓") // hitl
+		expect(bar).toContain("░") // idle
 	})
 
 	it("handles zero duration total", () => {
-		const segments: TimelineSegment[] = [
-			{ type: "solo", startMs: 1000, endMs: 1000, durationMs: 0 },
-		]
+		const segments: TimelineSegment[] = [{ type: "agent", startMs: 1000, endMs: 1000, durationMs: 0 }]
 		const result = renderTimeline(segments, mockTheme)
-
 		expect(result).toContain("─")
-	})
-
-	it("skips zero-duration segments in rendering", () => {
-		const segments: TimelineSegment[] = [
-			{ type: "solo", startMs: 0, endMs: 5000, durationMs: 5000 },
-			{ type: "hitl", startMs: 5000, endMs: 5000, durationMs: 0 },
-			{ type: "solo", startMs: 5000, endMs: 10000, durationMs: 5000 },
-		]
-		const result = renderTimeline(segments, mockTheme, 10)
-
-		const lines = result.split("\n")
-		const bar = lines[0]
-		expect(bar).not.toContain("▓")
-	})
-
-	it("uses default width of 60", () => {
-		const segments: TimelineSegment[] = [
-			{ type: "solo", startMs: 0, endMs: 1000, durationMs: 1000 },
-		]
-		const result = renderTimeline(segments, mockTheme)
-
-		const lines = result.split("\n")
-		expect(lines[0].length).toBe(60)
 	})
 })

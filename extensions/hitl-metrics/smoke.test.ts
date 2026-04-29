@@ -134,9 +134,10 @@ describe("HITL Metrics Smoke Tests", () => {
 			// Verify timeline appears
 			expect(output).toContain("Session Timeline")
 
-			// Verify legend characters appear (solo and HITL indicators)
-			expect(output).toContain("solo")
+			// Verify legend characters appear (agent, HITL, idle indicators)
+			expect(output).toContain("agent")
 			expect(output).toContain("HITL")
+			expect(output).toContain("idle")
 		})
 	})
 

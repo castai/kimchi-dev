@@ -10,6 +10,8 @@ import {
 	closeOrphanSessions,
 	getRecentSessions,
 	getSessionStats,
+	recordPermissionEvent,
+	getSessionPermissionEvents,
 } from "./session.js"
 
 describe("Session Management", () => {
@@ -37,7 +39,7 @@ describe("Session Management", () => {
 			expect(typeof session?.id).toBe("string")
 		})
 
-		it("returns existing active session within 5-minute window", () => {
+		it("returns existing active session within 2.hour window", () => {
 			const first = getOrCreateSession(db, "project-abc-123")
 			const second = getOrCreateSession(db, "project-abc-123")
 
@@ -56,8 +58,9 @@ describe("Session Management", () => {
 			expect(second?.id).not.toBe(first?.id)
 		})
 
-		it("creates new session when old session exceeded 5-min timeout", () => {
-			const oldTime = Date.now() - 6 * 60 * 1000
+		it("creates new session when old session exceeded 2.h timeout", async () => {
+			// Insert active session 3 hours ago — beyond the 2h resume window
+			const oldTime = Date.now() - 3 * 60 * 60 * 1000
 			db.run(
 				"INSERT INTO hitl_sessions (id, project_hash, started_at, status) VALUES (?, ?, ?, ?)",
 				["old-session-id", "project-abc-123", oldTime, "active"],
@@ -192,11 +195,11 @@ describe("Session Management", () => {
 			consoleSpy.mockRestore()
 		})
 
-		it("uses default threshold of 5 minutes", () => {
-			const sixMinsAgo = Date.now() - 6 * 60 * 1000
+		it("uses default threshold of 2 hours", () => {
+			const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000
 			db.run(
 				"INSERT INTO hitl_sessions (id, project_hash, started_at, status) VALUES (?, ?, ?, ?)",
-				["orphan-default", "project-x", sixMinsAgo, "active"],
+				["orphan-default", "project-x", threeHoursAgo, "active"],
 			)
 
 			const count = closeOrphanSessions(db)
@@ -225,7 +228,7 @@ describe("Session Management", () => {
 				["session-newest", "project-x", 3000, "closed"],
 			)
 
-			const sessions = getRecentSessions(db, "project-x")
+			const sessions = getRecentSessions(db)
 
 			expect(sessions).toHaveLength(3
 )
@@ -235,7 +238,7 @@ describe("Session Management", () => {
 		})
 
 		it("returns empty array when no sessions exist", () => {
-			const sessions = getRecentSessions(db, "nonexistent-project")
+			const sessions = getRecentSessions(db)
 			expect(sessions).toEqual([])
 		})
 
@@ -253,7 +256,7 @@ describe("Session Management", () => {
 				["session-3", "project-x", 3000, "closed"],
 			)
 
-			const sessions = getRecentSessions(db, "project-x", 2)
+			const sessions = getRecentSessions(db, 2)
 			expect(sessions).toHaveLength(2)
 			expect(sessions[0].id).toBe("session-3")
 			expect(sessions[1].id).toBe("session-2")
@@ -267,11 +270,11 @@ describe("Session Management", () => {
 				)
 			}
 
-			const sessions = getRecentSessions(db, "project-x")
+			const sessions = getRecentSessions(db)
 			expect(sessions.length).toBeLessThanOrEqual(10)
 		})
 
-		it("filters by project hash", () => {
+		it("returns all sessions from the DB (no hash filter needed — DB is project-scoped)", () => {
 			db.run(
 				"INSERT INTO hitl_sessions (id, project_hash, started_at, status) VALUES (?, ?, ?, ?)",
 				["session-a", "project-a", 1000, "active"],
@@ -281,21 +284,23 @@ describe("Session Management", () => {
 				["session-b", "project-b", 2000, "active"],
 			)
 
-			const sessionsA = getRecentSessions(db, "project-a")
-			expect(sessionsA).toHaveLength(1)
-			expect(sessionsA[0].project_hash).toBe("project-a")
+			const sessions = getRecentSessions(db)
+			// Both sessions returned — DB is already scoped to one project
+			expect(sessions).toHaveLength(2)
+			expect(sessions[0].id).toBe("session-b") // newest first
+			expect(sessions[1].id).toBe("session-a")
 		})
 
 		it("returns empty array on database closure", () => {
 			db.close()
-			const sessions = getRecentSessions(db, "project-x")
+			const sessions = getRecentSessions(db)
 			expect(sessions).toEqual([])
 		})
 	})
 
 	describe("getSessionStats", () => {
 		it("returns zeros for empty project", () => {
-			const stats = getSessionStats(db, "empty-project")
+			const stats = getSessionStats(db)
 
 			expect(stats.total_sessions).toBe(0)
 			expect(stats.total_hitl_time_ms).toBe(0)
@@ -304,14 +309,14 @@ describe("Session Management", () => {
 		})
 
 		it("returns correct aggregates", () => {
-			// Create session
+			// Create sessions with hitl_time_ms set (stats now reads from sessions, not events)
 			db.run(
-				"INSERT INTO hitl_sessions (id, project_hash, started_at, status) VALUES (?, ?, ?, ?)",
-				["session-1", "project-x", 1000, "active"],
+				"INSERT INTO hitl_sessions (id, project_hash, started_at, status, hitl_time_ms) VALUES (?, ?, ?, ?, ?)",
+				["session-1", "project-x", 1000, "active", 3000],
 			)
 			db.run(
-				"INSERT INTO hitl_sessions (id, project_hash, started_at, status) VALUES (?, ?, ?, ?)",
-				["session-2", "project-x", 2000, "closed"],
+				"INSERT INTO hitl_sessions (id, project_hash, started_at, status, hitl_time_ms) VALUES (?, ?, ?, ?, ?)",
+				["session-2", "project-x", 2000, "closed", 3000],
 			)
 
 			// Create events
@@ -328,7 +333,7 @@ describe("Session Management", () => {
 				["session-2", "tool-c", 3, 3000, "[]", 5000],
 			)
 
-			const stats = getSessionStats(db, "project-x")
+			const stats = getSessionStats(db)
 
 			expect(stats.total_sessions).toBe(2)
 			expect(stats.interaction_count).toBe(3)
@@ -346,7 +351,7 @@ describe("Session Management", () => {
 				["session-1", "tool-a", 1, 5000, "[]", 2000],
 			)
 
-			const stats = getSessionStats(db, "project-x")
+			const stats = getSessionStats(db)
 
 			expect(stats.avg_wait_ms).toBe(5000)
 		})
@@ -357,7 +362,7 @@ describe("Session Management", () => {
 				["session-1", "project-x", 1000, "active"],
 			)
 
-			const stats = getSessionStats(db, "project-x")
+			const stats = getSessionStats(db)
 
 			expect(stats.total_sessions).toBe(1)
 			expect(stats.interaction_count).toBe(0)
@@ -365,7 +370,7 @@ describe("Session Management", () => {
 			expect(stats.avg_wait_ms).toBe(0)
 		})
 
-		it("filters by project hash", () => {
+		it("counts all sessions in DB (no hash filter needed — DB is project-scoped)", () => {
 			db.run(
 				"INSERT INTO hitl_sessions (id, project_hash, started_at, status) VALUES (?, ?, ?, ?)",
 				["session-a", "project-a", 1000, "active"],
@@ -375,18 +380,152 @@ describe("Session Management", () => {
 				["session-b", "project-b", 2000, "active"],
 			)
 
-			const statsA = getSessionStats(db, "project-a")
-			expect(statsA.total_sessions).toBe(1)
+			const stats = getSessionStats(db)
+			expect(stats.total_sessions).toBe(2) // Both sessions counted — DB is already project-scoped
 		})
 
 		it("returns zeros on database closure", () => {
 			db.close()
-			const stats = getSessionStats(db, "project-x")
+			const stats = getSessionStats(db)
 
 			expect(stats.total_sessions).toBe(0)
 			expect(stats.total_hitl_time_ms).toBe(0)
 			expect(stats.interaction_count).toBe(0)
 			expect(stats.avg_wait_ms).toBe(0)
+		})
+	})
+
+	describe("recordPermissionEvent", () => {
+		it("records a permission event", () => {
+			db.run(
+				"INSERT INTO hitl_sessions (id, project_hash, started_at, status) VALUES (?, ?, ?, ?)",
+				["session-perm", "project-x", 1000, "active"],
+			)
+
+			const result = recordPermissionEvent(
+				db,
+				"session-perm",
+				"bash",
+				"rm -rf /tmp/*",
+				"allow",
+				500,
+			)
+
+			expect(result).toBe(true)
+
+			const events = getSessionPermissionEvents(db, "session-perm")
+			expect(events).toHaveLength(1)
+			expect(events[0].tool_name).toBe("bash")
+			expect(events[0].action).toBe("rm -rf /tmp/*")
+			expect(events[0].outcome).toBe("allow")
+			expect(events[0].duration_ms).toBe(500)
+		})
+
+		it("records different outcomes", () => {
+			db.run(
+				"INSERT INTO hitl_sessions (id, project_hash, started_at, status) VALUES (?, ?, ?, ?)",
+				["session-outcomes", "project-x", 1000, "active"],
+			)
+
+			recordPermissionEvent(db, "session-outcomes", "bash", "cmd1", "allow", 100)
+			recordPermissionEvent(db, "session-outcomes", "bash", "cmd2", "allow_once", 200)
+			recordPermissionEvent(db, "session-outcomes", "bash", "cmd3", "deny", 300)
+			recordPermissionEvent(db, "session-outcomes", "bash", "cmd4", "blocked", 400, "Denied by rule")
+
+			const events = getSessionPermissionEvents(db, "session-outcomes")
+			expect(events).toHaveLength(4)
+			expect(events[0].outcome).toBe("allow")
+			expect(events[1].outcome).toBe("allow_once")
+			expect(events[2].outcome).toBe("deny")
+			expect(events[3].outcome).toBe("blocked")
+			expect(events[3].reason).toBe("Denied by rule")
+		})
+
+		it("is non-fatal when database is closed", () => {
+			db.close()
+			const result = recordPermissionEvent(
+				db,
+				"session-perm",
+				"bash",
+				"cmd",
+				"deny",
+				100,
+			)
+			expect(result).toBe(false)
+		})
+
+		it("is non-fatal when session does not exist", () => {
+			const result = recordPermissionEvent(
+				db,
+				"nonexistent-session",
+				"bash",
+				"cmd",
+				"allow",
+				100,
+			)
+			expect(result).toBe(false)
+		})
+	})
+
+	describe("getSessionPermissionEvents", () => {
+		it("returns empty array when no permission events exist", () => {
+			db.run(
+				"INSERT INTO hitl_sessions (id, project_hash, started_at, status) VALUES (?, ?, ?, ?)",
+				["session-empty", "project-x", 1000, "active"],
+			)
+
+			const events = getSessionPermissionEvents(db, "session-empty")
+			expect(events).toEqual([])
+		})
+
+		it("returns events in chronological order", () => {
+			db.run(
+				"INSERT INTO hitl_sessions (id, project_hash, started_at, status) VALUES (?, ?, ?, ?)",
+				["session-chron", "project-x", 1000, "active"],
+			)
+
+			recordPermissionEvent(db, "session-chron", "write", "file1", "allow", 100)
+			recordPermissionEvent(db, "session-chron", "write", "file2", "allow", 200)
+
+			const events = getSessionPermissionEvents(db, "session-chron")
+			expect(events).toHaveLength(2)
+			expect(events[0].action).toBe("file1")
+			expect(events[1].action).toBe("file2")
+		})
+
+		it("returns empty array on database closure", () => {
+			db.close()
+			const events = getSessionPermissionEvents(db, "any-session")
+			expect(events).toEqual([])
+		})
+	})
+
+	describe("getSessionStats with permission events", () => {
+		it("aggregates permission event stats", () => {
+			db.run(
+				"INSERT INTO hitl_sessions (id, project_hash, started_at, status) VALUES (?, ?, ?, ?)",
+				["session-perm-stats", "project-perm", 1000, "active"],
+			)
+
+			recordPermissionEvent(db, "session-perm-stats", "bash", "cmd1", "allow", 1000)
+			recordPermissionEvent(db, "session-perm-stats", "bash", "cmd2", "deny", 500)
+
+			const stats = getSessionStats(db)
+
+			expect(stats.permission_count).toBe(2)
+			expect(stats.total_permission_time_ms).toBe(1500)
+		})
+
+		it("returns zero permission stats when no permission events", () => {
+			db.run(
+				"INSERT INTO hitl_sessions (id, project_hash, started_at, status) VALUES (?, ?, ?, ?)",
+				["session-no-perm", "project-no-perm", 1000, "active"],
+			)
+
+			const stats = getSessionStats(db)
+
+			expect(stats.permission_count).toBe(0)
+			expect(stats.total_permission_time_ms).toBe(0)
 		})
 	})
 })

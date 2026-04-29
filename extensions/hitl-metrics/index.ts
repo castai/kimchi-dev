@@ -2,23 +2,25 @@
  * HITL Metrics Extension
  *
  * Extension entrypoint that registers tools to capture Human-in-the-Loop
- * interaction events from ask_user_questions tool calls.
+ * interaction events and tracks three categories of time:
+ * - Agent time: tool execution (excluding HITL)
+ * - HITL time: HITL tool duration (${HITL_TOOL_NAME})
+ * - Idle time: gaps between activities
  *
  * Hooks:
  * - session_start: Initialize database and session
- * - tool_execution_start: Track start times for duration calculation
- * - tool_result: Filter ask_user_questions calls and write events
- * - session_shutdown: Clean up and close session
+ * - input: Track user input, mark end of idle
+ * - tool_execution_start: Track all tool starts
+ * - tool_result: Filter all tools, categorize time, write events
+ * - session_shutdown: Clean up and close session with end cause
  */
 
-import { SessionManager } from "./session-manager.js"
+import { SessionManager, HITL_TOOL_NAME } from "./session-manager.js"
+import type { EndCause } from "./storage/index.js"
 import { handleMetricsCommand } from "./commands/metrics.js"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
 
-/**
- * Cache detection threshold in milliseconds.
- * Results faster than this are likely served from cache.
- */
+/** Cache detection threshold in milliseconds */
 const CACHE_THRESHOLD_MS = 50
 
 /**
@@ -47,7 +49,10 @@ export default function hitlMetricsExtension(pi: ExtensionAPI): void {
 				console.warn("[HITL] No cwd provided in session_start, skipping initialization")
 				return
 			}
-			manager.init(cwd)
+			// HITL_DB_PATH overrides the DB path entirely (useful for testing).
+			// When set, the dirname is created if missing and the file is "hitl.db" inside it.
+			const initOptions = process.env.HITL_DB_PATH ? { dbPath: process.env.HITL_DB_PATH } : {}
+			manager.init(cwd, initOptions)
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			console.warn(`[HITL] Error in session_start handler: ${message}`)
@@ -55,17 +60,26 @@ export default function hitlMetricsExtension(pi: ExtensionAPI): void {
 	})
 
 	// -------------------------------------------------------------------------
-	// Tool Execution Start: Track start times for duration calculation
+	// Input: Track user input (marks end of idle time)
+	// -------------------------------------------------------------------------
+	pi.on("input", async (event) => {
+		try {
+			// Skip extension-generated messages
+			if (event.source === "extension") return
+			manager.recordUserInput()
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			console.warn(`[HITL] Error in input handler: ${message}`)
+		}
+	})
+
+	// -------------------------------------------------------------------------
+	// Tool Execution Start: Track start times for all tools
 	// -------------------------------------------------------------------------
 	pi.on("tool_execution_start", async (event) => {
 		try {
-			// Only track ask_user_questions executions
-			if (event.toolName !== "ask_user_questions") return
-
-			// Store start time keyed by toolCallId
-			if (event.toolCallId) {
-				manager.recordStartTime(event.toolCallId)
-			}
+			if (!event.toolCallId) return
+			manager.recordToolStart(event.toolCallId, event.toolName)
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			console.warn(`[HITL] Error in tool_execution_start handler: ${message}`)
@@ -73,68 +87,36 @@ export default function hitlMetricsExtension(pi: ExtensionAPI): void {
 	})
 
 	// -------------------------------------------------------------------------
-	// Tool Result: Filter ask_user_questions and write events to DB
+	// Tool Result: Categorize and record all tool results
 	// -------------------------------------------------------------------------
 	pi.on("tool_result", async (event) => {
 		try {
-			// Skip non-ask_user_questions tools
-			if (event.toolName !== "ask_user_questions") return
-
-			// Skip error results
-			if (event.isError) return
-
-			// Get toolCallId for duration lookup
 			const toolCallId = (event as { toolCallId?: string }).toolCallId
-			if (!toolCallId) {
-				console.warn("[HITL] ask_user_questions result missing toolCallId")
-				return
-			}
+			if (!toolCallId) return
 
-			// Consume start time and compute duration
+			// Compute duration
 			const startTime = manager.consumeStartTime(toolCallId)
-			let durationMs: number
+			if (!startTime) return // Cached or orphaned result
 
-			if (startTime !== undefined) {
-				durationMs = Date.now() - startTime
+			const durationMs = Date.now() - startTime
+			if (durationMs < CACHE_THRESHOLD_MS) return // Likely cached
+
+			// Handle HITL tools specially
+			if (event.toolName === HITL_TOOL_NAME && !event.isError) {
+				// Extract question count from input
+				const input = (event as { input?: { questions?: unknown[] } }).input
+				const questionCount = input?.questions && Array.isArray(input.questions) 
+					? input.questions.length 
+					: 0
+
+				// Extract selected options from result
+				const result = (event as { result?: { selectedOptions?: string[] } }).result
+				const selectedOptions: string[] = result?.selectedOptions?.filter((o): o is string => typeof o === "string") || []
+
+				manager.recordEvent(event.toolName, questionCount, durationMs, selectedOptions)
 			} else {
-				// No matching start time — indicates cached result or restart
-				// Silently skip (don't record cached events)
-				return
-			}
-
-			// Skip cached results (duration below threshold indicates cache hit)
-			if (durationMs < CACHE_THRESHOLD_MS) {
-				return
-			}
-
-			// Extract question count from input (if available)
-			let questionCount = 0
-			const input = (event as { input?: { questions?: unknown[] } }).input
-			if (input?.questions && Array.isArray(input.questions)) {
-				questionCount = input.questions.length
-			}
-
-			// Extract selected options from result
-			const selectedOptions: string[] = []
-			const result = (event as { result?: { selectedOptions?: string[] } }).result
-			if (result?.selectedOptions && Array.isArray(result.selectedOptions)) {
-				for (const option of result.selectedOptions) {
-					if (typeof option === "string") {
-						selectedOptions.push(option)
-					}
-				}
-			}
-
-			// Record the event
-			const recorded = manager.recordEvent(
-				"ask_user_questions",
-				questionCount,
-				durationMs,
-				selectedOptions,
-			)
-
-			if (!recorded) {
-				console.warn("[HITL] Failed to record event (database error)")
+				// Record as regular tool execution (contributing to agent time)
+				manager.recordToolEnd(toolCallId, event.toolName, durationMs)
 			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
@@ -143,12 +125,14 @@ export default function hitlMetricsExtension(pi: ExtensionAPI): void {
 	})
 
 	// -------------------------------------------------------------------------
-	// Session Shutdown: Clean up and close session
+	// Session Shutdown: Clean up and close session with end cause
 	// -------------------------------------------------------------------------
 	pi.on("session_shutdown", async (event) => {
 		try {
-			const cause = (event as { cause?: "signal" | "disconnect" }).cause ?? "signal"
-			manager.close()
+			const rawCause = (event as { cause?: string }).cause
+			// "disconnect" = normal exit (connection closed), "signal" = killed
+			const endCause: EndCause = rawCause === "disconnect" ? "complete" : (rawCause as EndCause) ?? "signal"
+			manager.close(endCause)
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			console.warn(`[HITL] Error in session_shutdown handler: ${message}`)

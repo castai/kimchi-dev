@@ -1,29 +1,30 @@
 /**
  * /metrics Command Handler
  *
- * Displays HITL metrics for the current project by querying
- * accumulated data from the SQLite database.
+ * Displays HITL metrics for the current project with three-category
+ * time breakdown: agent, HITL, and idle time.
  */
 
 import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent"
 import type { Theme } from "@mariozechner/pi-coding-agent"
 import { formatMetrics, formatTimelineSection } from "../formatters.js"
-import { HitlDatabase, projectHash, getSessionStats, getRecentSessions, getSessionEvents } from "../storage/index.js"
+import {
+	HitlDatabase,
+	projectHash,
+	getSessionStats,
+	getRecentSessions,
+	getSessionEvents,
+	getSessionActivityEvents,
+} from "../storage/index.js"
 import { buildTimeline } from "../timeline.js"
 import type { HitlStats, HitlSession } from "../types.js"
 import { homedir } from "node:os"
-import { resolve } from "node:path"
+import { join, resolve } from "node:path"
 
-/** Storage directory path (shared with SessionManager) */
-const STORAGE_DIR = resolve(homedir(), ".hitl-metrics")
+const STORAGE_DIR = join(homedir(), ".kimchi", "metrics")
 
-/**
- * Create a fallback theme when no UI is available.
- * This satisfies the Theme type interface without actual color support.
- */
 function createFallbackTheme(): Theme {
 	const noOp = (text: string) => text
-	// Simple theme that just returns text unchanged
 	return {
 		name: "fallback",
 		fg: (_c: string, text: string) => text,
@@ -41,20 +42,14 @@ function createFallbackTheme(): Theme {
 	} as unknown as Theme
 }
 
-/**
- * Get metrics output for a project directory.
- * Opens a temporary DB connection, queries stats, formats output, closes DB.
- * Pure and testable — the command handler is just glue.
- *
- * @param cwd - Project directory path
- * @param theme - Theme for color/formatting
- * @returns Formatted metrics string (or empty state message)
- */
-export async function getMetricsOutput(cwd: string, theme: Theme): Promise<string> {
+export async function getMetricsOutput(
+	cwd: string,
+	theme: Theme,
+	options: { dbPath?: string } = {},
+): Promise<string> {
 	const hash = projectHash(cwd)
-	const dbPath = resolve(STORAGE_DIR, `${hash}.db`)
+	const dbPath = options.dbPath ?? resolve(STORAGE_DIR, hash, "hitl.db")
 
-	// Check if DB file exists before trying to open
 	const { existsSync } = await import("node:fs")
 	if (!existsSync(dbPath)) {
 		return "No HITL data recorded yet"
@@ -64,23 +59,21 @@ export async function getMetricsOutput(cwd: string, theme: Theme): Promise<strin
 	db.open()
 
 	try {
-		// Read-only: no need to initSchema (tables must already exist)
-		const stats: HitlStats = getSessionStats(db, hash)
-		const sessions: HitlSession[] = getRecentSessions(db, hash, 10)
+		const stats: HitlStats = getSessionStats(db)
+		const sessions: HitlSession[] = getRecentSessions(db, 10)
 
-		// Empty check — stats might be zero even if DB exists
 		if (stats.total_sessions === 0) {
 			return "No HITL data recorded yet"
 		}
 
-		// Find most recent closed session for timeline
-		const mostRecentClosedSession = sessions.find(s => s.status === "closed" && s.ended_at !== null)
-		
-		// Build timeline section if we have a closed session
+		// Find most recent closed session for timeline with activity data
+		const mostRecentClosedSession = sessions.find((s) => s.status === "closed" && s.ended_at !== null)
+
 		let timelineSection = ""
-		if (mostRecentClosedSession !== undefined) {
+		if (mostRecentClosedSession) {
 			const events = getSessionEvents(db, mostRecentClosedSession.id)
-			const segments = buildTimeline(mostRecentClosedSession, events)
+			const activities = getSessionActivityEvents(db, mostRecentClosedSession.id)
+			const segments = buildTimeline(mostRecentClosedSession, events, activities)
 			timelineSection = formatTimelineSection(segments, theme, 60)
 		}
 
@@ -94,13 +87,6 @@ export async function getMetricsOutput(cwd: string, theme: Theme): Promise<strin
 	}
 }
 
-/**
- * Handle the /metrics command.
- * Queries HITL metrics for the current project and displays them via UI.
- *
- * @param _args - Command arguments (unused)
- * @param ctx - Extension command context
- */
 export async function handleMetricsCommand(_args: string, ctx: ExtensionCommandContext): Promise<void> {
 	try {
 		const cwd = ctx.cwd
@@ -109,11 +95,8 @@ export async function handleMetricsCommand(_args: string, ctx: ExtensionCommandC
 			return
 		}
 
-		let theme: Theme
 		if (!ctx.hasUI) {
-			// No UI available — use fallback theme
-			theme = createFallbackTheme()
-			const output = await getMetricsOutput(cwd, theme)
+			const output = await getMetricsOutput(cwd, createFallbackTheme())
 			console.log("HITL Metrics:")
 			console.log(output)
 			return
@@ -122,7 +105,6 @@ export async function handleMetricsCommand(_args: string, ctx: ExtensionCommandC
 		const output = await getMetricsOutput(cwd, ctx.ui.theme)
 		ctx.ui.notify(output, "info")
 	} catch (error) {
-		// Non-fatal error handling — show graceful message
 		const message = error instanceof Error ? error.message : String(error)
 		console.warn(`[HITL] Error in metrics command: ${message}`)
 		ctx.ui.notify("No HITL data recorded yet", "info")

@@ -1,27 +1,14 @@
-/**
- * Test helper for creating mock Theme instances
- *
- * Provides a mock Theme that satisfies the interface for deterministic tests.
- */
-
-import type { Theme, ThemeColor } from "@mariozechner/pi-coding-agent"
-
-type NoOp = (text: string) => string
-
-const noOp: NoOp = (text) => text
-
-// ThemeBg type is not exported from main package, but we know the valid values
-type ThemeBg = "selectedBg" | "userMessageBg" | "customMessageBg" | "toolPendingBg" | "toolSuccessBg" | "toolErrorBg"
+import type { Theme } from "@mariozechner/pi-coding-agent"
 
 /**
- * Create a minimal mock Theme for testing.
- * Returns plain strings without ANSI codes for deterministic tests.
+ * Creates a mock theme for testing purposes.
  */
 export function createMockTheme(): Theme {
+	const noOp = (text: string) => text
 	return {
 		name: "mock",
-		fg: (_color: ThemeColor, text: string) => text,
-		bg: (_color: ThemeBg, text: string) => text,
+		fg: (_c: "success" | "error" | "warning" | "muted" | "accent" | "dim" | "toolTitle" | string, text: string) => text,
+		bg: (_c: string, text: string) => text,
 		bold: noOp,
 		italic: noOp,
 		underline: noOp,

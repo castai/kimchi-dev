@@ -10,8 +10,8 @@ import { HitlDatabase, projectHash, getSessionStats, getRecentSessions } from ".
 import type { HitlStats, HitlSession } from "../types.js"
 import type { ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-agent"
 import { homedir } from "node:os"
-import { resolve } from "node:path"
-import { mkdtempSync, rmSync } from "node:fs"
+import { resolve, join } from "node:path"
+import { mkdtempSync, rmSync, mkdirSync } from "node:fs"
 import { createMockTheme } from "../test-helpers/mock-theme.js"
 
 const mockTheme: Theme = createMockTheme()
@@ -84,6 +84,17 @@ function seedDatabase(db: HitlDatabase, hash: string): void {
 		"INSERT INTO hitl_events (session_id, tool_name, question_count, duration_ms, selected_options, created_at) VALUES (?, ?, ?, ?, ?, ?)",
 		[sessionId2, "ask_user_questions", 3, 2000, JSON.stringify(["option3", "option4"]), now - 800000],
 	)
+
+	// Set session time metrics so getSessionStats reads them correctly
+	// (stats now sums session.hitl_time_ms, not hitl_events.duration_ms)
+	db.run(
+		"UPDATE hitl_sessions SET agent_time_ms = 10000, hitl_time_ms = 2000, idle_time_ms = 500 WHERE id = ?",
+		[sessionId1],
+	)
+	db.run(
+		"UPDATE hitl_sessions SET agent_time_ms = 5000, hitl_time_ms = 2000, idle_time_ms = 300 WHERE id = ?",
+		[sessionId2],
+	)
 }
 
 // --- Tests ---
@@ -143,8 +154,9 @@ describe("handleMetricsCommand", () => {
 
 	it("should display metrics via notify when DB has data", async () => {
 		const projectHashStr = projectHash(tempDir)
-		const storageDir = resolve(homedir(), ".hitl-metrics")
-		const expectedDbPath = resolve(storageDir, `${projectHashStr}.db`)
+		const storageDir = join(homedir(), ".kimchi", "metrics", projectHashStr)
+		const expectedDbPath = join(storageDir, "hitl.db")
+		mkdirSync(storageDir, { recursive: true })
 
 		// Create DB at expected location
 		const db = new HitlDatabase(expectedDbPath)
@@ -228,8 +240,8 @@ describe("storage integration", () => {
 		const db2 = new HitlDatabase(dbPath)
 		db2.open()
 
-		const stats: HitlStats = getSessionStats(db2, hash)
-		const sessions: HitlSession[] = getRecentSessions(db2, hash, 10)
+		const stats: HitlStats = getSessionStats(db2)
+		const sessions: HitlSession[] = getRecentSessions(db2, 10)
 
 		expect(stats.total_sessions).toBe(2)
 		expect(stats.interaction_count).toBe(3)
@@ -250,8 +262,8 @@ describe("storage integration", () => {
 		db.open()
 		db.initSchema()
 
-		const stats: HitlStats = getSessionStats(db, hash)
-		const sessions: HitlSession[] = getRecentSessions(db, hash, 10)
+		const stats: HitlStats = getSessionStats(db)
+		const sessions: HitlSession[] = getRecentSessions(db, 10)
 
 		expect(stats.total_sessions).toBe(0)
 		expect(stats.interaction_count).toBe(0)
@@ -282,8 +294,9 @@ describe("timeline integration", () => {
 	it("getMetricsOutput includes timeline for closed session with events", async () => {
 		const { getMetricsOutput } = await import("./metrics.js")
 		const projectHashStr = projectHash(tempDir)
-		const storageDir = resolve(homedir(), ".hitl-metrics")
-		const expectedDbPath = resolve(storageDir, `${projectHashStr}.db`)
+		const storageDir = join(homedir(), ".kimchi", "metrics", projectHashStr)
+		const expectedDbPath = join(storageDir, "hitl.db")
+		mkdirSync(storageDir, { recursive: true })
 
 		// Create DB at expected location
 		const db = new HitlDatabase(expectedDbPath)
@@ -293,19 +306,22 @@ describe("timeline integration", () => {
 		const now = Date.now()
 		const sessionId = "test-session-timeline"
 
-		// Insert a closed session
+		// Insert a closed session with time data for timeline rendering
 		db.run(
-			"INSERT INTO hitl_sessions (id, project_hash, started_at, ended_at, status) VALUES (?, ?, ?, ?, ?)",
-			[sessionId, projectHashStr, now - 3600000, now - 60000, "closed"],
+			`INSERT INTO hitl_sessions (id, project_hash, started_at, ended_at, status, end_cause, agent_time_ms, hitl_time_ms, idle_time_ms)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			[sessionId, projectHashStr, now - 3600000, now - 60000, "closed", "complete", 120000, 120000, 60000],
 		)
 
 		// Insert events for the session
 		db.run(
-			"INSERT INTO hitl_events (session_id, tool_name, question_count, duration_ms, selected_options, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+			`INSERT INTO hitl_events (session_id, tool_name, question_count, duration_ms, selected_options, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
 			[sessionId, "ask_user_questions", 2, 120000, JSON.stringify(["option1"]), now - 3500000],
 		)
 		db.run(
-			"INSERT INTO hitl_events (session_id, tool_name, question_count, duration_ms, selected_options, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+			`INSERT INTO hitl_events (session_id, tool_name, question_count, duration_ms, selected_options, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
 			[sessionId, "ask_user_questions", 1, 60000, JSON.stringify(["option2"]), now - 3300000],
 		)
 
@@ -313,11 +329,12 @@ describe("timeline integration", () => {
 
 		const mockTheme = createMockTheme()
 
-		const output = await getMetricsOutput(tempDir, mockTheme as Theme)
+		const output = await getMetricsOutput(tempDir, mockTheme as Theme, { dbPath: expectedDbPath })
 
 		expect(output).toContain("Session Timeline")
-		expect(output).toContain("solo")
+		expect(output).toContain("agent")
 		expect(output).toContain("HITL")
+		expect(output).toContain("idle")
 
 		// Cleanup
 		try {
@@ -330,8 +347,9 @@ describe("timeline integration", () => {
 	it("getMetricsOutput omits timeline when no closed sessions exist", async () => {
 		const { getMetricsOutput } = await import("./metrics.js")
 		const projectHashStr = projectHash(tempDir)
-		const storageDir = resolve(homedir(), ".hitl-metrics")
-		const expectedDbPath = resolve(storageDir, `${projectHashStr}.db`)
+		const storageDir = join(homedir(), ".kimchi", "metrics", projectHashStr)
+		const expectedDbPath = join(storageDir, "hitl.db")
+		mkdirSync(storageDir, { recursive: true })
 
 		// Create DB at expected location
 		const db = new HitlDatabase(expectedDbPath)
@@ -343,15 +361,16 @@ describe("timeline integration", () => {
 
 		// Insert only an active session (no closed sessions)
 		db.run(
-			"INSERT INTO hitl_sessions (id, project_hash, started_at, ended_at, status) VALUES (?, ?, ?, ?, ?)",
-			[sessionId, projectHashStr, now - 3600000, null, "active"],
+			`INSERT INTO hitl_sessions (id, project_hash, started_at, ended_at, status, end_cause, agent_time_ms, hitl_time_ms, idle_time_ms)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			[sessionId, projectHashStr, now - 3600000, null, "active", null, 0, 0, 0],
 		)
 
 		db.close()
 
 		const mockTheme = createMockTheme()
 
-		const output = await getMetricsOutput(tempDir, mockTheme as Theme)
+		const output = await getMetricsOutput(tempDir, mockTheme as Theme, { dbPath: expectedDbPath })
 
 		// Should have metrics but no timeline section
 		expect(output).toContain("Total sessions")
@@ -367,8 +386,9 @@ describe("timeline integration", () => {
 
 	it("metrics command shows timeline when DB has closed session data", async () => {
 		const projectHashStr = projectHash(tempDir)
-		const storageDir = resolve(homedir(), ".hitl-metrics")
-		const expectedDbPath = resolve(storageDir, `${projectHashStr}.db`)
+		const storageDir = join(homedir(), ".kimchi", "metrics", projectHashStr)
+		const expectedDbPath = join(storageDir, "hitl.db")
+		mkdirSync(storageDir, { recursive: true })
 
 		// Create DB at expected location
 		const db = new HitlDatabase(expectedDbPath)
@@ -378,13 +398,15 @@ describe("timeline integration", () => {
 		const now = Date.now()
 		const sessionId = "test-session-closed"
 
-		// Insert a closed session with events
+		// Insert a closed session with time data
 		db.run(
-			"INSERT INTO hitl_sessions (id, project_hash, started_at, ended_at, status) VALUES (?, ?, ?, ?, ?)",
-			[sessionId, projectHashStr, now - 3600000, now - 60000, "closed"],
+			`INSERT INTO hitl_sessions (id, project_hash, started_at, ended_at, status, end_cause, agent_time_ms, hitl_time_ms, idle_time_ms)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			[sessionId, projectHashStr, now - 3600000, now - 60000, "closed", "complete", 120000, 120000, 60000],
 		)
 		db.run(
-			"INSERT INTO hitl_events (session_id, tool_name, question_count, duration_ms, selected_options, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+			`INSERT INTO hitl_events (session_id, tool_name, question_count, duration_ms, selected_options, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
 			[sessionId, "ask_user_questions", 2, 120000, JSON.stringify(["option1"]), now - 3500000],
 		)
 
@@ -398,8 +420,9 @@ describe("timeline integration", () => {
 		expect(notifyCall).toHaveBeenCalled()
 		const notifiedMessage = notifyCall.mock.calls[0][0] as string
 		expect(notifiedMessage).toContain("Session Timeline")
-		expect(notifiedMessage).toContain("solo")
+		expect(notifiedMessage).toContain("agent")
 		expect(notifiedMessage).toContain("HITL")
+		expect(notifiedMessage).toContain("idle")
 
 		// Cleanup
 		try {

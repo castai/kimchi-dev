@@ -2,158 +2,136 @@
  * HITL Metrics Formatters
  *
  * Pure formatting utilities for displaying HITL metrics in the TUI.
- * No side effects — completely testable.
+ * Updated to support three-category time tracking and end causes.
  */
 
 import type { HitlStats, HitlSession, TimelineSegment } from "./types.js"
 import { renderTimeline } from "./timeline.js"
-
-// Use the Theme type from @mariozechner/pi-coding-agent
 import type { Theme } from "@mariozechner/pi-coding-agent"
 
-/**
- * Convert milliseconds to human-readable "Xh Ym Zs" format.
- * - Omits zero-value leading segments (e.g., no "0h" if < 1 hour)
- * - Always shows at least "0s" for zero input
- * - Rounds seconds to whole numbers
- */
 export function formatDuration(ms: number): string {
 	if (ms < 0) ms = 0
 	if (ms === 0) return "0s"
-
 	const totalSeconds = Math.round(ms / 1000)
 	const hours = Math.floor(totalSeconds / 3600)
 	const minutes = Math.floor((totalSeconds % 3600) / 60)
 	const seconds = totalSeconds % 60
-
 	const parts: string[] = []
-
-	if (hours > 0) {
-		parts.push(`${hours}h`)
-	}
-
-	if (minutes > 0 || hours > 0) {
-		parts.push(`${minutes}m`)
-	}
-
-	// Always show seconds (unless we have hours/minutes, then show even if 0)
-	if (hours === 0 && minutes === 0) {
-		parts.push(`${seconds}s`)
-	} else {
-		parts.push(`${seconds}s`)
-	}
-
+	if (hours > 0) parts.push(`${hours}h`)
+	if (minutes > 0 || hours > 0) parts.push(`${minutes}m`)
+	parts.push(`${seconds}s`)
 	return parts.join(" ")
 }
 
-/**
- * Format a timestamp (Unix epoch ms) to ISO date string (YYYY-MM-DD HH:MM)
- */
 function formatTimestamp(ms: number): string {
-	const date = new Date(ms)
-	const year = date.getFullYear()
-	const month = String(date.getMonth() + 1).padStart(2, "0")
-	const day = String(date.getDate()).padStart(2, "0")
-	const hour = String(date.getHours()).padStart(2, "0")
-	const minute = String(date.getMinutes()).padStart(2, "0")
-
-	return `${year}-${month}-${day} ${hour}:${minute}`
+	const d = new Date(ms)
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
 }
 
-/**
- * Format a single session row for the recent sessions list
- */
+function formatEndCause(cause: string | null | undefined): string {
+	if (!cause) return ""
+	const icons: Record<string, string> = {
+		complete: "✓",
+		disconnect: "⚠",
+		signal: "✗",
+		orphaned: "?",
+	}
+	return icons[cause] || "?"
+}
+
+function getCauseColor(cause: string | null | undefined): "success" | "error" | "warning" | "muted" {
+	if (cause === "complete") return "success"
+	if (cause === "disconnect" || cause === "signal" || cause === "orphaned") return "error"
+	return "muted"
+}
+
 export function formatSessionRow(session: HitlSession, theme: Theme): string {
 	const timestamp = formatTimestamp(session.started_at)
-	const status = session.status.toUpperCase()
+	const duration = session.ended_at ? formatDuration(session.ended_at - session.started_at) : "active"
+	const causeIcon = session.end_cause ? formatEndCause(session.end_cause) : ""
+	const causeColor = getCauseColor(session.end_cause)
 
-	let duration = ""
-	if (session.ended_at !== null) {
-		const durationMs = session.ended_at - session.started_at
-		duration = ` (${formatDuration(durationMs)})`
-	} else {
-		duration = " (active)"
-	}
-
-	// Status color coding (use text labels since we don't have specific colors)
 	let statusDisplay: string
-	if (session.status === "active") {
-		statusDisplay = theme.fg("warning", status)
-	} else if (session.status === "closed") {
-		statusDisplay = theme.fg("success", status)
-	} else {
-		statusDisplay = theme.fg("error", status)
-	}
+	if (session.status === "active") statusDisplay = theme.fg("warning", "ACTIVE")
+	else if (session.status === "closed") statusDisplay = theme.fg("success", "CLOSED")
+	else statusDisplay = theme.fg("error", "ORPHANED")
 
-	return `  ${timestamp}  ${statusDisplay}${duration}`
+	const causeDisplay = causeIcon ? ` ${theme.fg(causeColor, causeIcon)}` : ""
+
+	return `  ${timestamp}  ${statusDisplay}${causeDisplay}  (${duration})`
 }
 
-/**
- * Format a timeline section with a section header.
- * Returns an empty string if there are no timeline segments.
- *
- * @param segments - Array of timeline segments (from most recent session)
- * @param theme - Theme for color/formatting
- * @param width - Chart width in characters (default: 60)
- * @returns Formatted timeline section string, or empty string if no segments
- */
-export function formatTimelineSection(
-	segments: TimelineSegment[],
-	theme: Theme,
-	width: number = 60,
-): string {
-	if (segments.length === 0) {
-		return ""
-	}
-
-	const lines: string[] = []
-	lines.push(theme.bold("Session Timeline"))
-	lines.push("")
-	lines.push("  " + renderTimeline(segments, theme, width))
-	lines.push("")
-
-	return lines.join("\n")
+export function formatTimelineSection(segments: TimelineSegment[], theme: Theme, width = 60): string {
+	if (segments.length === 0) return ""
+	return [theme.bold("Session Timeline"), "", "  " + renderTimeline(segments, theme, width), ""].join("\n")
 }
 
-/**
- * Build the complete /metrics output as themed text lines
- */
 export function formatMetrics(
 	stats: HitlStats,
 	recentSessions: HitlSession[],
 	theme: Theme,
 	timelineSection?: string,
 ): string {
-	const lines: string[] = []
+	const lines: string[] = ["", theme.bold("HITL Metrics"), ""]
 
-	// Header
-	lines.push("")
-	lines.push(theme.bold("HITL Metrics"))
-	lines.push("")
-
-	// Empty state check
 	if (stats.total_sessions === 0) {
-		lines.push("  No HITL data recorded yet")
-		lines.push("")
+		lines.push("  No HITL data recorded yet", "")
 		return lines.join("\n")
 	}
 
-	// Stats section
+	// Calculate totals from sessions
+	let totalAgentMs = 0
+	let totalHitlMs = 0
+	let totalIdleMs = 0
+
+	for (const session of recentSessions) {
+		totalAgentMs += session.agent_time_ms || 0
+		totalHitlMs += session.hitl_time_ms || 0
+		totalIdleMs += session.idle_time_ms || 0
+	}
+
+	// Add session-level aggregation for backward compatibility
+	lines.push(theme.bold("Time Breakdown"))
+	lines.push(`  Agent time: ${formatDuration(totalAgentMs)}`)
+	lines.push(`  HITL time:  ${formatDuration(totalHitlMs)}`)
+	lines.push(`  Idle time:  ${formatDuration(totalIdleMs)}`)
+	lines.push("")
+
 	lines.push(theme.bold("Statistics"))
 	lines.push(`  Total sessions:     ${stats.total_sessions}`)
 	lines.push(`  Total HITL time:    ${formatDuration(stats.total_hitl_time_ms)}`)
 	lines.push(`  Interactions:       ${stats.interaction_count}`)
 	lines.push(`  Avg wait time:      ${formatDuration(stats.avg_wait_ms)}`)
 	lines.push("")
+	
+	// Permission stats
+	if (stats.permission_count > 0) {
+		lines.push(theme.bold("Permission Events"))
+		lines.push(`  Permission prompts: ${stats.permission_count}`)
+		lines.push(`  Permission time:    ${formatDuration(stats.total_permission_time_ms)}`)
+		lines.push("")
+	}
 
-	// Recent sessions section
+	// Count end causes
+	const endCauses = { complete: 0, disconnect: 0, signal: 0, orphaned: 0 }
+	for (const s of recentSessions) {
+		if (s.end_cause) endCauses[s.end_cause]++
+	}
+	const completed = endCauses.complete
+	const interrupted = endCauses.disconnect + endCauses.signal + endCauses.orphaned
+
+	if (completed > 0 || interrupted > 0) {
+		lines.push(theme.bold("Session Outcomes"))
+		lines.push(`  Complete: ${completed}`)
+		lines.push(`  Interrupted: ${interrupted}`)
+		lines.push("")
+	}
+
 	lines.push(theme.bold("Recent Sessions"))
 	if (recentSessions.length === 0) {
 		lines.push("  No recent sessions")
 	} else {
-		// Show up to 10 sessions
-		const sessionsToShow = recentSessions.slice(0, 10)
-		for (const session of sessionsToShow) {
+		for (const session of recentSessions.slice(0, 10)) {
 			lines.push(formatSessionRow(session, theme))
 		}
 		if (recentSessions.length > 10) {
@@ -162,8 +140,7 @@ export function formatMetrics(
 	}
 	lines.push("")
 
-	// Append timeline section if provided
-	if (timelineSection !== undefined && timelineSection !== "") {
+	if (timelineSection) {
 		lines.push(timelineSection)
 	}
 
