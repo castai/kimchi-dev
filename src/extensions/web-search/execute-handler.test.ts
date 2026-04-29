@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import * as config from "../../config.js"
 import { DEFAULT_LIMIT, SEARCH_ENDPOINT, type SearchResponse, executeWebSearch } from "./execute-handler.js"
+
+vi.mock("../../config.js", () => ({ readApiKeyFromConfigFile: vi.fn() }))
 
 function mockFetch(status: number, body: unknown, headers: Record<string, string> = {}): void {
 	vi.stubGlobal(
@@ -22,20 +25,32 @@ function makeSources(count: number) {
 }
 
 beforeEach(() => {
-	vi.stubEnv("KIMCHI_API_KEY", "test-key-123")
+	vi.mocked(config.readApiKeyFromConfigFile).mockReturnValue("test-key-123")
 })
 
 afterEach(() => {
 	vi.unstubAllGlobals()
-	vi.unstubAllEnvs()
+	vi.restoreAllMocks()
 })
 
 describe("executeWebSearch", () => {
 	describe("API key validation", () => {
-		it("throws when KIMCHI_API_KEY is not set", async () => {
-			vi.stubEnv("KIMCHI_API_KEY", "")
+		it("throws a human-readable error when no API key is set in config", async () => {
+			vi.mocked(config.readApiKeyFromConfigFile).mockReturnValue(undefined)
 
-			await expect(executeWebSearch({ query: "test" })).rejects.toThrow("KIMCHI_API_KEY is not set")
+			await expect(executeWebSearch({ query: "test" })).rejects.toThrow(
+				"Web search requires an API key. Run 'kimchi' and log in, or visit https://app.kimchi.dev to create a key.",
+			)
+		})
+
+		it("uses API key from config file", async () => {
+			vi.mocked(config.readApiKeyFromConfigFile).mockReturnValue("key-from-config-file")
+			mockFetch(200, { sources: [] })
+
+			await executeWebSearch({ query: "test" })
+
+			const headers = vi.mocked(fetch).mock.calls[0][1]?.headers as Record<string, string>
+			expect(headers.Authorization).toBe("Bearer key-from-config-file")
 		})
 	})
 
