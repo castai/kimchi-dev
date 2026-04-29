@@ -90,7 +90,6 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	let cliMode: PermissionMode | undefined
 	let originalActiveTools: string[] | null = null
 	let planModeApplied = false
-	let yoloWarningShown = false
 
 	function rebuildConfigRules(): void {
 		configRules = [
@@ -173,13 +172,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		if (next === "plan") applyPlanModeTools()
 		propagateModeToEnv()
 		updateStatus(ctx)
-		// Show danger warning when switching to yolo mode (only once per session)
-		if (next === "yolo" && ctx.hasUI && !yoloWarningShown) {
-			yoloWarningShown = true
-			const dangerMsg =
-				"DANGER: Running in YOLO mode. All permission checks are disabled. The agent will execute commands without confirmation. This can modify or delete files. Intended for use in disposable or sandboxed environments only. Not recommended for production use."
-			ctx.ui.notify(ctx.ui.theme.fg("error", dangerMsg), "warning")
-		}
+		maybeShowYoloWarning(ctx, next)
 	}
 
 	function doLoadConfig(ctx: ExtensionContext): { errors: string[] } {
@@ -192,6 +185,18 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		loaded = lc
 		rebuildConfigRules()
 		return { errors }
+	}
+
+	function maybeShowYoloWarning(ctx: ExtensionContext, mode: PermissionMode) {
+		if (!ctx.hasUI) return
+		if (mode === "yolo") {
+			ctx.ui.setStatus(
+				"permissions-warning",
+				"WARNING: all permission checks disabled. YOLO mode is recommended for sandbox/disposable environments only.",
+			)
+		} else {
+			ctx.ui.setStatus("permissions-warning", undefined)
+		}
 	}
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -215,13 +220,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		propagateModeToEnv()
 		updateStatus(ctx)
 
-		// Show danger warning when starting in yolo mode (only once per session)
-		if (currentMode() === "yolo" && ctx.hasUI && !yoloWarningShown) {
-			yoloWarningShown = true
-			const dangerMsg =
-				"DANGER: Running in YOLO mode. All permission checks are disabled. The agent will execute commands without confirmation. This can modify or delete files. Intended for use in disposable or sandboxed environments only. Not recommended for production use."
-			ctx.ui.notify(ctx.ui.theme.fg("error", dangerMsg), "warning")
-		}
+		maybeShowYoloWarning(ctx, currentMode())
 	})
 
 	pi.on("before_agent_start", async (event): Promise<{ systemPrompt?: string }> => {
