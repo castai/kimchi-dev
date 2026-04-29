@@ -87,8 +87,9 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	let cliMode: PermissionMode | undefined
 	let originalActiveTools: string[] | null = null
 	let planModeApplied = false
-	/** Shared mutable ref so handleConfirm (outside the closure) can set/clear the abort controller. */
-	const promptAbortRef: { current: AbortController | null } = { current: null }
+	let yoloWarningShown = false
+	/** Tracks all active permission prompt abort controllers for concurrent tool calls. */
+	const activeAbortControllers = new Set<AbortController>()
 	let unsubscribeTerminalInput: (() => void) | null = null
 
 	function rebuildConfigRules(): void {
@@ -177,12 +178,16 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		if (next === "plan") applyPlanModeTools()
 		propagateModeToEnv()
 		updateStatus(ctx)
-		// Dismiss any active permission prompt so the tool_call handler can re-evaluate under the new mode.
-		if (promptAbortRef.current) {
-			promptAbortRef.current.abort()
-			promptAbortRef.current = null
+		// Dismiss all active permission prompts so tool_call handlers re-evaluate under the new mode.
+		for (const ctrl of activeAbortControllers) ctrl.abort()
+		activeAbortControllers.clear()
+		// Show danger warning when switching to yolo mode (only once per session)
+		if (next === "yolo" && ctx.hasUI && !yoloWarningShown) {
+			yoloWarningShown = true
+			const dangerMsg =
+				"DANGER: Running in YOLO mode. All permission checks are disabled. The agent will execute commands without confirmation. This can modify or delete files. Intended for use in disposable or sandboxed environments only. Not recommended for production use."
+			ctx.ui.notify(ctx.ui.theme.fg("error", dangerMsg), "warning")
 		}
-		maybeShowYoloWarning(ctx, next)
 	}
 
 	function doLoadConfig(ctx: ExtensionContext): { errors: string[] } {
@@ -324,18 +329,19 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 					ctx,
 					subtitle: `Classifier: ${verdict.reason}`,
 					session,
-					abortRef: promptAbortRef,
+					activeAborts: activeAbortControllers,
 				})
 				if (result === "aborted") continue // mode changed, re-evaluate
 				return result
 			}
 
-			const result = await handleConfirm(event, { ctx, session, abortRef: promptAbortRef })
+			const result = await handleConfirm(event, { ctx, session, activeAborts: activeAbortControllers })
 			if (result === "aborted") continue // mode changed, re-evaluate
 			return result
 		}
 
 		// Exhausted re-evaluation attempts — fail closed.
+		console.warn("permissions: mode changed too many times during prompt, failing closed")
 		return { block: true, reason: "Permission mode changed too many times during prompt" }
 	})
 
@@ -364,7 +370,7 @@ interface ConfirmOptions {
 	ctx: ExtensionContext
 	session: SessionMemory
 	subtitle?: string
-	abortRef: { current: AbortController | null }
+	activeAborts: Set<AbortController>
 }
 
 async function handleConfirm(
@@ -372,7 +378,7 @@ async function handleConfirm(
 	opts: ConfirmOptions,
 ): Promise<{ block: true; reason: string } | "aborted" | undefined> {
 	const abort = new AbortController()
-	opts.abortRef.current = abort
+	opts.activeAborts.add(abort)
 	try {
 		const outcome = await promptForApproval({
 			toolName: event.toolName,
@@ -393,7 +399,7 @@ async function handleConfirm(
 		}
 		return { block: true, reason: "Declined by user" }
 	} finally {
-		opts.abortRef.current = null
+		opts.activeAborts.delete(abort)
 	}
 }
 
