@@ -40,7 +40,7 @@ const KIMCHI_FLAGS: FlagDoc[] = [
 ]
 
 const KIMCHI_ENV: FlagDoc[] = [
-	{ name: "KIMCHI_API_KEY", description: "Cast AI / Kimchi API key (overrides config.json apiKey)" },
+	{ name: "KIMCHI_API_KEY", description: "Kimchi API key (overrides config.json apiKey)" },
 	{ name: "KIMCHI_PERMISSIONS", description: "Initial permissions mode: default | plan | auto" },
 	{ name: "KIMCHI_TELEMETRY_ENABLED", description: "Enable telemetry (1/true). Off by default." },
 	{ name: "KIMCHI_TAGS", description: "Comma-separated `key:value` tags applied to every LLM request" },
@@ -69,7 +69,7 @@ function maxNameWidth(rows: FlagDoc[]): number {
  * indefinitely.
  */
 export async function printMergedHelp(): Promise<void> {
-	console.log(`${bold("kimchi")} — coding agent CLI powered by Cast AI`)
+	console.log(`${bold("kimchi")} — code with powerful open-source LLMs`)
 	console.log()
 	console.log(`${bold("Usage:")} kimchi [subcommand] [options] [@files…] [messages…]`)
 	console.log()
