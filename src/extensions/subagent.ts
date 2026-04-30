@@ -23,6 +23,7 @@ import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./sp
 
 const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
+const RESULT_MAX_CHARS = 8000
 
 let activeSessionCounts: Map<string, number> | null = null
 
@@ -319,6 +320,7 @@ function spawnSubagent(
 	cwd: string,
 	signal: AbortSignal | undefined,
 	tokenBudget: number | undefined,
+	inactivityTimeoutMs: number,
 	hideThinkingBlock: boolean,
 	onToken: (accumulated: string) => void,
 	onToolCall: (name: string, args: Record<string, unknown>, accumulated: string) => void,
@@ -349,11 +351,11 @@ function spawnSubagent(
 		let failureReason: SubagentFailureReason | undefined
 		let closed = false
 
-		let inactivityHandle = setTimeout(() => kill("output_stalled"), INACTIVITY_TIMEOUT_MS)
+		let inactivityHandle = setTimeout(() => kill("output_stalled"), inactivityTimeoutMs)
 		const resetInactivity = () => {
 			if (closed) return
 			clearTimeout(inactivityHandle)
-			inactivityHandle = setTimeout(() => kill("output_stalled"), INACTIVITY_TIMEOUT_MS)
+			inactivityHandle = setTimeout(() => kill("output_stalled"), inactivityTimeoutMs)
 		}
 
 		const finish = (exitCode: number) => {
@@ -462,6 +464,13 @@ function truncatePrompt(prompt: string): string {
 	return `${prompt.slice(0, PROMPT_MAX_LENGTH)}...`
 }
 
+function truncateSubagentResult(text: string, sessionFile: string | undefined): string {
+	if (text.length <= RESULT_MAX_CHARS) return text
+	const tail = text.slice(-RESULT_MAX_CHARS)
+	const sessionRef = sessionFile ? ` Full output in: ${sessionFile}` : ""
+	return `[Output truncated — showing last ${RESULT_MAX_CHARS} characters.${sessionRef}]\n\n${tail}`
+}
+
 function formatFooterStatus(counts: Map<string, number>, theme: Theme): string {
 	const entries = [...counts.entries()].map(([model, n]) => `${model} [${n}]`).join(" | ")
 	return theme.fg("dim", `subagents: ${entries}`)
@@ -499,6 +508,12 @@ const SubagentParams = Type.Object({
 		Type.Union([Type.Integer({ minimum: 1 }), Type.String({ pattern: "^[1-9][0-9]*$" })], {
 			description:
 				"Maximum total tokens (input + output) the subagent may consume. Subagent is killed when exceeded. Omit unless you have an explicit reason to cap token usage — do not set this speculatively.",
+		}),
+	),
+	inactivityTimeoutMs: Type.Optional(
+		Type.Union([Type.Integer({ minimum: 1000 }), Type.String({ pattern: "^[1-9][0-9]*$" })], {
+			description:
+				"Milliseconds of silence before the subagent is killed with output_stalled. Defaults to 3 minutes. Increase for planning or research steps where a thinking-heavy model may reason silently for an extended period before producing output.",
 		}),
 	),
 })
@@ -622,12 +637,15 @@ export default function (pi: ExtensionAPI) {
 
 			let lastToolCall: string | undefined
 			const tokenBudget = params.tokenBudget !== undefined ? Number(params.tokenBudget) : undefined
+			const inactivityTimeoutMs =
+				params.inactivityTimeoutMs !== undefined ? Number(params.inactivityTimeoutMs) : INACTIVITY_TIMEOUT_MS
 			const hideThinkingBlock = settingsManager.getHideThinkingBlock()
 			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(
 				invocation,
 				ctx.cwd,
 				signal,
 				tokenBudget,
+				inactivityTimeoutMs,
 				hideThinkingBlock,
 				(text) => {
 					lastToolCall = undefined
@@ -657,12 +675,13 @@ export default function (pi: ExtensionAPI) {
 			const stats: SubagentStats = { durationMs, tokenUsage, sessionId, sessionFile: childSessionFile }
 
 			if (failureReason !== undefined || exitCode !== 0) {
+				const rawDetail = stderr.trim() || accumulated || "(no output)"
 				const error: SubagentError = {
 					reason: failureReason ?? "exit_error",
 					model: params.model,
 					tokenUsage,
 					durationMs,
-					detail: stderr.trim() || accumulated || "(no output)",
+					detail: truncateSubagentResult(rawDetail, childSessionFile),
 				}
 				return {
 					content: [{ type: "text", text: JSON.stringify(error) }],
@@ -671,13 +690,13 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 
+			const resultText =
+				(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated)) || "(no output)"
 			return {
 				content: [
 					{
 						type: "text",
-						text:
-							(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated)) ||
-							"(no output)",
+						text: truncateSubagentResult(resultText, childSessionFile),
 					},
 				],
 				details: stats,

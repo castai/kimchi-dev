@@ -48,7 +48,8 @@ Run the steps in order. For steps you own, use your tools directly. For steps yo
 - Write subagent prompts that are fully self-contained. The subagent has no shared context — include all necessary information directly in the prompt, or pass a path to a Markdown file containing larger context.
 - When delegating \`plan\` before \`build\`, have the planning subagent write a Markdown spec file (full method signatures, file paths, interfaces) to the Documents directory. Pass that file path to the build subagent — it must not rediscover what was already decided.
 - Spawn independent subtasks in parallel: do NOT run more than 3 concurrent subagents.
-- After a subagent returns, review the output. If corrections are needed, spawn a follow-up with the correction task.
+- After a subagent returns, read the output file it wrote to the Documents directory — do not rely on the inline tool result text for decisions. The tool result is a short status signal; the file is the source of truth.
+- After reading the output file, if corrections are needed, spawn a follow-up with the correction task.
 - Do NOT spawn a subagent for work you can do in a single tool call.
 - Every file the subagent needs must go in the \`attachments\` field — never paste file contents or \`@path\` tokens into the prompt. The subagent sees each attachment as an image or file block before your prompt; refer to them by name.
 
@@ -70,7 +71,14 @@ Include a \`tokenBudget\` for every subagent call:
 - Complex multi-layer architecture or large codebase exploration: 500,000 tokens
 - Research or design tasks producing a design document: 200,000 tokens
 
-If a subagent hits its budget, spawn a follow-up with the remaining work rather than raising the budget.`,
+If a subagent hits its budget, spawn a follow-up with the remaining work rather than raising the budget.
+
+## Inactivity timeout
+
+By default subagents are killed after 3 minutes of silence. For steps where a thinking-heavy model may reason silently before producing output, set \`inactivityTimeoutMs\` explicitly:
+
+- \`plan\` or \`research\` delegated to a heavy model: 600000 (10 minutes)
+- \`build\` or \`review\`: omit (default is sufficient)`,
 	TOOLS_SECTION,
 	DOCUMENTS_SECTION,
 	RESEARCH_RULES,

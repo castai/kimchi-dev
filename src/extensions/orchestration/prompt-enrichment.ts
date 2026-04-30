@@ -219,7 +219,6 @@ export default function (skillPaths: string[]) {
 				}
 
 				const currentModel = ctx.model ? { id: ctx.model.id, name: ctx.model.id } : undefined
-				const enrichedPrompt = transformPrompt(event.text, registry, currentModel)
 
 				// Non-interactive (--print/--mode rpc) and debug-prompts mode: replace the user
 				// text inline. The "handled" + sendUserMessage path below relies on the TUI event
@@ -229,9 +228,13 @@ export default function (skillPaths: string[]) {
 				// caller's await session.prompt(enrichedPrompt) do the work synchronously.
 				const debugPrompts = pi.getFlag("debug-prompts") === true
 				if (debugPrompts || !ctx.hasUI) {
+					const enrichedPrompt = transformPrompt(event.text, registry, currentModel)
 					return { action: "transform" as const, text: enrichedPrompt, images: event.images }
 				}
 
+				// In UI mode the original user message is sent separately via sendUserMessage,
+				// so the task text must not be duplicated inside the enriched-prompt header.
+				const enrichedPrompt = transformPrompt(event.text, registry, currentModel, false)
 				pi.sendMessage(
 					{ customType: "enriched-prompt", content: [{ type: "text", text: enrichedPrompt }], display: false },
 					{ deliverAs: "nextTurn" },

@@ -58,7 +58,12 @@ export interface CurrentModelInfo {
 	name: string
 }
 
-export function transformPrompt(userPrompt: string, registry: ModelRegistry, currentModel?: CurrentModelInfo): string {
+export function transformPrompt(
+	userPrompt: string,
+	registry: ModelRegistry,
+	currentModel?: CurrentModelInfo,
+	includeTask = true,
+): string {
 	const subagentModels = registry.getModelsWithCapabilities().filter((m) => m.id !== currentModel?.id)
 	const modelsSection = formatModelsSection(subagentModels)
 
@@ -73,7 +78,12 @@ export function transformPrompt(userPrompt: string, registry: ModelRegistry, cur
 		? formatCurrentModelCapabilities(currentDescriptor)
 		: "No capability information available for this model."
 
-	return userPromptTemplate
+	let template = userPromptTemplate
+	if (!includeTask) {
+		template = template.replace(/\n## Task\n\n\{\{USER_PROMPT\}\}\n?$/, "")
+	}
+
+	return template
 		.replace("{{CURRENT_MODEL_NAME}}", () => currentModelName)
 		.replace("{{CURRENT_MODEL_CAPABILITIES}}", () => currentModelCapabilities)
 		.replace("{{MODELS}}", () => modelsSection)
