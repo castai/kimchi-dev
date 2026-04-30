@@ -1,0 +1,109 @@
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { buildGsd2ModelsConfig, buildGsd2Preferences } from "./gsd2.js"
+import { byId } from "./registry.js"
+
+describe("buildGsd2ModelsConfig", () => {
+	it("nests the kimchi provider under providers.kimchi", () => {
+		const cfg = buildGsd2ModelsConfig("test-key") as {
+			providers: { kimchi: { apiKey: string; baseUrl: string; defaultModel: string } }
+		}
+		expect(cfg.providers.kimchi.apiKey).toBe("test-key")
+		expect(cfg.providers.kimchi.baseUrl).toBe("https://llm.kimchi.dev/openai/v1")
+		expect(cfg.providers.kimchi.defaultModel).toBe("kimi-k2.5")
+	})
+
+	it("emits all five models with cost metadata (Opus/Sonnet billed, kimchi models free)", () => {
+		const cfg = buildGsd2ModelsConfig("k") as {
+			providers: { kimchi: { models: Array<{ id: string; cost: { input: number } }> } }
+		}
+		const models = cfg.providers.kimchi.models
+		expect(models.length).toBe(5)
+		const opus = models.find((m) => m.id === "claude-opus-4-6")
+		expect(opus?.cost).toEqual({ input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 })
+		const sonnet = models.find((m) => m.id === "claude-sonnet-4-6")
+		expect(sonnet?.cost).toEqual({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 })
+		const main = models.find((m) => m.id === "kimi-k2.5")
+		expect(main?.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 })
+	})
+
+	it("Main model accepts text+image input, others text only", () => {
+		const cfg = buildGsd2ModelsConfig("k") as {
+			providers: { kimchi: { models: Array<{ id: string; input: string[] }> } }
+		}
+		const models = cfg.providers.kimchi.models
+		expect(models.find((m) => m.id === "kimi-k2.5")?.input).toEqual(["text", "image"])
+		expect(models.find((m) => m.id === "nemotron-3-super-fp4")?.input).toEqual(["text"])
+		expect(models.find((m) => m.id === "claude-opus-4-6")?.input).toEqual(["text"])
+	})
+})
+
+describe("buildGsd2Preferences", () => {
+	const prefs = buildGsd2Preferences()
+
+	it("starts and ends with a YAML frontmatter fence", () => {
+		expect(prefs.startsWith("---\n")).toBe(true)
+		expect(prefs.trimEnd().endsWith("---")).toBe(true)
+	})
+
+	it("routes the high-level task buckets to the right model tiers", () => {
+		// Opus for planning/validation/auto_supervisor (heavy reasoning).
+		expect(prefs).toContain("planning: kimchi/claude-opus-4-6")
+		expect(prefs).toContain("validation: kimchi/claude-opus-4-6")
+		expect(prefs).toMatch(/auto_supervisor:\s*\n\s*model: kimchi\/claude-opus-4-6/)
+		// Coding model for research + subagent + light tier.
+		expect(prefs).toContain("research: kimchi/nemotron-3-super-fp4")
+		expect(prefs).toContain("subagent: kimchi/nemotron-3-super-fp4")
+		// Sub model for execution_simple + discuss.
+		expect(prefs).toContain("discuss: kimchi/minimax-m2.7")
+		expect(prefs).toContain("execution_simple: kimchi/minimax-m2.7")
+	})
+
+	it("hardcodes the worktree+squash git defaults", () => {
+		expect(prefs).toContain("isolation: worktree")
+		expect(prefs).toContain("merge_strategy: squash")
+	})
+})
+
+describe("gsd2 tool registration", () => {
+	let tmp: string
+	let prevHome: string | undefined
+
+	beforeEach(() => {
+		tmp = mkdtempSync(join(tmpdir(), "kimchi-gsd2-test-"))
+		prevHome = process.env.HOME
+		process.env.HOME = tmp
+	})
+
+	afterEach(() => {
+		// biome-ignore lint/performance/noDelete: env-var cleanup needs a real delete; assigning undefined would coerce to the literal string "undefined".
+		if (prevHome === undefined) delete process.env.HOME
+		else process.env.HOME = prevHome
+		rmSync(tmp, { recursive: true, force: true })
+	})
+
+	it("registers itself with the integrations registry on import", () => {
+		const tool = byId("gsd2")
+		expect(tool).toBeDefined()
+		expect(tool?.binaryName).toBe("gsd")
+		expect(tool?.configPath).toBe("~/.gsd/preferences.md")
+	})
+
+	it("write() rejects an empty API key", async () => {
+		const tool = byId("gsd2")
+		await expect(tool?.write("global", "")).rejects.toThrow(/API key/)
+	})
+
+	it("write() emits both ~/.gsd/agent/models.json and ~/.gsd/preferences.md", async () => {
+		const tool = byId("gsd2")
+		await tool?.write("global", "secret-123")
+
+		const models = JSON.parse(readFileSync(join(tmp, ".gsd", "agent", "models.json"), "utf-8"))
+		expect(models.providers.kimchi.apiKey).toBe("secret-123")
+
+		const prefs = readFileSync(join(tmp, ".gsd", "preferences.md"), "utf-8")
+		expect(prefs).toContain("planning: kimchi/claude-opus-4-6")
+	})
+})
