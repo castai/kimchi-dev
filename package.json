@@ -1,11 +1,11 @@
 {
 	"name": "@kimchi-dev/cli",
 	"version": "0.1.0",
-	"description": "kimchi-code — a coding agent CLI powered by Cast AI",
+	"description": "kimchi — a coding agent CLI powered by Cast AI",
 	"type": "module",
 	"license": "MIT",
 	"bin": {
-		"kimchi-code": "src/entry.ts"
+		"kimchi": "src/entry.ts"
 	},
 	"scripts": {
 		"clean": "rm -rf dist",
@@ -22,8 +22,7 @@
 		"test": "vitest run --dir src",
 		"test:smoke": "vitest run --config tests/smoke/vitest.config.ts",
 		"prepare": "husky",
-		"verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:smoke",
-		"prepare": "husky"
+		"verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:smoke"
 	},
 	"piConfig": {
 		"name": "kimchi",

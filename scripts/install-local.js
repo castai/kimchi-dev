@@ -9,11 +9,11 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
-const distBin = join(projectRoot, "dist", "bin", "kimchi-code")
+const distBin = join(projectRoot, "dist", "bin", "kimchi")
 const distShare = join(projectRoot, "dist", "share", "kimchi")
 
 if (!existsSync(distBin)) {
-	console.error("dist/bin/kimchi-code not found — run `pnpm run build:binary` first.")
+	console.error("dist/bin/kimchi not found — run `pnpm run build:binary` first.")
 	process.exit(1)
 }
 if (!existsSync(distShare)) {
@@ -26,9 +26,9 @@ const binDest = join(prefix, "bin")
 const shareDest = join(prefix, "share", "kimchi")
 
 mkdirSync(binDest, { recursive: true })
-cpSync(distBin, join(binDest, "kimchi-code"))
+cpSync(distBin, join(binDest, "kimchi"))
 
 cpSync(distShare, shareDest, { recursive: true })
 
-console.log(`Installed binary  → ${join(binDest, "kimchi-code")}`)
+console.log(`Installed binary  → ${join(binDest, "kimchi")}`)
 console.log(`Installed share   → ${shareDest}`)
