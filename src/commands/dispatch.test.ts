@@ -41,15 +41,34 @@ describe("dispatchSubcommand", () => {
 		expect(result).toEqual({ kind: "fallthrough" })
 	})
 
-	it("handles --help by printing the merged help via pi", async () => {
-		// printMergedHelp dynamically imports pi-coding-agent which calls
-		// process.exit(0) inside its main(). That's hostile to a unit test —
-		// we'd kill vitest. Instead, verify dispatch picks the help branch by
-		// looking at the first subcommand name path: passing "version --help"
-		// routes to the subcommand, not the merged renderer, which proves the
-		// dispatch order is right.
+	it("handles --help by printing the merged help text", async () => {
+		const result = await dispatchSubcommand(["--help"])
+		expect(result).toEqual({ kind: "handled", exitCode: 0 })
+
+		const printed = logSpy.mock.calls.map((c) => String(c[0] ?? "")).join("\n")
+		// Sections we expect from the custom renderer
+		expect(printed).toContain("Subcommands:")
+		expect(printed).toContain("kimchi setup")
+		expect(printed).toContain("kimchi claude")
+		expect(printed).toContain("Harness flags")
+		expect(printed).toContain("--provider")
+		expect(printed).toContain("--mode")
+		expect(printed).toContain("Environment variables:")
+		expect(printed).toContain("KIMCHI_API_KEY")
+		// Pi-internal commands must NOT leak into kimchi's help (we no longer
+		// delegate to pi.main for the lower section).
+		expect(printed).not.toContain("install <source>")
+		expect(printed).not.toContain("ANTHROPIC_API_KEY")
+	})
+
+	it("subcommand context wins over a trailing --help", async () => {
 		const result = await dispatchSubcommand(["version", "--help"])
 		expect(result.kind).toBe("handled")
+		// The version handler ran (printed something to stdout) rather than
+		// the merged help renderer. Either way is "handled", but checking
+		// stdout for the version banner confirms the dispatch order.
+		const printed = logSpy.mock.calls.map((c) => String(c[0] ?? "")).join("\n")
+		expect(printed).toMatch(/^kimchi \d+\.\d+\.\d+/m)
 	})
 
 	it("each known subcommand stub prints its own marker and returns 1", async () => {

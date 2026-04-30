@@ -25,12 +25,12 @@ describe("binary smoke tests", () => {
 		expect(result.stdout).toContain("Usage")
 	})
 
-	it("--help shows kimchi subcommands and pi harness flags together", () => {
+	it("--help shows kimchi subcommands, harness flags, and env vars (no pi internals)", () => {
 		const result = runBinary({
 			args: ["--help"],
 			extraEnv: { KIMCHI_API_KEY: "smoke-test-dummy" },
 		})
-		// Kimchi-side section
+		// Subcommand catalogue
 		expect(result.stdout).toContain("Subcommands:")
 		expect(result.stdout).toContain("kimchi setup")
 		expect(result.stdout).toContain("kimchi claude")
@@ -38,9 +38,17 @@ describe("binary smoke tests", () => {
 		expect(result.stdout).toContain("kimchi cursor")
 		expect(result.stdout).toContain("kimchi openclaw")
 		expect(result.stdout).toContain("kimchi gsd2")
-		// Pi-side section — proves the pi help printer ran after ours
+		// Curated harness flags forwarded to pi
 		expect(result.stdout).toContain("--provider")
 		expect(result.stdout).toContain("--mode")
+		expect(result.stdout).toContain("--continue")
+		// Kimchi-only env vars
+		expect(result.stdout).toContain("KIMCHI_API_KEY")
+		// Pi-internal extension management commands and provider-specific env
+		// vars must not leak into kimchi's help screen.
+		expect(result.stdout).not.toContain("install <source>")
+		expect(result.stdout).not.toContain("ANTHROPIC_API_KEY")
+		expect(result.stdout).not.toContain("OPENAI_API_KEY")
 	})
 
 	it("version subcommand prints version + platform without launching the harness", () => {
