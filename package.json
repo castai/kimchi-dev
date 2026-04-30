@@ -22,8 +22,7 @@
 		"test": "vitest run --dir src",
 		"test:smoke": "vitest run --config tests/smoke/vitest.config.ts",
 		"prepare": "husky",
-		"verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:smoke",
-		"prepare": "husky"
+		"verify": "pnpm run check && pnpm run build:binary && pnpm run test && pnpm run test:smoke"
 	},
 	"piConfig": {
 		"name": "kimchi",

@@ -25,6 +25,50 @@ describe("binary smoke tests", () => {
 		expect(result.stdout).toContain("Usage")
 	})
 
+	it("--help shows kimchi subcommands and pi harness flags together", () => {
+		const result = runBinary({
+			args: ["--help"],
+			extraEnv: { KIMCHI_API_KEY: "smoke-test-dummy" },
+		})
+		// Kimchi-side section
+		expect(result.stdout).toContain("Subcommands:")
+		expect(result.stdout).toContain("kimchi setup")
+		expect(result.stdout).toContain("kimchi claude")
+		expect(result.stdout).toContain("kimchi opencode")
+		expect(result.stdout).toContain("kimchi cursor")
+		expect(result.stdout).toContain("kimchi openclaw")
+		expect(result.stdout).toContain("kimchi gsd2")
+		// Pi-side section — proves the pi help printer ran after ours
+		expect(result.stdout).toContain("--provider")
+		expect(result.stdout).toContain("--mode")
+	})
+
+	it("version subcommand prints version + platform without launching the harness", () => {
+		const result = runBinary({
+			args: ["version"],
+			extraEnv: { KIMCHI_API_KEY: "smoke-test-dummy" },
+		})
+		expect(result.stdout).toMatch(/^kimchi \d+\.\d+\.\d+/)
+		expect(result.stdout).toContain("platform:")
+		// The harness exit hook prints "To resume:" on exit code 0; subcommands
+		// short-circuit before any session starts, so it must NOT appear.
+		expect(result.stdout).not.toContain("To resume:")
+	})
+
+	it("unknown arg falls through to the harness (pi prints the unrecognised-flag warning)", () => {
+		// Pi treats unknown flags as extension flags and surfaces a diagnostic.
+		// We just need to assert the dispatcher didn't intercept — the easiest
+		// signal is that the harness session attempts to run (stderr contains
+		// pi's startup diagnostics, not our "not implemented" stub message).
+		const result = runBinary({
+			args: ["--definitely-not-a-real-flag=value"],
+			extraEnv: { KIMCHI_API_KEY: "smoke-test-dummy" },
+			throwOnError: false,
+			timeoutMs: 5_000,
+		})
+		expect(result.stdout + result.stderr).not.toContain("not implemented yet on this branch")
+	})
+
 	it("prompt templates are embedded in binary (no extension errors on startup)", () => {
 		const result = runBinary({
 			args: ["-p", "hello"],
