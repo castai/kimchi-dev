@@ -459,6 +459,52 @@ function spawnSubagent(
 	})
 }
 
+interface SubagentResponse {
+	summary: string
+	files: string[]
+}
+
+export function parseSubagentResponse(text: string): SubagentResponse | null {
+	const trimmed = text.trim()
+
+	const tryParse = (s: string): SubagentResponse | null => {
+		try {
+			const parsed = JSON.parse(s)
+			if (typeof parsed?.summary === "string") {
+				return {
+					summary: parsed.summary,
+					files: Array.isArray(parsed.files)
+						? (parsed.files as unknown[]).filter((f): f is string => typeof f === "string")
+						: [],
+				}
+			}
+		} catch {
+			// fall through
+		}
+		return null
+	}
+
+	const direct = tryParse(trimmed)
+	if (direct !== null) return direct
+
+	const fenceMatch = trimmed.match(/```(?:json)?\s*\n([\s\S]*?)\n```/)
+	if (fenceMatch) {
+		const fromFence = tryParse(fenceMatch[1].trim())
+		if (fromFence !== null) return fromFence
+	}
+
+	const lastClose = trimmed.lastIndexOf("}")
+	if (lastClose !== -1) {
+		const firstOpen = trimmed.lastIndexOf("{", lastClose)
+		if (firstOpen !== -1) {
+			const fromBlock = tryParse(trimmed.slice(firstOpen, lastClose + 1))
+			if (fromBlock !== null) return fromBlock
+		}
+	}
+
+	return null
+}
+
 function truncatePrompt(prompt: string): string {
 	if (prompt.length <= PROMPT_MAX_LENGTH) return prompt
 	return `${prompt.slice(0, PROMPT_MAX_LENGTH)}...`
@@ -692,13 +738,22 @@ export default function (pi: ExtensionAPI) {
 
 			const resultText =
 				(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated)) || "(no output)"
+			const parsed = parseSubagentResponse(resultText)
+			if (parsed === null) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Protocol violation: subagent response is not valid JSON.\n\nRaw output:\n\n${truncateSubagentResult(resultText, childSessionFile)}`,
+						},
+					],
+					details: stats,
+					isError: true,
+				}
+			}
+			const filesLine = parsed.files.length > 0 ? `\nFiles: ${parsed.files.join(", ")}` : ""
 			return {
-				content: [
-					{
-						type: "text",
-						text: truncateSubagentResult(resultText, childSessionFile),
-					},
-				],
+				content: [{ type: "text", text: `${parsed.summary}${filesLine}` }],
 				details: stats,
 			}
 		},

@@ -3,7 +3,13 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { CURRENT_SESSION_VERSION } from "@mariozechner/pi-coding-agent"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { buildSubagentArgs, parseSubagentEvent, prepareChildSessionFile, validateAttachments } from "./subagent.js"
+import {
+	buildSubagentArgs,
+	parseSubagentEvent,
+	parseSubagentResponse,
+	prepareChildSessionFile,
+	validateAttachments,
+} from "./subagent.js"
 
 describe("parseSubagentEvent", () => {
 	const cases: Record<
@@ -364,4 +370,55 @@ describe("prepareChildSessionFile", () => {
 		const ids = Array.from({ length: 8 }, () => prepareChildSessionFile(tmp, parentFile, "/work/dir")?.sessionId)
 		expect(new Set(ids).size).toBe(ids.length)
 	})
+})
+
+describe("parseSubagentResponse", () => {
+	const cases: Record<string, { input: string; expected: { summary: string; files: string[] } | null }> = {
+		"parses clean JSON": {
+			input: '{"summary": "Done.", "files": ["/docs/plan.md"]}',
+			expected: { summary: "Done.", files: ["/docs/plan.md"] },
+		},
+		"parses JSON with no files": {
+			input: '{"summary": "Task complete.", "files": []}',
+			expected: { summary: "Task complete.", files: [] },
+		},
+		"parses JSON missing files field": {
+			input: '{"summary": "Done."}',
+			expected: { summary: "Done.", files: [] },
+		},
+		"parses JSON wrapped in code fence": {
+			input: '```json\n{"summary": "Done.", "files": ["/docs/out.md"]}\n```',
+			expected: { summary: "Done.", files: ["/docs/out.md"] },
+		},
+		"parses JSON wrapped in plain code fence": {
+			input: '```\n{"summary": "Done.", "files": []}\n```',
+			expected: { summary: "Done.", files: [] },
+		},
+		"parses JSON with leading preamble": {
+			input: 'Here is my response:\n\n{"summary": "Done.", "files": ["/docs/out.md"]}',
+			expected: { summary: "Done.", files: ["/docs/out.md"] },
+		},
+		"filters out non-string file entries": {
+			input: '{"summary": "Done.", "files": ["/docs/a.md", 42, null, "/docs/b.md"]}',
+			expected: { summary: "Done.", files: ["/docs/a.md", "/docs/b.md"] },
+		},
+		"returns null for plain text": {
+			input: "I completed the task successfully.",
+			expected: null,
+		},
+		"returns null for JSON without summary": {
+			input: '{"result": "done", "files": []}',
+			expected: null,
+		},
+		"returns null for empty string": {
+			input: "",
+			expected: null,
+		},
+	}
+
+	for (const [name, { input, expected }] of Object.entries(cases)) {
+		it(name, () => {
+			expect(parseSubagentResponse(input)).toEqual(expected)
+		})
+	}
 })

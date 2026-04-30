@@ -24,12 +24,16 @@ The Documents directory is shown in the Environment section. Use it for **all** 
 
 export const SUBAGENT_RESPONSE_PROTOCOL = `## Subagent response protocol
 
-When you finish your work, your final response must follow this format:
+Your final response must be a single JSON object with no other text before or after it:
 
-1. Write all substantive output (plans, specs, research notes, findings) to a file in the Documents directory.
-2. Return a concise summary — at most 5 sentences — covering: what was done, the exact path of every file written, and any critical decisions or blockers the caller must know about.
+\`\`\`
+{"summary": "...", "files": ["path1", "path2"]}
+\`\`\`
 
-Do NOT return file contents, code blocks, or lengthy explanations inline. The caller will read the files from disk. Inline text beyond the short summary is wasted tokens.`
+- \`summary\`: one paragraph (at most 5 sentences) covering what was done, any critical decisions, and any blockers.
+- \`files\`: array of absolute paths to every file written to the Documents directory. Empty array if none.
+
+Write all substantive output (plans, specs, research notes, findings) to files in the Documents directory — never inline in the summary. Do NOT add any text before or after the JSON. Do NOT wrap it in a markdown code fence.`
 
 export const PHASE_TAGGING = `## Phase Tagging for Analytics
 
