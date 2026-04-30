@@ -51,7 +51,7 @@ const helpOrVersion = isHelpOrVersionArgs(process.argv.slice(2))
 
 process.on("exit", (code) => {
 	if (code === 0 && !acpMode) {
-		const resumeCmd = sessionId ? `kimchi-code --session ${sessionId}` : "kimchi-code --continue"
+		const resumeCmd = sessionId ? `kimchi --session ${sessionId}` : "kimchi --continue"
 		console.log(`\nTo resume: ${resumeCmd}`)
 	}
 })

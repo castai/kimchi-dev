@@ -184,7 +184,7 @@ export function readTelemetryConfig(configPath?: string): TelemetryConfig {
 }
 
 /**
- * Load the kimchi-code configuration.
+ * Load the kimchi configuration.
  *
  * API key resolution order:
  *   1. KIMCHI_API_KEY environment variable (highest precedence)

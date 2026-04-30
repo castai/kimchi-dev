@@ -2,7 +2,7 @@
  * Shared test harness utilities for smoke tests.
  *
  * Provides isolated temp directories and a helper to spawn the compiled
- * kimchi-code binary with a sandboxed HOME. The binary computes its agent
+ * kimchi binary with a sandboxed HOME. The binary computes its agent
  * config dir as HOME/.config/kimchi/harness, so we expose that derived
  * path for tests that need to place settings files there.
  */
@@ -17,7 +17,7 @@ import { afterAll, beforeAll } from "vitest"
 
 const nodeRequire = createRequire(import.meta.url)
 
-export const BINARY_PATH = resolve("dist/bin/kimchi-code")
+export const BINARY_PATH = resolve("dist/bin/kimchi")
 export const PACKAGE_DIR = resolve("dist/share/kimchi")
 
 let tempHome: string | undefined

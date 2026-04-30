@@ -10,7 +10,7 @@ export function resolveAuxiliaryFilesDir(
 		return env.PI_PACKAGE_DIR
 	}
 
-	// When running as a compiled binary (dist/bin/kimchi-code), share files
+	// When running as a compiled binary (dist/bin/kimchi), share files
 	// live at ../share/kimchi relative to the binary.
 	if (execPath) {
 		const siblingShare = join(execPath, "..", "..", "share", "kimchi")

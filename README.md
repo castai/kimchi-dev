@@ -1,31 +1,29 @@
-# kimchi-code
+# kimchi
 
-A coding agent CLI powered by [kimchi-dev](https://github.com/castai/kimchi-dev). Built on the [pi-mono](https://github.com/badlogic/pi-mono) coding agent SDK, kimchi-code gives you an AI-powered development assistant in your terminal that connects to kimchi-dev's LLM infrastructure.
+A coding agent CLI powered by [kimchi-dev](https://github.com/castai/kimchi-dev). Built on the [pi-mono](https://github.com/badlogic/pi-mono) coding agent SDK, kimchi gives you an AI-powered development assistant in your terminal that connects to kimchi-dev's LLM infrastructure.
 
 ## Quick start
-
-The easiest way to use kimchi-code is through the `kimchi` CLI, which handles downloading and launching the agent automatically:
 
 ```bash
 kimchi
 ```
 
-You can also run `kimchi-code` directly if it's on your PATH.
+Run `kimchi --help` to see all available subcommands and flags.
 
 ## Configuration
 
 ### Authentication
 
-kimchi-code shares authentication with the `kimchi` CLI. The API key is resolved in this order:
+The API key is resolved in this order:
 
 1. `KIMCHI_API_KEY` environment variable (takes precedence)
 2. `~/.config/kimchi/config.json` field `api_key`
 
-If you're already logged in via `kimchi`, no additional setup is needed.
+Run `kimchi setup` for an interactive first-time configuration.
 
 ### Agent config
 
-kimchi-code stores its own configuration (settings, sessions, models) under:
+kimchi stores its own configuration (settings, sessions, models) under:
 
 ```
 ~/.config/kimchi/harness/
@@ -39,12 +37,12 @@ Use `/model` in the interactive CLI to switch between available models.
 
 ### Multi-model orchestration
 
-By default, kimchi-code runs in multi-model mode: the main agent classifies each task, executes what it can directly, and delegates the rest to specialised subagents picked from the available model roster.
+By default, kimchi runs in multi-model mode: the main agent classifies each task, executes what it can directly, and delegates the rest to specialised subagents picked from the available model roster.
 
 To disable orchestration and run as a single, direct coding assistant:
 
 ```bash
-kimchi-code --multi-model=false
+kimchi --multi-model=false
 ```
 
 You can also toggle the mode at any time during a session with the **option/alt+tab** keyboard shortcut. The current state is shown in the footer (`multi-model: on` / `multi-model: off`).
@@ -53,7 +51,7 @@ When multi-model is off the agent uses a single-model system prompt: environment
 
 ### HTTP proxy
 
-kimchi-code respects `HTTP_PROXY` / `HTTPS_PROXY` environment variables for network requests.
+kimchi respects `HTTP_PROXY` / `HTTPS_PROXY` environment variables for network requests.
 
 ### Subagent sessions
 
@@ -63,7 +61,7 @@ This means subagent runs are fully recoverable from disk: open the parent's `.js
 
 ## Tags
 
-kimchi-code supports tagging LLM requests for usage tracking and cost attribution. Tags are automatically included with every LLM request and displayed in the footer of the interactive UI.
+kimchi supports tagging LLM requests for usage tracking and cost attribution. Tags are automatically included with every LLM request and displayed in the footer of the interactive UI.
 
 ### Commands
 
@@ -114,7 +112,7 @@ Active tags are displayed in the footer, grouped by key with color coding for vi
 
 A `model:{model_id}` tag is automatically added to every LLM request (e.g., `model:kimi-k2.5`). This tag does not count toward the 10 tag limit and cannot be removed.
 
-A `phase:{phase}` tag is automatically added since kimchi-code supports phase tracking for usage analytics and cost attribution. Phases represent the high-level type of work being done (exploration, planning, building, reviewing, or researching).
+A `phase:{phase}` tag is automatically added since kimchi supports phase tracking for usage analytics and cost attribution. Phases represent the high-level type of work being done (exploration, planning, building, reviewing, or researching).
 
 ### Available phases
 
@@ -213,7 +211,7 @@ Or build a standalone binary and run it:
 
 ```bash
 pnpm run build:binary
-./dist/kimchi-code
+./dist/bin/kimchi
 ```
 
 ### Project structure
@@ -237,7 +235,7 @@ Supported platforms:
 - macOS (amd64, arm64)
 - Linux (amd64, arm64)
 
-Release assets follow the naming convention `kimchi-code_{os}_{arch}.tar.gz` with a `checksums.txt` (SHA256) for verification.
+Release assets follow the naming convention `kimchi_{os}_{arch}.tar.gz` with a `checksums.txt` (SHA256) for verification.
 
 ## License
 

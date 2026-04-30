@@ -24,3 +24,9 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# Local merge-planning scratch (kimchi CLI repo + pi-mono source for reference)
+kimchi-cli-copy/
+kimchi-cli-src
+pi-mono-copy/
+pi-mono-src

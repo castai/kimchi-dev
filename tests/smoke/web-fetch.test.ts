@@ -1,6 +1,6 @@
 /**
  * Smoke test — verify the web_fetch tool works end-to-end through the
- * kimchi-code harness.
+ * kimchi harness.
  *
  * Requires KIMCHI_API_KEY to be set (skipped otherwise).
  * The web_fetch tool is bundled into the compiled binary via inline

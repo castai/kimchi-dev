@@ -38,15 +38,15 @@ run("typecheck", "pnpm run typecheck")
 const targetFlag = crossTarget ? ` --target=${crossTarget}` : ""
 run(
 	"compile",
-	`bun build src/entry.ts --compile${targetFlag} --outfile dist/bin/kimchi-code --external chromium-bidi --external electron`,
+	`bun build src/entry.ts --compile${targetFlag} --outfile dist/bin/kimchi --external chromium-bidi --external electron`,
 )
 
 // Bun --compile produces binaries with an invalid code signature on macOS.
 // The kernel kills badly-signed arm64 binaries immediately (SIGKILL, exit 137).
 // Strip the corrupt signature and re-sign ad-hoc. See: https://github.com/oven-sh/bun/issues/7208
 if (!isCrossCompile && platform() === "darwin") {
-	run("codesign (strip)", "codesign --remove-signature dist/bin/kimchi-code")
-	run("codesign (ad-hoc)", "codesign -s - dist/bin/kimchi-code")
+	run("codesign (strip)", "codesign --remove-signature dist/bin/kimchi")
+	run("codesign (ad-hoc)", "codesign -s - dist/bin/kimchi")
 }
 
 run("copy resources", "node scripts/copy-resources.js")
