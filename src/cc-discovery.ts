@@ -49,32 +49,28 @@ function hasBearerAuthorizationHeader(headers: Record<string, string>): boolean 
 	)
 }
 
-export function discoverCcConfig(): CcDiscovery {
+function ingestServers(into: Record<string, ServerEntry>, source: unknown): void {
+	if (!source || typeof source !== "object" || Array.isArray(source)) return
+	for (const [name, def] of Object.entries(source as Record<string, unknown>)) {
+		if (into[name]) continue
+		if (def === null || typeof def !== "object" || Array.isArray(def)) continue
+		into[name] = transformServer(def as CcMcpServerRaw)
+	}
+}
+
+export function discoverCcConfig(configPath = CC_CONFIG_PATH): CcDiscovery {
 	const mcpServers: Record<string, ServerEntry> = {}
 
 	try {
-		const raw = JSON.parse(readFileSync(CC_CONFIG_PATH, "utf-8"))
+		const raw = JSON.parse(readFileSync(configPath, "utf-8"))
 		const projects = raw?.projects
 		if (projects && typeof projects === "object") {
 			for (const project of Object.values(projects)) {
-				const servers = (project as Record<string, unknown>)?.mcpServers
-				if (!servers || typeof servers !== "object") continue
-				for (const [name, def] of Object.entries(servers as Record<string, unknown>)) {
-					if (!mcpServers[name] && def !== null && typeof def === "object" && !Array.isArray(def)) {
-						mcpServers[name] = transformServer(def as CcMcpServerRaw)
-					}
-				}
+				ingestServers(mcpServers, (project as Record<string, unknown>)?.mcpServers)
 			}
 		}
 
-		const topLevel = raw?.mcpServers
-		if (topLevel && typeof topLevel === "object") {
-			for (const [name, def] of Object.entries(topLevel as Record<string, unknown>)) {
-				if (!mcpServers[name] && def !== null && typeof def === "object" && !Array.isArray(def)) {
-					mcpServers[name] = transformServer(def as CcMcpServerRaw)
-				}
-			}
-		}
+		ingestServers(mcpServers, raw?.mcpServers)
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
 			console.warn(`Failed to read Claude Code config: ${err instanceof Error ? err.message : String(err)}`)
