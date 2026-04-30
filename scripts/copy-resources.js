@@ -43,8 +43,11 @@ cpSync(exportHtmlSrc, exportHtmlDest, {
 	filter: (src) => !exportHtmlSkipSuffixes.some((suffix) => src.endsWith(suffix)),
 })
 
-// kimchi's own theme lives outside node_modules — copy it alongside the upstream themes
-cpSync(join(projectRoot, "themes", "kimchi.json"), join(themeDest, "kimchi.json"))
+// kimchi's own themes live outside node_modules — copy them alongside the upstream themes
+const bundledKimchiThemes = ["kimchi.json", "kimchi-minimal.json", "dark.json", "light.json"]
+for (const file of bundledKimchiThemes) {
+	cpSync(join(projectRoot, "themes", file), join(themeDest, file))
+}
 
 if (!isDev) {
 	cpSync(join(projectRoot, "package.json"), join(projectRoot, "dist", "share", "kimchi", "package.json"))

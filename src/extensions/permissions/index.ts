@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext, ToolCallEvent } from "@mariozechner/pi-coding-agent"
+import { RST_FG, resolvedSemanticFg } from "../../ansi.js"
 import { classifyToolCall } from "./classifier.js"
 import { registerCommands } from "./commands.js"
 import { type LoadedConfig, loadConfig } from "./config.js"
@@ -156,10 +157,15 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		if (!ctx.hasUI) return
 		const mode = currentMode()
 		const active = MODES.find((m) => m.mode === mode) ?? MODES[0]
-		const theme = ctx.ui.theme
-		const dots = MODES.map((m) => (m.mode === mode ? theme.fg(m.color, "●") : theme.fg("muted", "○"))).join(" ")
-		const name = theme.fg(active.color, active.label)
-		const hint = theme.fg("dim", "→ shift+tab")
+		// Filled dot + active label hardcode kimchi palette so the cue stays legible
+		// under kimchi-minimal; unfilled dots + hint use the "text" token to match
+		// editor input/cwd chrome.
+		const text = (s: string): string => ctx.ui.theme.fg("text", s)
+		const dots = MODES.map((m) =>
+			m.mode === mode ? `${resolvedSemanticFg(ctx.ui.theme, m.color)}●${RST_FG}` : text("○"),
+		).join(" ")
+		const name = `${resolvedSemanticFg(ctx.ui.theme, active.color)}${active.label}${RST_FG}`
+		const hint = text("→ shift+tab")
 		ctx.ui.setStatus("permissions-mode", `${dots} ${name} ${hint}`)
 	}
 

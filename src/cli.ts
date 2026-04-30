@@ -1,7 +1,7 @@
 // CLI logic — imported dynamically by entry.ts after PI_PACKAGE_DIR is set.
 // All static imports here (extensions, pi-mono) are safe because the env is already configured.
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
@@ -15,6 +15,7 @@ import {
 } from "./config.js"
 import { isBunBinary } from "./env.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
+import kimchiMinimalTintsExtension from "./extensions/kimchi-minimal-tints.js"
 import loginExtension from "./extensions/login/index.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
@@ -35,6 +36,7 @@ import webSearchExtension from "./extensions/web-search/index.js"
 import { updateModelsConfig } from "./models.js"
 import { runSetupWizard } from "./setup-wizard.js"
 import { setAvailableModels } from "./startup-context.js"
+import { probeTerminalBackground } from "./terminal-bg-probe.js"
 import { getVersion } from "./utils.js"
 
 const telemetryConfig = readTelemetryConfig()
@@ -145,21 +147,56 @@ try {
 			readFileSync(settingsPath, "utf-8")
 		} catch (err) {
 			if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-				writeFileSync(settingsPath, `${JSON.stringify({ quietStartup: true, theme: "kimchi" }, null, 2)}\n`)
+				writeFileSync(settingsPath, `${JSON.stringify({ quietStartup: true, theme: "kimchi-minimal" }, null, 2)}\n`)
 			} else {
 				console.error(`Warning: could not read ${settingsPath}: ${(err as Error).message}`)
 			}
 		}
 
-		// Copy kimchi theme into agent dir so initTheme can find it before extensions load
+		// Bundled themes are write-through cache — owned by the package, not the user.
+		// Source edits propagate so packaged upgrades pick up new defaults. Users
+		// wanting custom colors should clone+rename (e.g. `my-kimchi.json`), which
+		// this loop won't touch. The kimchi-minimal source keeps all six bg tokens
+		// as `""` placeholders; the kimchi-minimal-tints extension fills them in
+		// per-process at session_start from the OSC 11 probe.
 		const themesDir = resolve(agentDir, "themes")
-		const kimchiThemeDest = resolve(themesDir, "kimchi.json")
-		if (!existsSync(kimchiThemeDest)) {
-			mkdirSync(themesDir, { recursive: true })
-			const kimchiThemeSrc = isBunBinary
-				? resolve(process.env.PI_PACKAGE_DIR ?? "", "theme", "kimchi.json")
-				: resolve(dirname(fileURLToPath(import.meta.url)), "../themes/kimchi.json")
-			copyFileSync(kimchiThemeSrc, kimchiThemeDest)
+		const bundledThemes = ["kimchi.json", "kimchi-minimal.json", "dark.json", "light.json"]
+		const bundledThemesSrcDir = isBunBinary
+			? resolve(process.env.PI_PACKAGE_DIR ?? "", "theme")
+			: resolve(dirname(fileURLToPath(import.meta.url)), "../themes")
+		mkdirSync(themesDir, { recursive: true })
+
+		// Probe runs here (before pi-mono takes stdin) so the result is cached for
+		// the kimchi-minimal-tints and terminal-colors extensions. Skip in ACP mode —
+		// stdout is the JSON-RPC channel and OSC escapes would corrupt the IDE's
+		// input stream.
+		if (!acpMode) await probeTerminalBackground()
+
+		// Compare contents and only write when they differ. Restarts in a second
+		// terminal must be byte-identical no-ops because pi runs `fs.watch` on the
+		// active theme file — any rewrite (even with the same bytes via copyFileSync)
+		// fires a reload in every other running instance. The previous version of
+		// this loop injected per-process bg tints into kimchi-minimal.json on every
+		// startup; that race is what made terminals clobber each other's colors.
+		// Tints now live in memory only, applied by the kimchi-minimal-tints
+		// extension at session_start.
+		for (const file of bundledThemes) {
+			const src = resolve(bundledThemesSrcDir, file)
+			const dest = resolve(themesDir, file)
+			let srcContent: string
+			try {
+				srcContent = readFileSync(src, "utf-8")
+			} catch {
+				console.warn(`Warning: bundled theme ${file} not found at ${src}, skipping`)
+				continue
+			}
+			let destContent: string | undefined
+			try {
+				destContent = readFileSync(dest, "utf-8")
+			} catch {
+				// dest missing — fall through and write
+			}
+			if (destContent !== srcContent) writeFileSync(dest, srcContent)
 		}
 
 		// Suppress Node.js warnings (same as pi-mono's own cli.js)
@@ -185,6 +222,7 @@ try {
 			outputFilterExtension,
 			shutdownMarkerExtension,
 			terminalColorsExtension,
+			kimchiMinimalTintsExtension,
 			bashCollapseExtension,
 			loopGuardExtension,
 			mcpAdapterExtension,

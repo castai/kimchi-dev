@@ -5,7 +5,7 @@ import type { AssistantMessage } from "@mariozechner/pi-ai"
 import type { ExtensionContext, ReadonlyFooterDataProvider, Theme } from "@mariozechner/pi-coding-agent"
 import type { Component } from "@mariozechner/pi-tui"
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
-import { RST_FG, TEAL_FG } from "../ansi.js"
+import { RST_FG, TEAL_FG, resolvedSemanticFg } from "../ansi.js"
 import { formatCount } from "../extensions/format.js"
 import { getMultiModelEnabled } from "../extensions/orchestration/prompt-enrichment.js"
 import { getActiveSubagentCount } from "../extensions/subagent.js"
@@ -123,8 +123,9 @@ export class StatsFooter implements Component {
 
 	invalidate(): void {}
 
+	// Use the "text" token (not "dim") so labels match the editor input/cwd chrome.
 	private dim(s: string): string {
-		return this.theme.fg("dim", s)
+		return this.theme.fg("text", s)
 	}
 
 	private modelSegment(): FooterSegment {
@@ -156,9 +157,12 @@ export class StatsFooter implements Component {
 		const pct = contextUsage?.percent ?? 0
 
 		const filled = Math.max(0, Math.min(BAR_WIDTH, Math.round((pct / 100) * BAR_WIDTH)))
-		const bar = this.theme.fg("success", "█".repeat(filled)) + this.dim("░".repeat(BAR_WIDTH - filled))
+		const fill = resolvedSemanticFg(this.theme, "success")
+		const bar = `${fill}${"█".repeat(filled)}${RST_FG}${this.dim("░".repeat(BAR_WIDTH - filled))}`
 		const pctColor = pct > 90 ? "error" : pct > 70 ? "warning" : undefined
-		const pctStr = pctColor ? this.theme.fg(pctColor, `${Math.round(pct)}%`) : teal(`${Math.round(pct)}%`)
+		const pctStr = pctColor
+			? `${resolvedSemanticFg(this.theme, pctColor)}${Math.round(pct)}%${RST_FG}`
+			: teal(`${Math.round(pct)}%`)
 		return seg(`${bar} ${pctStr} ${this.dim("ctx")}`)
 	}
 
