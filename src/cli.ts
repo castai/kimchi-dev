@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
+import { dispatchSubcommand } from "./commands/dispatch.js"
 import {
 	DEFAULT_SKILL_PATHS,
 	loadConfig,
@@ -45,6 +46,7 @@ const telemetryConfig = readTelemetryConfig()
 
 let sessionId: string | undefined
 let sessionFile: string | undefined
+let sessionStarted = false
 // ACP mode runs JSON-RPC over stdio; the "To resume:" print (even remapped to
 // stderr via console.log = console.error inside runAcpMode) is noise in IDE
 // logs and not actionable — the IDE owns session continuation. Decide once,
@@ -53,7 +55,13 @@ const acpMode = isAcpMode(process.argv.slice(2))
 const helpOrVersion = isHelpOrVersionArgs(process.argv.slice(2))
 
 process.on("exit", (code) => {
-	if (code === 0 && !acpMode) {
+	// Only print the resume hint after a real harness session ran. Subcommands
+	// (kimchi setup, kimchi version, …) and --help/--version short-circuit
+	// before any session starts, so sessionId stays undefined and we keep
+	// quiet. The non-resume case (sessionId still undefined after main exits)
+	// is preserved by checking whether session capture had a chance to run —
+	// done by the harness path setting sessionStarted = true below.
+	if (code === 0 && !acpMode && sessionStarted) {
 		// Only print a session-specific hint if the session file was actually
 		// flushed to disk. Empty sessions (immediate exit) never get persisted,
 		// so `--session <id>` would fail to resolve. Fall back to --continue,
@@ -95,10 +103,24 @@ function isAcpMode(args: string[]): boolean {
 }
 
 try {
+	// Top-level kimchi subcommands (setup, claude, opencode, …) and the merged
+	// --help take ownership before any harness setup runs. `--version` falls
+	// through to pi-coding-agent's main below so it prints the version using
+	// piConfig.name = "kimchi".
+	const dispatch = await dispatchSubcommand(process.argv.slice(2))
+	if (dispatch.kind === "handled") {
+		process.exit(dispatch.exitCode)
+	}
+
 	if (helpOrVersion) {
 		const { main } = await import("@mariozechner/pi-coding-agent")
 		await main(process.argv.slice(2), { extensionFactories: [] })
 	} else {
+		// We're entering the harness/ACP path. Subcommands and --help/--version
+		// short-circuit above without ever reaching here, which is why the exit
+		// hook keys off this flag instead of just running unconditionally on a
+		// 0-status exit.
+		sessionStarted = true
 		let config = loadConfig()
 
 		const envKey = process.env.KIMCHI_API_KEY || undefined

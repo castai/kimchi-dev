@@ -9,7 +9,7 @@ pnpm run build:binary-linux-arm64   # Apple Silicon (M1/M2/M3/M4)
 pnpm run build:binary-linux-x64     # Intel Mac or x86-64 Linux host
 ```
 
-Then start the sandbox from the kimchi-dev directory so `dist/kimchi-code` is available inside it.
+Then start the sandbox from the kimchi-dev directory so `dist/kimchi` is available inside it.
 
 Only your working directory and its subdirectories are shared with the host — everything else (`/tmp`, home directory, system paths) lives inside the sandbox. The network is proxied — HTTP/HTTPS goes through a policy-controlled proxy, non-HTTP protocols (raw TCP, UDP) are blocked entirely. The first run pulls the sandbox image and takes a while — subsequent runs start in seconds.
 
@@ -23,8 +23,8 @@ Both steps run in the same terminal:
 # 1. Create a named sandbox (shell = agent type, . = workspace to mount)
 docker sandbox create --name kimchi-sandbox shell .
 
-# 2. Launch kimchi-code with the API key (-w sets the working directory to the mounted workspace)
-docker sandbox exec -it -e KIMCHI_API_KEY -w "$(pwd)" kimchi-sandbox ./dist/kimchi-code --provider kimchi-dev --model kimi-k2.5
+# 2. Launch kimchi with the API key (-w sets the working directory to the mounted workspace)
+docker sandbox exec -it -e KIMCHI_API_KEY -w "$(pwd)" kimchi-sandbox ./dist/kimchi --provider kimchi-dev --model kimi-k2.5
 ```
 
 ### Run — create and enter a sandbox in one step
@@ -46,8 +46,8 @@ docker sandbox create --name kimchi-sandbox shell .
 Only `exec` supports forwarding host environment variables with `-e`:
 
 ```sh
-# Forward KIMCHI_API_KEY from the host and run kimchi-code
-docker sandbox exec -it -e KIMCHI_API_KEY -w "$(pwd)" kimchi-sandbox ./dist/kimchi-code -p "your prompt"
+# Forward KIMCHI_API_KEY from the host and run kimchi
+docker sandbox exec -it -e KIMCHI_API_KEY -w "$(pwd)" kimchi-sandbox ./dist/kimchi -p "your prompt"
 
 # Interactive shell with the API key available
 docker sandbox exec -it -e KIMCHI_API_KEY -w "$(pwd)" kimchi-sandbox bash

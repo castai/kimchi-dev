@@ -4,7 +4,7 @@ import { join } from "node:path"
 const REQUIRED_THEME_FILES = ["dark.json", "light.json"]
 
 function recoveryHint(dir: string): string {
-	return `\n\nExpected layout in ${dir}:\n  package.json\n  theme/dark.json\n  theme/light.json\n\nIf kimchi-code is installed elsewhere, set PI_PACKAGE_DIR to point to the correct directory.`
+	return `\n\nExpected layout in ${dir}:\n  package.json\n  theme/dark.json\n  theme/light.json\n\nIf kimchi is installed elsewhere, set PI_PACKAGE_DIR to point to the correct directory.`
 }
 
 export function validateAuxiliaryFiles(dir: string): void {

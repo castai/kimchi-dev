@@ -7,7 +7,7 @@ import { Readable, Writable } from "node:stream"
 import { setTimeout as delay } from "node:timers/promises"
 import * as acp from "@agentclientprotocol/sdk"
 
-const binary = process.argv[2] ?? "./dist/kimchi-code"
+const binary = process.argv[2] ?? "./dist/bin/kimchi"
 
 class Client {
 	chunksBySession = new Map()
