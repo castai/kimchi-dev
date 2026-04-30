@@ -13,8 +13,7 @@ import { CastAiStatsApi, getTimeRange } from "./api.js"
 import { formatError, formatHelp } from "./display.js"
 import { formatAnalyticsVisual, formatProductivityVisual } from "./visual.js"
 
-// API key used for Cast AI API requests
-const DEFAULT_API_KEY = "c7b7ea88b9c92c21d2487634e62884aa5d167fb188be676a30fe99639b3a81b1"
+// API key used for Cast AI API requests - must be provided via CASTAI_API_KEY env var
 
 // Hardcoded user ID as specified
 const HARDCODED_USER_ID = "d1c79c82-c230-4b19-9def-dbe49bf63368"
@@ -33,7 +32,7 @@ function getStatsConfig(): StatsConfig {
 	const envOrg = process.env.CASTAI_ORG_ID
 
 	return {
-		apiKey: envKey || DEFAULT_API_KEY,
+		apiKey: envKey || "",
 		userId: HARDCODED_USER_ID,
 		organizationId: envOrg || ORGANIZATION_ID,
 	}

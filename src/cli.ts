@@ -25,7 +25,7 @@ import permissionsExtension from "./extensions/permissions/index.js"
 import { reserveShiftTabForPermissions } from "./extensions/permissions/keybindings.js"
 import promptSummaryExtension from "./extensions/prompt-summary.js"
 import shutdownMarkerExtension from "./extensions/shutdown-marker.js"
-import statsExtension from "./extensions/stats/index.js"
+// import statsExtension from "./extensions/stats/index.js"
 import subagentExtension from "./extensions/subagent.js"
 import tagsExtension from "./extensions/tags.js"
 import telemetryExtension from "./extensions/telemetry.js"
@@ -222,7 +222,7 @@ try {
 			sessionIdCaptureExtension,
 			outputFilterExtension,
 			shutdownMarkerExtension,
-			statsExtension,
+			// statsExtension,
 			terminalColorsExtension,
 			kimchiMinimalTintsExtension,
 			bashCollapseExtension,
