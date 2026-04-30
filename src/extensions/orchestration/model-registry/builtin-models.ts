@@ -21,16 +21,16 @@ import type { ModelCapabilities } from "./types.js"
  */
 
 const KIMI_K26_DESCRIPTION = `\
-Flagship Kimi model with vision support — handles images, screenshots, and visual input \
-with complex reasoning, architectural planning, and deep exploration across large codebases. \
-When a hard problem needs a superior plan or methodical analysis, this is the model to \
-delegate to. Also excels at research and review tasks. Best for complex multi-step tasks \
-requiring careful analysis.`
+Flagship Kimi model with vision support — the key model for complex planning decisions \
+and deep research. Handles images, screenshots, and visual input with superior reasoning. \
+When a hard problem needs architectural planning, strategic analysis, or methodical \
+research, this is the model to delegate to. Best for complex multi-step tasks.`
 
 const KIMI_K25_DESCRIPTION = `\
-The only model in the pool with vision support — use it when the task involves images, \
-screenshots, or visual input. Best for exploration and research tasks, particularly those \
-requiring image understanding or visual context. Excellent for autonomous multi-tool workflows.`
+Kimi model with vision support — the workhorse for simpler execution tasks and \
+exploration. Handles images, screenshots, and visual input. Best for straightforward \
+coding tasks, quick exploration, and when vision input is needed but planning depth \
+isn't critical. Reliable and efficient for well-scoped subtasks.`
 
 const MINIMAX_M27_DESCRIPTION = `\
 The strongest coding model in the pool. \
