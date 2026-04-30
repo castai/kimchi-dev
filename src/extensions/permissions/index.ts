@@ -181,6 +181,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		// Dismiss all active permission prompts so tool_call handlers re-evaluate under the new mode.
 		for (const ctrl of activeAbortControllers) ctrl.abort()
 		activeAbortControllers.clear()
+		maybeShowYoloWarning(ctx, next)
 		// Show danger warning when switching to yolo mode (only once per session)
 		if (next === "yolo" && ctx.hasUI && !yoloWarningShown) {
 			yoloWarningShown = true
@@ -267,7 +268,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		// Re-evaluation loop: when a permission prompt is dismissed because the user
 		// changed mode via shift+tab, we re-evaluate the tool call under the new mode.
 		// Cap iterations at MODES.length to prevent infinite loops.
-		for (let attempt = 0; attempt <= MODES.length; attempt++) {
+		for (let attempt = 0; attempt < MODES.length; attempt++) {
 			const mode = currentMode()
 
 			// YOLO mode: bypass ALL permission checks including rules, denylist, and classifier
