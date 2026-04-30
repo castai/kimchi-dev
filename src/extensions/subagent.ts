@@ -23,6 +23,7 @@ import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./sp
 
 const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
+export const RESULT_MAX_CHARS = 8000
 
 let activeSessionCounts: Map<string, number> | null = null
 
@@ -34,7 +35,7 @@ export function getActiveSubagentCount(): number {
 }
 const STDERR_MAX = 8192
 const TIMEOUT_MS = 30 * 60 * 1000
-const INACTIVITY_TIMEOUT_MS = 60 * 1000
+const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000
 const CHECKPOINT_END_TYPE = "subagent-end"
 const RECOVERY_MESSAGE_TYPE = "subagent-recovery"
 const INTERRUPTED_MESSAGE_TYPE = "subagent-interrupted"
@@ -319,6 +320,7 @@ function spawnSubagent(
 	cwd: string,
 	signal: AbortSignal | undefined,
 	tokenBudget: number | undefined,
+	inactivityTimeoutMs: number,
 	hideThinkingBlock: boolean,
 	onToken: (accumulated: string) => void,
 	onToolCall: (name: string, args: Record<string, unknown>, accumulated: string) => void,
@@ -349,11 +351,11 @@ function spawnSubagent(
 		let failureReason: SubagentFailureReason | undefined
 		let closed = false
 
-		let inactivityHandle = setTimeout(() => kill("output_stalled"), INACTIVITY_TIMEOUT_MS)
+		let inactivityHandle = setTimeout(() => kill("output_stalled"), inactivityTimeoutMs)
 		const resetInactivity = () => {
 			if (closed) return
 			clearTimeout(inactivityHandle)
-			inactivityHandle = setTimeout(() => kill("output_stalled"), INACTIVITY_TIMEOUT_MS)
+			inactivityHandle = setTimeout(() => kill("output_stalled"), inactivityTimeoutMs)
 		}
 
 		const finish = (exitCode: number) => {
@@ -457,9 +459,64 @@ function spawnSubagent(
 	})
 }
 
+interface SubagentResponse {
+	summary: string
+	files: string[]
+}
+
+export function parseSubagentResponse(text: string): SubagentResponse | null {
+	const trimmed = text.trim()
+
+	const tryParse = (s: string): SubagentResponse | null => {
+		try {
+			const parsed = JSON.parse(s)
+			if (typeof parsed?.summary === "string") {
+				return {
+					summary: parsed.summary,
+					files: Array.isArray(parsed.files)
+						? (parsed.files as unknown[]).filter((f): f is string => typeof f === "string")
+						: [],
+				}
+			}
+		} catch {
+			// fall through
+		}
+		return null
+	}
+
+	const direct = tryParse(trimmed)
+	if (direct !== null) return direct
+
+	const fenceMatch = trimmed.match(/```(?:json)?\s*\n([\s\S]*?)\n```/)
+	if (fenceMatch) {
+		const fromFence = tryParse(fenceMatch[1].trim())
+		if (fromFence !== null) return fromFence
+	}
+
+	const lastClose = trimmed.lastIndexOf("}")
+	if (lastClose !== -1) {
+		const firstOpen = trimmed.lastIndexOf("{", lastClose)
+		if (firstOpen !== -1) {
+			const fromBlock = tryParse(trimmed.slice(firstOpen, lastClose + 1))
+			if (fromBlock !== null) return fromBlock
+		}
+	}
+
+	return null
+}
+
 function truncatePrompt(prompt: string): string {
 	if (prompt.length <= PROMPT_MAX_LENGTH) return prompt
 	return `${prompt.slice(0, PROMPT_MAX_LENGTH)}...`
+}
+
+export function truncateSubagentResult(text: string, sessionFile: string | undefined): string {
+	if (text.length <= RESULT_MAX_CHARS) return text
+	const half = Math.floor(RESULT_MAX_CHARS / 2)
+	const head = text.slice(0, half)
+	const tail = text.slice(-half)
+	const sessionRef = sessionFile ? ` Full output in: ${sessionFile}` : ""
+	return `${head}\n\n[… middle elided.${sessionRef}]\n\n${tail}`
 }
 
 function formatFooterStatus(counts: Map<string, number>, theme: Theme): string {
@@ -499,6 +556,12 @@ const SubagentParams = Type.Object({
 		Type.Union([Type.Integer({ minimum: 1 }), Type.String({ pattern: "^[1-9][0-9]*$" })], {
 			description:
 				"Maximum total tokens (input + output) the subagent may consume. Subagent is killed when exceeded. Omit unless you have an explicit reason to cap token usage — do not set this speculatively.",
+		}),
+	),
+	inactivityTimeoutMs: Type.Optional(
+		Type.Union([Type.Integer({ minimum: 1000 }), Type.String({ pattern: "^[1-9][0-9]{3,}$" })], {
+			description:
+				"Milliseconds of silence before the subagent is killed with output_stalled. Defaults to 3 minutes. Increase for planning or research steps where a thinking-heavy model may reason silently for an extended period before producing output.",
 		}),
 	),
 })
@@ -622,12 +685,15 @@ export default function (pi: ExtensionAPI) {
 
 			let lastToolCall: string | undefined
 			const tokenBudget = params.tokenBudget !== undefined ? Number(params.tokenBudget) : undefined
+			const inactivityTimeoutMs =
+				params.inactivityTimeoutMs !== undefined ? Number(params.inactivityTimeoutMs) : INACTIVITY_TIMEOUT_MS
 			const hideThinkingBlock = settingsManager.getHideThinkingBlock()
 			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(
 				invocation,
 				ctx.cwd,
 				signal,
 				tokenBudget,
+				inactivityTimeoutMs,
 				hideThinkingBlock,
 				(text) => {
 					lastToolCall = undefined
@@ -657,12 +723,13 @@ export default function (pi: ExtensionAPI) {
 			const stats: SubagentStats = { durationMs, tokenUsage, sessionId, sessionFile: childSessionFile }
 
 			if (failureReason !== undefined || exitCode !== 0) {
+				const rawDetail = stderr.trim() || accumulated || "(no output)"
 				const error: SubagentError = {
 					reason: failureReason ?? "exit_error",
 					model: params.model,
 					tokenUsage,
 					durationMs,
-					detail: stderr.trim() || accumulated || "(no output)",
+					detail: truncateSubagentResult(rawDetail, childSessionFile),
 				}
 				return {
 					content: [{ type: "text", text: JSON.stringify(error) }],
@@ -671,15 +738,24 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 
+			const resultText =
+				(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated)) || "(no output)"
+			const parsed = parseSubagentResponse(resultText)
+			if (parsed === null) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Protocol violation: subagent response is not valid JSON.\n\nRaw output:\n\n${truncateSubagentResult(resultText, childSessionFile)}`,
+						},
+					],
+					details: stats,
+					isError: true,
+				}
+			}
+			const filesLine = parsed.files.length > 0 ? `\nFiles: ${parsed.files.join(", ")}` : ""
 			return {
-				content: [
-					{
-						type: "text",
-						text:
-							(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated)) ||
-							"(no output)",
-					},
-				],
+				content: [{ type: "text", text: `${parsed.summary}${filesLine}` }],
 				details: stats,
 			}
 		},

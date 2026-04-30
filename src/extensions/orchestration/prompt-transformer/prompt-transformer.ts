@@ -5,7 +5,7 @@ import type { ContextFile } from "./context-files.js"
 import systemPromptTemplate from "./prompts/orchestrator-system-prompt.js"
 import singleModelSystemPromptTemplate from "./prompts/single-model-system-prompt.js"
 import subagentSystemPromptTemplate from "./prompts/subagent-system-prompt.js"
-import userPromptTemplate from "./prompts/transformed-user-prompt.js"
+import { userPromptHeader, userPromptTaskSection } from "./prompts/transformed-user-prompt.js"
 
 export interface EnvironmentInfo {
 	os: string
@@ -58,7 +58,12 @@ export interface CurrentModelInfo {
 	name: string
 }
 
-export function transformPrompt(userPrompt: string, registry: ModelRegistry, currentModel?: CurrentModelInfo): string {
+export function transformPrompt(
+	userPrompt: string,
+	registry: ModelRegistry,
+	currentModel?: CurrentModelInfo,
+	includeTask = true,
+): string {
 	const subagentModels = registry.getModelsWithCapabilities().filter((m) => m.id !== currentModel?.id)
 	const modelsSection = formatModelsSection(subagentModels)
 
@@ -73,7 +78,9 @@ export function transformPrompt(userPrompt: string, registry: ModelRegistry, cur
 		? formatCurrentModelCapabilities(currentDescriptor)
 		: "No capability information available for this model."
 
-	return userPromptTemplate
+	const template = includeTask ? userPromptHeader + userPromptTaskSection : userPromptHeader
+
+	return template
 		.replace("{{CURRENT_MODEL_NAME}}", () => currentModelName)
 		.replace("{{CURRENT_MODEL_CAPABILITIES}}", () => currentModelCapabilities)
 		.replace("{{MODELS}}", () => modelsSection)

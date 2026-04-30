@@ -1,4 +1,4 @@
-import { CORE_GUIDELINES, DOCUMENTS_SECTION, FOOTER, TOOLS_SECTION } from "./shared.js"
+import { CORE_GUIDELINES, DOCUMENTS_SECTION, FOOTER, SUBAGENT_RESPONSE_PROTOCOL, TOOLS_SECTION } from "./shared.js"
 
 export default [
 	`You are an expert coding assistant. You operate inside a coding agent harness. Use only the tools listed under **Available Tools** below — never guess or invent tool names.
@@ -6,6 +6,7 @@ export default [
 {{ENVIRONMENT}}`,
 	TOOLS_SECTION,
 	DOCUMENTS_SECTION,
+	SUBAGENT_RESPONSE_PROTOCOL,
 	`## Guidelines
 
 ${CORE_GUIDELINES}
