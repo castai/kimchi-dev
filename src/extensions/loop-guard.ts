@@ -263,11 +263,18 @@ function extractOutputText(content: ToolResultEvent["content"]): string {
 export default function loopGuardExtension(pi: ExtensionAPI) {
 	const guard = new LoopGuard()
 
-	pi.on("input", () => {
+	pi.on("input", (event) => {
+		if (event.source === "extension") return
 		guard.reset()
 	})
 
 	pi.on("tool_call", (event) => {
+		if (!event.toolName) {
+			return {
+				block: true,
+				reason: "Tool name is empty. Check your tool call syntax and use only the tools listed under Available Tools.",
+			}
+		}
 		if (guard.isTriggered()) {
 			return { block: true, reason: TERMINATION_MESSAGE }
 		}
