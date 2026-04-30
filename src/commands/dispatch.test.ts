@@ -71,14 +71,30 @@ describe("dispatchSubcommand", () => {
 		expect(printed).toMatch(/^kimchi \d+\.\d+\.\d+/m)
 	})
 
-	it("each known subcommand stub prints its own marker and returns 1", async () => {
-		const stubs = ["setup", "claude", "opencode", "cursor", "openclaw", "gsd2", "update", "config"]
-		for (const name of stubs) {
+	it("setup + update are still stubs and return 1 with a 'not implemented' marker", async () => {
+		// These two land in PR2-followups (setup wizard + self-update). Until
+		// then they print a stub marker so users get a clear message rather
+		// than silent dispatch.
+		for (const name of ["setup", "update"]) {
 			errSpy.mockClear()
 			const result = await dispatchSubcommand([name])
 			expect(result).toEqual({ kind: "handled", exitCode: 1 })
 			const first = errSpy.mock.calls[0]?.[0] as string | undefined
 			expect(first).toContain(`kimchi ${name}: not implemented yet`)
 		}
+	})
+
+	// Per-tool subcommand behavior is exercised in the integration test files
+	// (claude-code.test.ts, opencode.test.ts, cursor.test.ts, openclaw.test.ts,
+	// gsd2.test.ts) — including the empty-API-key rejection path. We don't
+	// re-assert it here because the dispatcher would resolve the key from the
+	// real ~/.config/kimchi/config.json on developer machines and spawn the
+	// underlying binary, which makes the test environment-dependent.
+
+	it("config with no args prints usage and returns 1", async () => {
+		const result = await dispatchSubcommand(["config"])
+		expect(result).toEqual({ kind: "handled", exitCode: 1 })
+		const messages = errSpy.mock.calls.map((c) => String(c[0] ?? "")).join("\n")
+		expect(messages).toContain("Usage: kimchi config")
 	})
 })
