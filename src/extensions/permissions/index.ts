@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext, ToolCallEvent } from "@mariozechner/pi-coding-agent"
+import { isKeyRelease, matchesKey } from "@mariozechner/pi-tui"
 import { RST_FG, resolvedSemanticFg } from "../../ansi.js"
 import { classifyToolCall } from "./classifier.js"
 import { registerCommands } from "./commands.js"
@@ -75,11 +76,6 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		type: "string",
 	})
 
-	pi.registerShortcut("shift+tab", {
-		description: "Cycle permission mode (default → plan → yolo)",
-		handler: (ctx) => cycleMode(ctx),
-	})
-
 	const session = new SessionMemory()
 	const builtinRules: Rule[] = parseRules(BUILTIN_DENY, "deny", "builtin")
 	// Snapshot env before propagateModeToEnv overwrites it; otherwise
@@ -91,6 +87,10 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	let cliMode: PermissionMode | undefined
 	let originalActiveTools: string[] | null = null
 	let planModeApplied = false
+	let yoloWarningShown = false
+	/** Tracks all active permission prompt abort controllers for concurrent tool calls. */
+	const activeAbortControllers = new Set<AbortController>()
+	let unsubscribeTerminalInput: (() => void) | null = null
 
 	function rebuildConfigRules(): void {
 		configRules = [
@@ -178,7 +178,17 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		if (next === "plan") applyPlanModeTools()
 		propagateModeToEnv()
 		updateStatus(ctx)
+		// Dismiss all active permission prompts so tool_call handlers re-evaluate under the new mode.
+		for (const ctrl of activeAbortControllers) ctrl.abort()
+		activeAbortControllers.clear()
 		maybeShowYoloWarning(ctx, next)
+		// Show danger warning when switching to yolo mode (only once per session)
+		if (next === "yolo" && ctx.hasUI && !yoloWarningShown) {
+			yoloWarningShown = true
+			const dangerMsg =
+				"DANGER: Running in YOLO mode. All permission checks are disabled. The agent will execute commands without confirmation. This can modify or delete files. Intended for use in disposable or sandboxed environments only. Not recommended for production use."
+			ctx.ui.notify(ctx.ui.theme.fg("error", dangerMsg), "warning")
+		}
 	}
 
 	function doLoadConfig(ctx: ExtensionContext): { errors: string[] } {
@@ -213,6 +223,23 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 			else console.error(`permissions: ${err}`)
 		}
 
+		// Register a global terminal input listener so that the shift+tab shortcut
+		// works even when a permission prompt (ExtensionSelectorComponent) has focus.
+		if (unsubscribeTerminalInput) unsubscribeTerminalInput()
+		if (ctx.hasUI) {
+			unsubscribeTerminalInput = ctx.ui.onTerminalInput((data) => {
+				if (matchesKey(data, "shift+tab")) {
+					// Kitty keyboard protocol sends both press and release events;
+					// ignore the release to avoid cycling the mode twice per keystroke.
+					if (!isKeyRelease(data)) {
+						cycleMode(ctx)
+					}
+					return { consume: true }
+				}
+				return undefined
+			})
+		}
+
 		// CLI-flag rules live in session memory so /permissions list shows them.
 		session.addMany(parseRules(loaded.allowBySource.cli, "allow", "cli"))
 		session.addMany(parseRules(loaded.denyBySource.cli, "deny", "cli"))
@@ -235,69 +262,88 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	})
 
 	pi.on("tool_call", async (event, ctx) => {
-		const mode = currentMode()
 		const toolName = event.toolName.toLowerCase()
 		const input = event.input as Record<string, unknown>
 
-		// YOLO mode: bypass ALL permission checks including rules, denylist, and classifier
-		if (mode === "yolo") {
-			return undefined
-		}
+		// Re-evaluation loop: when a permission prompt is dismissed because the user
+		// changed mode via shift+tab, we re-evaluate the tool call under the new mode.
+		// Cap iterations at MODES.length to prevent infinite loops.
+		for (let attempt = 0; attempt < MODES.length; attempt++) {
+			const mode = currentMode()
 
-		if (mode === "plan") {
-			if (toolName === "bash") {
-				const command = typeof input.command === "string" ? input.command : ""
-				if (!isReadOnlyBashCommand(command)) {
+			// YOLO mode: bypass ALL permission checks including rules, denylist, and classifier
+			if (mode === "yolo") {
+				return undefined
+			}
+
+			if (mode === "plan") {
+				if (toolName === "bash") {
+					const command = typeof input.command === "string" ? input.command : ""
+					if (!isReadOnlyBashCommand(command)) {
+						return {
+							block: true,
+							reason: `Plan mode: bash command "${command}" is not in the read-only allowlist. Use /permissions mode default (or auto) to run writes.`,
+						}
+					}
+					return undefined
+				}
+				if (!isReadOnlyTool(toolName) && !PLAN_MODE_TOOLS.includes(toolName)) {
 					return {
 						block: true,
-						reason: `Plan mode: bash command "${command}" is not in the read-only allowlist. Use /permissions mode default (or auto) to run writes.`,
+						reason: `Plan mode: tool ${toolName} is not available. Use /permissions mode default to enable writes.`,
 					}
 				}
 				return undefined
 			}
-			if (!isReadOnlyTool(toolName) && !PLAN_MODE_TOOLS.includes(toolName)) {
-				return {
-					block: true,
-					reason: `Plan mode: tool ${toolName} is not available. Use /permissions mode default to enable writes.`,
+
+			const match = evaluateRules(allRules(), toolName, input)
+			if (match.decision === "deny") {
+				return { block: true, reason: `Denied by rule ${formatRule(match.rule)}` }
+			}
+			if (match.decision === "allow") return undefined
+
+			if (BUILTIN_ALLOW_TOOL_NAMES.includes(toolName)) return undefined
+
+			// Auto mode + headless default mode (subagents) both go through the
+			// classifier; prompts without a UI fail closed.
+			if (mode === "auto" || !ctx.hasUI) {
+				if (isReadOnlyTool(toolName)) return undefined
+				if (toolName === "bash") {
+					const command = typeof input.command === "string" ? input.command : ""
+					if (isReadOnlyBashCommand(command)) return undefined
 				}
+
+				const verdict = await classifyToolCall(
+					ctx,
+					{ toolName, input, cwd: ctx.cwd },
+					{ timeoutMs: loaded.config.classifierTimeoutMs },
+				)
+
+				if (verdict.verdict === "safe") return undefined
+				if (verdict.verdict === "blocked") {
+					return { block: true, reason: `Classifier blocked: ${verdict.reason}` }
+				}
+				if (!ctx.hasUI) {
+					return { block: true, reason: `Classifier: ${verdict.reason} (no UI to confirm)` }
+				}
+				const result = await handleConfirm(event, {
+					ctx,
+					subtitle: `Classifier: ${verdict.reason}`,
+					session,
+					activeAborts: activeAbortControllers,
+				})
+				if (result === "aborted") continue // mode changed, re-evaluate
+				return result
 			}
-			return undefined
+
+			const result = await handleConfirm(event, { ctx, session, activeAborts: activeAbortControllers })
+			if (result === "aborted") continue // mode changed, re-evaluate
+			return result
 		}
 
-		const match = evaluateRules(allRules(), toolName, input)
-		if (match.decision === "deny") {
-			return { block: true, reason: `Denied by rule ${formatRule(match.rule)}` }
-		}
-		if (match.decision === "allow") return undefined
-
-		if (BUILTIN_ALLOW_TOOL_NAMES.includes(toolName)) return undefined
-
-		// Auto mode + headless default mode (subagents) both go through the
-		// classifier; prompts without a UI fail closed.
-		if (mode === "auto" || !ctx.hasUI) {
-			if (isReadOnlyTool(toolName)) return undefined
-			if (toolName === "bash") {
-				const command = typeof input.command === "string" ? input.command : ""
-				if (isReadOnlyBashCommand(command)) return undefined
-			}
-
-			const verdict = await classifyToolCall(
-				ctx,
-				{ toolName, input, cwd: ctx.cwd },
-				{ timeoutMs: loaded.config.classifierTimeoutMs },
-			)
-
-			if (verdict.verdict === "safe") return undefined
-			if (verdict.verdict === "blocked") {
-				return { block: true, reason: `Classifier blocked: ${verdict.reason}` }
-			}
-			if (!ctx.hasUI) {
-				return { block: true, reason: `Classifier: ${verdict.reason} (no UI to confirm)` }
-			}
-			return handleConfirm(event, { ctx, subtitle: `Classifier: ${verdict.reason}`, session })
-		}
-
-		return handleConfirm(event, { ctx, session })
+		// Exhausted re-evaluation attempts — fail closed.
+		console.warn("permissions: mode changed too many times during prompt, failing closed")
+		return { block: true, reason: "Permission mode changed too many times during prompt" }
 	})
 
 	registerCommands(pi, {
@@ -325,28 +371,37 @@ interface ConfirmOptions {
 	ctx: ExtensionContext
 	session: SessionMemory
 	subtitle?: string
+	activeAborts: Set<AbortController>
 }
 
 async function handleConfirm(
 	event: ToolCallEvent,
 	opts: ConfirmOptions,
-): Promise<{ block: true; reason: string } | undefined> {
-	const outcome = await promptForApproval({
-		toolName: event.toolName,
-		input: event.input as Record<string, unknown>,
-		ctx: opts.ctx,
-		subtitle: opts.subtitle,
-	})
+): Promise<{ block: true; reason: string } | "aborted" | undefined> {
+	const abort = new AbortController()
+	opts.activeAborts.add(abort)
+	try {
+		const outcome = await promptForApproval({
+			toolName: event.toolName,
+			input: event.input as Record<string, unknown>,
+			ctx: opts.ctx,
+			subtitle: opts.subtitle,
+			signal: abort.signal,
+		})
 
-	if (outcome.kind === "allow-once") return undefined
-	if (outcome.kind === "allow-remember") {
-		opts.session.add(outcome.rule)
-		return undefined
+		if (outcome.kind === "aborted") return "aborted"
+		if (outcome.kind === "allow-once") return undefined
+		if (outcome.kind === "allow-remember") {
+			opts.session.add(outcome.rule)
+			return undefined
+		}
+		if (outcome.kind === "deny-with-feedback") {
+			return { block: true, reason: outcome.feedback }
+		}
+		return { block: true, reason: "Declined by user" }
+	} finally {
+		opts.activeAborts.delete(abort)
 	}
-	if (outcome.kind === "deny-with-feedback") {
-		return { block: true, reason: outcome.feedback }
-	}
-	return { block: true, reason: "Declined by user" }
 }
 
 function splitFlag(raw: boolean | string | undefined): string[] {

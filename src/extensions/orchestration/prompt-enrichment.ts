@@ -26,6 +26,7 @@ import { homedir, platform, userInfo } from "node:os"
 import { isAbsolute, join, normalize, resolve } from "node:path"
 import type { AssistantMessage, ImageContent, TextContent } from "@mariozechner/pi-ai"
 import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
+import { isKeyRelease, matchesKey } from "@mariozechner/pi-tui"
 import { ANSI, fg } from "../../ansi.js"
 import { getAvailableModels } from "../../startup-context.js"
 import { getGitBranch } from "../../utils.js"
@@ -135,12 +136,23 @@ export default function (skillPaths: string[]) {
 				)
 			}
 
-			pi.registerShortcut("alt+tab", {
-				description: "Toggle multi-model orchestration on/off",
-				handler: (ctx) => {
-					multiModelEnabled = !multiModelEnabled
-					ctx.ui.setStatus("multi-model", undefined)
-				},
+			// Global terminal input listener so alt+tab works even when a
+			// dialog (e.g. permission prompt) has focus instead of the editor.
+			let unsubAltTab: (() => void) | null = null
+			pi.on("session_start", async (_event, ctx) => {
+				if (unsubAltTab) unsubAltTab()
+				if (ctx.hasUI) {
+					unsubAltTab = ctx.ui.onTerminalInput((data) => {
+						if (matchesKey(data, "alt+tab")) {
+							if (!isKeyRelease(data)) {
+								multiModelEnabled = !multiModelEnabled
+								ctx.ui.setStatus("multi-model", undefined)
+							}
+							return { consume: true }
+						}
+						return undefined
+					})
+				}
 			})
 
 			// Detect the inverse of the context-event nudge below: the orchestrator reasons

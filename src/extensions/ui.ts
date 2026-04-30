@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process"
+import type { Api, Model } from "@mariozechner/pi-ai"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
 import { isEditToolResult, isWriteToolResult } from "@mariozechner/pi-coding-agent"
+import { isKeyRelease, matchesKey } from "@mariozechner/pi-tui"
 import type { TUI } from "@mariozechner/pi-tui"
 import { PromptEditor } from "../components/editor.js"
 import { ScriptFooter, StatsFooter, buildScriptPayload, readStatusLineCommand } from "../components/footer.js"
@@ -8,6 +10,10 @@ import { LogoHeader } from "../components/logo.js"
 import { SplashHeader } from "../components/splash-header.js"
 import { collapseAll, expandNext, resetState } from "../expand-state.js"
 import { isBareExitAlias } from "./exit-utils.js"
+
+function modelsAreEqual(a: Model<Api>, b: Model<Api>): boolean {
+	return a.provider === b.provider && a.id === b.id
+}
 
 const HORIZONTAL_PADDING = 2
 
@@ -90,6 +96,7 @@ function runScript(scriptPath: string, payload: object, tui: TUI, footer: Script
 
 export default function uiExtension(pi: ExtensionAPI) {
 	let tuiPatched = false
+	let unsubModelCycleInput: (() => void) | null = null
 	let scriptFooter: ScriptFooter | null = null
 	let scriptTui: TUI | null = null
 	let scriptCmd: string | null = null
@@ -169,6 +176,30 @@ export default function uiExtension(pi: ExtensionAPI) {
 			currentEditor = editor
 			return editor
 		})
+
+		// Register a global terminal input listener so ctrl+p (model cycle forward)
+		// works even when a permission prompt or other dialog has focus.
+		if (unsubModelCycleInput) unsubModelCycleInput()
+		if (ctx.hasUI) {
+			unsubModelCycleInput = ctx.ui.onTerminalInput((data) => {
+				if (matchesKey(data, "ctrl+p")) {
+					if (!isKeyRelease(data)) {
+						const available = ctx.modelRegistry.getAvailable()
+						const current = ctx.model
+						if (available.length > 1 && current) {
+							let idx = available.findIndex((m) => modelsAreEqual(m, current))
+							if (idx === -1) idx = 0
+							const next = available[(idx + 1) % available.length]
+							pi.setModel(next).catch((err) => {
+								ctx.ui.notify(`Failed to cycle model: ${err instanceof Error ? err.message : String(err)}`, "warning")
+							})
+						}
+					}
+					return { consume: true }
+				}
+				return undefined
+			})
+		}
 	})
 
 	pi.on("input", (event, ctx) => {
