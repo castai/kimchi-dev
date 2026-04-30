@@ -75,8 +75,9 @@ If a subagent hits its budget, spawn a follow-up with the remaining work rather 
 
 ## Inactivity timeout
 
-By default subagents are killed after 3 minutes of silence. For steps where a thinking-heavy model may reason silently before producing output, set \`inactivityTimeoutMs\` explicitly:
+By default subagents are killed after 3 minutes of silence. For steps where a model may reason silently or perform extensive file I/O before producing output, set \`inactivityTimeoutMs\` explicitly:
 
+- \`explore\` on a large codebase: 300000 (5 minutes)
 - \`plan\` or \`research\` delegated to a heavy model: 600000 (10 minutes)
 - \`build\` or \`review\`: omit (default is sufficient)`,
 	TOOLS_SECTION,

@@ -35,7 +35,7 @@ export function getActiveSubagentCount(): number {
 }
 const STDERR_MAX = 8192
 const TIMEOUT_MS = 30 * 60 * 1000
-const INACTIVITY_TIMEOUT_MS = 60 * 1000
+const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000
 const CHECKPOINT_END_TYPE = "subagent-end"
 const RECOVERY_MESSAGE_TYPE = "subagent-recovery"
 const INTERRUPTED_MESSAGE_TYPE = "subagent-interrupted"
