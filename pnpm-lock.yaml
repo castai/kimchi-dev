@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@mariozechner/pi-coding-agent':
+    hash: abb877a867e699ad24e2f72cb410d78bab73ece3c24663625133b61c0fbc513f
+    path: patches/@mariozechner__pi-coding-agent.patch
+
 importers:
 
   .:
@@ -16,7 +21,7 @@ importers:
         version: 1.2.0
       '@mariozechner/pi-coding-agent':
         specifier: ^0.67.68
-        version: 0.67.68(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
+        version: 0.67.68(patch_hash=abb877a867e699ad24e2f72cb410d78bab73ece3c24663625133b61c0fbc513f)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
       '@mariozechner/pi-tui':
         specifier: ^0.67.68
         version: 0.67.68
@@ -2798,7 +2803,7 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-coding-agent@0.67.68(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)':
+  '@mariozechner/pi-coding-agent@0.67.68(patch_hash=abb877a867e699ad24e2f72cb410d78bab73ece3c24663625133b61c0fbc513f)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)':
     dependencies:
       '@mariozechner/jiti': 2.6.5
       '@mariozechner/pi-agent-core': 0.67.68(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)

@@ -32,26 +32,45 @@ function transformServer(raw: CcMcpServerRaw): ServerEntry {
 	if (raw.url !== undefined) entry.url = raw.url
 	const headers = raw.headers ?? raw.header
 	if (headers !== undefined) entry.headers = headers
+	if (
+		raw.url !== undefined &&
+		headers !== null &&
+		typeof headers === "object" &&
+		hasBearerAuthorizationHeader(headers)
+	) {
+		entry.auth = "bearer"
+	}
 	return entry
 }
 
-export function discoverCcConfig(): CcDiscovery {
+function hasBearerAuthorizationHeader(headers: Record<string, string>): boolean {
+	return Object.entries(headers).some(
+		([k, v]) => k.toLowerCase() === "authorization" && typeof v === "string" && v.toLowerCase().startsWith("bearer "),
+	)
+}
+
+function ingestServers(into: Record<string, ServerEntry>, source: unknown): void {
+	if (!source || typeof source !== "object" || Array.isArray(source)) return
+	for (const [name, def] of Object.entries(source as Record<string, unknown>)) {
+		if (into[name]) continue
+		if (def === null || typeof def !== "object" || Array.isArray(def)) continue
+		into[name] = transformServer(def as CcMcpServerRaw)
+	}
+}
+
+export function discoverCcConfig(configPath = CC_CONFIG_PATH): CcDiscovery {
 	const mcpServers: Record<string, ServerEntry> = {}
 
 	try {
-		const raw = JSON.parse(readFileSync(CC_CONFIG_PATH, "utf-8"))
+		const raw = JSON.parse(readFileSync(configPath, "utf-8"))
 		const projects = raw?.projects
 		if (projects && typeof projects === "object") {
 			for (const project of Object.values(projects)) {
-				const servers = (project as Record<string, unknown>)?.mcpServers
-				if (!servers || typeof servers !== "object") continue
-				for (const [name, def] of Object.entries(servers as Record<string, CcMcpServerRaw>)) {
-					if (!mcpServers[name]) {
-						mcpServers[name] = transformServer(def)
-					}
-				}
+				ingestServers(mcpServers, (project as Record<string, unknown>)?.mcpServers)
 			}
 		}
+
+		ingestServers(mcpServers, raw?.mcpServers)
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
 			console.warn(`Failed to read Claude Code config: ${err instanceof Error ? err.message : String(err)}`)
