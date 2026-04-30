@@ -8,7 +8,7 @@ export const RESEARCH_RULES = `## Research Rules
 - **Avoid web_fetch.** It returns raw website content that can flood your context window. Prefer \`web_search\` for most research. Use \`web_fetch\` only when the information is frequently updated and unlikely to be indexed (e.g. changelogs, latest release notes), or when the user's message contains an explicit URL. When you do use it, request markdown or text format and delegate to a subagent to keep the output out of the main context.
 - **Run at most one web_search per task.** Do NOT run a second search to verify or refine.`
 
-export const CORE_GUIDELINES = `- Be concise in your responses.
+export const CORE_GUIDELINES = `- Be concise in your responses. Do not restate what you are about to do, repeat what you just did, or summarize completed steps — act and move on.
 - Show file paths clearly when working with files.
 - Read files before modifying them.
 - Prefer editing existing files over creating new ones.
