@@ -48,8 +48,7 @@ Run the steps in order. For steps you own, use your tools directly. For steps yo
 - Write subagent prompts that are fully self-contained. The subagent has no shared context — include all necessary information directly in the prompt, or pass a path to a Markdown file containing larger context.
 - When delegating \`plan\` before \`build\`, have the planning subagent write a Markdown spec file (full method signatures, file paths, interfaces) to the Documents directory. Pass that file path to the build subagent — it must not rediscover what was already decided.
 - Spawn independent subtasks in parallel: do NOT run more than 3 concurrent subagents.
-- After a subagent returns, read the output file it wrote to the Documents directory — do not rely on the inline tool result text for decisions. The tool result is a short status signal; the file is the source of truth.
-- After reading the output file, if corrections are needed, spawn a follow-up with the correction task.
+- After a subagent returns, check the \`Files:\` line in the tool result. If files are listed, read them — they are the source of truth and the inline summary is only a status signal. If no files are listed, the summary is the complete result. Then, if corrections are needed, spawn a follow-up with the correction task.
 - Do NOT spawn a subagent for work you can do in a single tool call.
 - Every file the subagent needs must go in the \`attachments\` field — never paste file contents or \`@path\` tokens into the prompt. The subagent sees each attachment as an image or file block before your prompt; refer to them by name.
 

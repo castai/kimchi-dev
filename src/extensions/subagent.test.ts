@@ -466,8 +466,13 @@ describe("truncateSubagentResult", () => {
 		it(name, () => {
 			const result = truncateSubagentResult(text, sessionFile)
 			if (expectTruncated) {
-				expect(result).toContain("[Output truncated")
+				expect(result).toContain("[… middle elided")
+				// head + elision notice + tail should stay within ~RESULT_MAX_CHARS + small overhead
 				expect(result.length).toBeLessThanOrEqual(RESULT_MAX_CHARS + 200)
+				// both the start and end of the original text are preserved
+				const half = Math.floor(RESULT_MAX_CHARS / 2)
+				expect(result).toContain(text.slice(0, half))
+				expect(result).toContain(text.slice(-half))
 			} else {
 				expect(result).toBe(text)
 			}

@@ -512,9 +512,11 @@ function truncatePrompt(prompt: string): string {
 
 export function truncateSubagentResult(text: string, sessionFile: string | undefined): string {
 	if (text.length <= RESULT_MAX_CHARS) return text
-	const tail = text.slice(-RESULT_MAX_CHARS)
+	const half = Math.floor(RESULT_MAX_CHARS / 2)
+	const head = text.slice(0, half)
+	const tail = text.slice(-half)
 	const sessionRef = sessionFile ? ` Full output in: ${sessionFile}` : ""
-	return `[Output truncated — showing last ${RESULT_MAX_CHARS} characters.${sessionRef}]\n\n${tail}`
+	return `${head}\n\n[… middle elided.${sessionRef}]\n\n${tail}`
 }
 
 function formatFooterStatus(counts: Map<string, number>, theme: Theme): string {
