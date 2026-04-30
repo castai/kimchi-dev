@@ -39,7 +39,12 @@ export function getProviderDisplayName(providerName: string): string {
 	return mapping[providerName] || providerName
 }
 
-export function formatAnalyticsVisual(data: GenerateAnalyticsResponse, theme: Theme, termWidth = 100, days = 30): string[] {
+export function formatAnalyticsVisual(
+	data: GenerateAnalyticsResponse,
+	theme: Theme,
+	termWidth = 100,
+	days = 30,
+): string[] {
 	const lines: string[] = []
 
 	lines.push("")

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { getTimeRange } from "./api.js"
 import { formatCount } from "../format.js"
-import { getProviderDisplayName, formatCurrency } from "./visual.js"
+import { getTimeRange } from "./api.js"
+import { formatCurrency, getProviderDisplayName } from "./visual.js"
 
 describe("getTimeRange", () => {
 	it("returns correct time range for 30 days", () => {
@@ -55,7 +55,7 @@ describe("formatCurrency", () => {
 
 	it("handles invalid input", () => {
 		expect(formatCurrency("invalid")).toBe("$0.00")
-		expect(formatCurrency(NaN)).toBe("$0.00")
+		expect(formatCurrency(Number.NaN)).toBe("$0.00")
 	})
 })
 

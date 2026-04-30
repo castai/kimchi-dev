@@ -33,7 +33,16 @@ let currentEditor: PromptEditor | undefined
  * Reset splash mode and switch to chat view.
  * Call this from command handlers that need to exit splash mode.
  */
-export function exitSplashMode(ctx: { ui: { setHeader: (factory: (tui: TUI, theme: import("@mariozechner/pi-coding-agent").Theme) => import("@mariozechner/pi-tui").Component) => void } }): void {
+export function exitSplashMode(ctx: {
+	ui: {
+		setHeader: (
+			factory: (
+				tui: TUI,
+				theme: import("@mariozechner/pi-coding-agent").Theme,
+			) => import("@mariozechner/pi-tui").Component,
+		) => void
+	}
+}): void {
 	if (!splashActive) return
 	splashActive = false
 	ctx.ui.setHeader((_tui, theme) => new LogoHeader(theme))
