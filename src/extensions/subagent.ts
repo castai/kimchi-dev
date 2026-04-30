@@ -23,7 +23,7 @@ import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./sp
 
 const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
-const RESULT_MAX_CHARS = 8000
+export const RESULT_MAX_CHARS = 8000
 
 let activeSessionCounts: Map<string, number> | null = null
 
@@ -510,7 +510,7 @@ function truncatePrompt(prompt: string): string {
 	return `${prompt.slice(0, PROMPT_MAX_LENGTH)}...`
 }
 
-function truncateSubagentResult(text: string, sessionFile: string | undefined): string {
+export function truncateSubagentResult(text: string, sessionFile: string | undefined): string {
 	if (text.length <= RESULT_MAX_CHARS) return text
 	const tail = text.slice(-RESULT_MAX_CHARS)
 	const sessionRef = sessionFile ? ` Full output in: ${sessionFile}` : ""
@@ -557,7 +557,7 @@ const SubagentParams = Type.Object({
 		}),
 	),
 	inactivityTimeoutMs: Type.Optional(
-		Type.Union([Type.Integer({ minimum: 1000 }), Type.String({ pattern: "^[1-9][0-9]*$" })], {
+		Type.Union([Type.Integer({ minimum: 1000 }), Type.String({ pattern: "^[1-9][0-9]{3,}$" })], {
 			description:
 				"Milliseconds of silence before the subagent is killed with output_stalled. Defaults to 3 minutes. Increase for planning or research steps where a thinking-heavy model may reason silently for an extended period before producing output.",
 		}),

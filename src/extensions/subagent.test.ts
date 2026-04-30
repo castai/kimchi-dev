@@ -4,10 +4,12 @@ import { join, resolve } from "node:path"
 import { CURRENT_SESSION_VERSION } from "@mariozechner/pi-coding-agent"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import {
+	RESULT_MAX_CHARS,
 	buildSubagentArgs,
 	parseSubagentEvent,
 	parseSubagentResponse,
 	prepareChildSessionFile,
+	truncateSubagentResult,
 	validateAttachments,
 } from "./subagent.js"
 
@@ -419,6 +421,59 @@ describe("parseSubagentResponse", () => {
 	for (const [name, { input, expected }] of Object.entries(cases)) {
 		it(name, () => {
 			expect(parseSubagentResponse(input)).toEqual(expected)
+		})
+	}
+})
+
+describe("truncateSubagentResult", () => {
+	const cases: Record<
+		string,
+		{ text: string; sessionFile: string | undefined; expectTruncated: boolean; expectSessionRef: boolean }
+	> = {
+		"returns text unchanged when under limit": {
+			text: "short output",
+			sessionFile: undefined,
+			expectTruncated: false,
+			expectSessionRef: false,
+		},
+		"returns text unchanged at exact limit": {
+			text: "x".repeat(RESULT_MAX_CHARS),
+			sessionFile: undefined,
+			expectTruncated: false,
+			expectSessionRef: false,
+		},
+		"truncates text one character over limit": {
+			text: "x".repeat(RESULT_MAX_CHARS + 1),
+			sessionFile: undefined,
+			expectTruncated: true,
+			expectSessionRef: false,
+		},
+		"truncates and includes session file reference when provided": {
+			text: "x".repeat(RESULT_MAX_CHARS + 100),
+			sessionFile: "/sessions/child.jsonl",
+			expectTruncated: true,
+			expectSessionRef: true,
+		},
+		"handles empty string": {
+			text: "",
+			sessionFile: undefined,
+			expectTruncated: false,
+			expectSessionRef: false,
+		},
+	}
+
+	for (const [name, { text, sessionFile, expectTruncated, expectSessionRef }] of Object.entries(cases)) {
+		it(name, () => {
+			const result = truncateSubagentResult(text, sessionFile)
+			if (expectTruncated) {
+				expect(result).toContain("[Output truncated")
+				expect(result.length).toBeLessThanOrEqual(RESULT_MAX_CHARS + 200)
+			} else {
+				expect(result).toBe(text)
+			}
+			if (expectSessionRef) {
+				expect(result).toContain(sessionFile)
+			}
 		})
 	}
 })

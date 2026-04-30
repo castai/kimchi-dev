@@ -1,4 +1,4 @@
-export default `## Your Capabilities
+export const userPromptHeader = `## Your Capabilities
 
 You are **{{CURRENT_MODEL_NAME}}**.
 
@@ -38,9 +38,6 @@ All models (including yourself) are described with the following attributes:
 
 ## Available Models
 
-{{MODELS}}
+{{MODELS}}`
 
-## Task
-
-{{USER_PROMPT}}
-`
+export const userPromptTaskSection = "\n\n## Task\n\n{{USER_PROMPT}}"

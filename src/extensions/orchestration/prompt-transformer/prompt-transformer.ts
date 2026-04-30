@@ -5,7 +5,7 @@ import type { ContextFile } from "./context-files.js"
 import systemPromptTemplate from "./prompts/orchestrator-system-prompt.js"
 import singleModelSystemPromptTemplate from "./prompts/single-model-system-prompt.js"
 import subagentSystemPromptTemplate from "./prompts/subagent-system-prompt.js"
-import userPromptTemplate from "./prompts/transformed-user-prompt.js"
+import { userPromptHeader, userPromptTaskSection } from "./prompts/transformed-user-prompt.js"
 
 export interface EnvironmentInfo {
 	os: string
@@ -78,10 +78,7 @@ export function transformPrompt(
 		? formatCurrentModelCapabilities(currentDescriptor)
 		: "No capability information available for this model."
 
-	let template = userPromptTemplate
-	if (!includeTask) {
-		template = template.replace(/\n## Task\n\n\{\{USER_PROMPT\}\}\n?$/, "")
-	}
+	const template = includeTask ? userPromptHeader + userPromptTaskSection : userPromptHeader
 
 	return template
 		.replace("{{CURRENT_MODEL_NAME}}", () => currentModelName)
