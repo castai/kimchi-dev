@@ -184,7 +184,9 @@ export default function uiExtension(pi: ExtensionAPI) {
 			unsubModelCycleInput = ctx.ui.onTerminalInput((data) => {
 				if (matchesKey(data, "ctrl+p")) {
 					if (!isKeyRelease(data)) {
-						const available = ctx.modelRegistry.getAvailable()
+						// Only show models from kimchi-dev provider to avoid collisions with pi-mono's built-in registry
+						// (e.g., claude-opus-4-7 exists under both anthropic and amazon-bedrock providers in pi-mono)
+						const available = ctx.modelRegistry.getAvailable().filter((m) => m.provider === "kimchi-dev")
 						const current = ctx.model
 						if (available.length > 1 && current) {
 							let idx = available.findIndex((m) => modelsAreEqual(m, current))
