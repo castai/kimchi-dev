@@ -203,8 +203,6 @@ export default function uiExtension(pi: ExtensionAPI) {
 							let idx = available.findIndex((m) => modelsAreEqual(m, current))
 							if (idx === -1) idx = 0
 							const next = available[(idx + 1) % available.length]
-							// Validate model before switching to catch any non-kimchi models
-							validateKimchiModel(next)
 							pi.setModel(next).catch((err) => {
 								ctx.ui.notify(`Failed to cycle model: ${err instanceof Error ? err.message : String(err)}`, "warning")
 							})
