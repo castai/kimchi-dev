@@ -35,6 +35,7 @@ export default function hitlMetricsExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("metrics", {
 		description: "Show HITL interaction metrics",
 		handler: async (args, ctx) => {
+			manager.persist()
 			handleMetricsCommand(args, ctx)
 		},
 	})
@@ -92,6 +93,19 @@ export default function hitlMetricsExtension(pi: ExtensionAPI): void {
 	})
 
 	// -------------------------------------------------------------------------
+	// Tool Execution End: RPC-mode fallback for tool time tracking
+	// -------------------------------------------------------------------------
+	pi.on("tool_execution_end", async (event) => {
+		try {
+			if (!event.toolCallId) return
+			manager.recordToolEndFromEvent(event.toolCallId, event.toolName)
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			console.warn(`[HITL] Error in tool_execution_end handler: ${message}`)
+		}
+	})
+
+	// -------------------------------------------------------------------------
 	// Tool Result: Categorize and record all tool results
 	// -------------------------------------------------------------------------
 	pi.on("tool_result", async (event) => {
@@ -126,6 +140,18 @@ export default function hitlMetricsExtension(pi: ExtensionAPI): void {
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			console.warn(`[HITL] Error in tool_result handler: ${message}`)
+		}
+	})
+
+	// -------------------------------------------------------------------------
+	// Agent End: Flush metrics if session_shutdown never fires (RPC mode)
+	// -------------------------------------------------------------------------
+	pi.on("agent_end", async () => {
+		try {
+			manager.persist()
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			console.warn(`[HITL] Error in agent_end handler: ${message}`)
 		}
 	})
 

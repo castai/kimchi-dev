@@ -18,12 +18,12 @@ const IDLE_CHAR = "░"
 export function buildTimeline(session: HitlSession, events: HitlEvent[], activities?: ActivityEvent[]): TimelineSegment[] {
 	const sessionEnd = session.ended_at ?? Date.now()
 	if (activities && activities.length > 0) {
-		return buildTimelineFromActivities(session.started_at, sessionEnd, activities)
+		return buildTimelineFromActivities(session.started_at, session.ended_at ?? null, activities)
 	}
 	return buildTimelineFromEvents(session, events, sessionEnd)
 }
 
-function buildTimelineFromActivities(sessionStart: number, sessionEnd: number, activities: ActivityEvent[]): TimelineSegment[] {
+function buildTimelineFromActivities(sessionStart: number, sessionEndedAt: number | null, activities: ActivityEvent[]): TimelineSegment[] {
 	const segments: TimelineSegment[] = []
 	sortActivities(activities)
 
@@ -45,8 +45,21 @@ function buildTimelineFromActivities(sessionStart: number, sessionEnd: number, a
 		pushSegment(segments, currentSegment, currentTime)
 	}
 
-	if (currentTime < sessionEnd) {
-		segments.push({ type: "idle", startMs: currentTime, endMs: sessionEnd, durationMs: sessionEnd - currentTime })
+	if (sessionEndedAt !== null) {
+		// Closed session: fill the remaining gap to session end
+		if (currentTime < sessionEndedAt) {
+			segments.push({ type: "idle", startMs: currentTime, endMs: sessionEndedAt, durationMs: sessionEndedAt - currentTime })
+		}
+	} else {
+		// Active session: only append trailing idle if we're actively waiting (last activity was idle_start)
+		const lastActivity = activities[activities.length - 1]
+		if (lastActivity?.activity_type === "idle_start") {
+			const now = Date.now()
+			if (currentTime < now) {
+				segments.push({ type: "idle", startMs: currentTime, endMs: now, durationMs: now - currentTime })
+			}
+		}
+		// Otherwise: agent finished last turn — no trailing segment shown
 	}
 
 	return mergeConsecutiveSegments(segments)

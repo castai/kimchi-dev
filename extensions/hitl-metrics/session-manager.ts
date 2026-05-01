@@ -127,12 +127,33 @@ export class SessionManager {
 	recordToolStart(toolCallId: string, toolName: string): void {
 		if (!toolCallId) return
 		this.pendingStartTimes.set(toolCallId, Date.now())
-
+		// Ensure session exists before recording (handles RPC mode where session_start may not fire)
+		this.ensureSession()
 		if (this.db && this.session) {
 			recordActivityEvent(this.db, this.session.id, "tool_start", toolName)
 		}
 		if (this.isIdle) this.endIdlePeriod()
 		this.lastActivityTimestamp = Date.now()
+	}
+
+	/**
+	 * Lazily initialize the session if it hasn't been created yet.
+	 * This handles modes (e.g. RPC) where session_start may not fire before tool events.
+	 */
+	private ensureSession(): void {
+		if (this.session !== null || this.db === null) return
+		try {
+			this.session = getOrCreateSession(this.db, this.projectHashValue, {})
+			if (this.session) {
+				this.lastActivityTimestamp = Date.now()
+				this.agentTimeAccumulator = this.session.agent_time_ms
+				this.hitlTimeAccumulator = this.session.hitl_time_ms
+				this.idleTimeAccumulator = this.session.idle_time_ms
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			console.warn(`[HITL] Lazy session init failed: ${message}`)
+		}
 	}
 
 	/** Record end of any tool execution and accumulate agent time */
@@ -143,6 +164,31 @@ export class SessionManager {
 			recordActivityEvent(this.db, this.session.id, "tool_end", toolName, durationMs)
 		}
 
+		// Accumulate agent time (exclude HITL tools tracked separately)
+		if (toolName !== HITL_TOOL_NAME) {
+			this.agentTimeAccumulator += durationMs
+		}
+		this.lastActivityTimestamp = Date.now()
+		this.maybeStartIdleTimer()
+	}
+
+	/**
+	 * Record tool end from tool_execution_end event.
+	 * In print mode, tool_result fires first and deletes startTime from pendingStartTimes,
+	 * so we skip when already consumed (no double-counting). In RPC mode, tool_result
+	 * may not fire, so we compute duration here using the stored start time.
+	 */
+	recordToolEndFromEvent(toolCallId: string, toolName: string): void {
+		const startTime = this.pendingStartTimes.get(toolCallId)
+		// Only record if not already consumed by tool_result (which deletes on consume)
+		if (startTime === undefined) return
+		this.pendingStartTimes.delete(toolCallId)
+		const durationMs = Date.now() - startTime
+		// Ensure session exists before recording (covers session_start not firing before tool_execution_end)
+		this.ensureSession()
+		if (this.db && this.session) {
+			recordActivityEvent(this.db, this.session.id, "tool_end", toolName, durationMs)
+		}
 		// Accumulate agent time (exclude HITL tools tracked separately)
 		if (toolName !== HITL_TOOL_NAME) {
 			this.agentTimeAccumulator += durationMs
@@ -266,6 +312,19 @@ export class SessionManager {
 		this.db = null
 		this.session = null
 		this.pendingStartTimes.clear()
+	}
+
+	/** Returns total idle time including any currently open idle period (not yet flushed to DB) */
+	getLiveIdleMs(): number {
+		const liveExtra = this.isIdle && this.currentIdleStart > 0 ? Date.now() - this.currentIdleStart : 0
+		return this.idleTimeAccumulator + liveExtra
+	}
+
+	/** Persist accumulated time metrics to database (public for external triggers) */
+	persist(): void {
+		if (!this.db || !this.session) return
+		const liveIdleMs = this.getLiveIdleMs()
+		updateSessionTimes(this.db, this.session.id, this.agentTimeAccumulator, this.hitlTimeAccumulator, liveIdleMs)
 	}
 
 	/** Persist accumulated time metrics to database */

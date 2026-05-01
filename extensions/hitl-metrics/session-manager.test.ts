@@ -131,6 +131,20 @@ describe("SessionManager", () => {
 			expect(time1).toBeGreaterThan(0)
 			expect(time2).toBeGreaterThan(0)
 		})
+
+		it("getLiveIdleMs() returns accumulated idle including open period", () => {
+			// Simulate: user input opens idle, then we check live idle before tool_start closes it
+			manager.recordUserInput() // opens idle_start
+			// Don't call recordToolStart — idle is still open
+			const liveIdle = manager.getLiveIdleMs()
+			expect(liveIdle).toBeGreaterThan(0) // open idle is counted
+		})
+
+		it("getLiveIdleMs() returns only accumulated idle when no open period", () => {
+			// No idle started — should be 0
+			const liveIdle = manager.getLiveIdleMs()
+			expect(liveIdle).toBe(0)
+		})
 	})
 
 	describe("session persistence", () => {

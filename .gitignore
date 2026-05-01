@@ -25,6 +25,9 @@ Thumbs.db
 # Test coverage
 coverage/
 
+# Kimchi local config
+.kimchi/
+
 # ── GSD baseline (auto-generated) ──
 .gsd
 .gsd-id

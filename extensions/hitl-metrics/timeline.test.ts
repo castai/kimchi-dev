@@ -115,6 +115,44 @@ describe("buildTimeline", () => {
 		expect(agentSegments.length).toBe(1)
 		expect(agentSegments[0].durationMs).toBe(4000)
 	})
+
+	it("active session: no trailing idle after last tool_end", () => {
+		const session = createSession({ started_at: 1000, ended_at: null, status: "active", agent_time_ms: 0, hitl_time_ms: 0, idle_time_ms: 0 })
+		const activities: ActivityEvent[] = [
+			createActivity({ activity_type: "tool_start", timestamp: 1000 }),
+			createActivity({ activity_type: "tool_end", timestamp: 2000, duration_ms: 1000 }),
+		]
+		const segments = buildTimeline(session, [], activities)
+		// Total duration should reflect only the known activity, not extend to Date.now()
+		const totalMs = segments.reduce((sum, s) => sum + s.durationMs, 0)
+		expect(totalMs).toBeLessThanOrEqual(1000)
+		const idleSegments = segments.filter((s) => s.type === "idle")
+		expect(idleSegments.length).toBe(0)
+	})
+
+	it("active session: trailing idle shown when last activity is idle_start (agent waiting)", () => {
+		const before = Date.now()
+		const session = createSession({ started_at: before - 5000, ended_at: null, status: "active", agent_time_ms: 0, hitl_time_ms: 0, idle_time_ms: 0 })
+		const activities: ActivityEvent[] = [
+			createActivity({ activity_type: "user_input", timestamp: before - 5000 }),
+			createActivity({ activity_type: "idle_start", timestamp: before - 5000 }),
+		]
+		const segments = buildTimeline(session, [], activities)
+		const idleSegments = segments.filter((s) => s.type === "idle")
+		expect(idleSegments.length).toBe(1)
+		expect(idleSegments[0].durationMs).toBeGreaterThan(0)
+	})
+
+	it("closed session: always fills trailing gap as idle", () => {
+		const session = createSession({ started_at: 1000, ended_at: 5000, status: "closed", agent_time_ms: 0, hitl_time_ms: 0, idle_time_ms: 0 })
+		const activities: ActivityEvent[] = [
+			createActivity({ activity_type: "tool_start", timestamp: 1000 }),
+			createActivity({ activity_type: "tool_end", timestamp: 2000, duration_ms: 1000 }),
+		]
+		const segments = buildTimeline(session, [], activities)
+		const end = segments.reduce((max, s) => Math.max(max, s.endMs), 0)
+		expect(end).toBe(5000)
+	})
 })
 
 describe("renderTimeline", () => {

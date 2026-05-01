@@ -293,8 +293,7 @@ async function main() {
       "-e", "extensions/hitl-metrics/index.ts",
       "--model", "kimi-k2.5",
     ],
-    PROMPT,
-    runEnv,
+    PROMPT
   )
 
   console.log(`Exit code: ${result.exitCode}`)
@@ -338,7 +337,6 @@ async function main() {
   const binaryResult = await runKimchi(
     ["/opt/homebrew/bin/gsd", "--print", "--mode", "json", "--no-session", "--model", "kimi-k2.5"],
     "bash echo hello",
-    { KIMCHI_API_KEY: apiKey } as Record<string, string>,
   )
   console.log(`Exit code: ${binaryResult.exitCode}`)
   console.log(`JSONL events captured: ${binaryResult.events.length}`)
