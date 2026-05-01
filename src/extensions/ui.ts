@@ -17,7 +17,7 @@ function modelsAreEqual(a: Model<Api>, b: Model<Api>): boolean {
 }
 
 /** Validate that a model is from the kimchi-dev provider */
-function validateKimchiModel(model: Model<Api>): void {
+export function validateKimchiModel(model: Model<Api>): void {
 	if (model.provider !== KIMCHI_PROVIDER) {
 		throw new Error(
 			`Model ${model.id} from provider "${model.provider}" is not supported. ` +
