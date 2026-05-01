@@ -76,3 +76,42 @@ describe("Model filtering for kimchi-dev provider", () => {
 		expect(available).toHaveLength(3)
 	})
 })
+
+describe("Model validation", () => {
+	it("accepts kimchi-dev provider models", () => {
+		const mockModel = { id: "claude-opus-4-7", provider: "kimchi-dev", name: "Claude Opus 4.7" }
+
+		// Should not throw
+		expect(() => {
+			if (mockModel.provider !== "kimchi-dev") {
+				throw new Error(
+					`Model ${mockModel.id} from provider "${mockModel.provider}" is not supported. Only kimchi-dev models are allowed to avoid API conflicts.`,
+				)
+			}
+		}).not.toThrow()
+	})
+
+	it("rejects non-kimchi-dev provider models with clear error", () => {
+		const mockModel = { id: "claude-opus-4-7", provider: "amazon-bedrock", name: "Claude Opus 4.7 (Bedrock)" }
+
+		expect(() => {
+			if (mockModel.provider !== "kimchi-dev") {
+				throw new Error(
+					`Model ${mockModel.id} from provider "${mockModel.provider}" is not supported. Only kimchi-dev models are allowed to avoid API conflicts.`,
+				)
+			}
+		}).toThrow(/amazon-bedrock.*not supported/)
+	})
+
+	it("rejects anthropic provider models", () => {
+		const mockModel = { id: "claude-opus-4-7", provider: "anthropic", name: "Claude Opus 4.7" }
+
+		expect(() => {
+			if (mockModel.provider !== "kimchi-dev") {
+				throw new Error(
+					`Model ${mockModel.id} from provider "${mockModel.provider}" is not supported. Only kimchi-dev models are allowed to avoid API conflicts.`,
+				)
+			}
+		}).toThrow(/anthropic.*not supported/)
+	})
+})

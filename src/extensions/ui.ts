@@ -16,6 +16,16 @@ function modelsAreEqual(a: Model<Api>, b: Model<Api>): boolean {
 	return a.provider === b.provider && a.id === b.id
 }
 
+/** Validate that a model is from the kimchi-dev provider */
+function validateKimchiModel(model: Model<Api>): void {
+	if (model.provider !== KIMCHI_PROVIDER) {
+		throw new Error(
+			`Model ${model.id} from provider "${model.provider}" is not supported. ` +
+				`Only ${KIMCHI_PROVIDER} models are allowed to avoid API conflicts.`,
+		)
+	}
+}
+
 const HORIZONTAL_PADDING = 2
 
 // Strip OSC 133 shell-integration marks emitted by pi-mono around each message.
@@ -193,6 +203,8 @@ export default function uiExtension(pi: ExtensionAPI) {
 							let idx = available.findIndex((m) => modelsAreEqual(m, current))
 							if (idx === -1) idx = 0
 							const next = available[(idx + 1) % available.length]
+							// Validate model before switching to catch any non-kimchi models
+							validateKimchiModel(next)
 							pi.setModel(next).catch((err) => {
 								ctx.ui.notify(`Failed to cycle model: ${err instanceof Error ? err.message : String(err)}`, "warning")
 							})
