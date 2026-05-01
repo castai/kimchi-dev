@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { EnrichmentGuard, deduplicateEnrichedPrompts } from "./prompt-enrichment.js"
 import type { OrchestratorMessages } from "./continuation-nudge.js"
+import { EnrichmentGuard, deduplicateEnrichedPrompts } from "./prompt-enrichment.js"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -27,7 +27,14 @@ function makeAssistant(): OrchestratorMessages[number] {
 		api: "openai-completions",
 		provider: "kimchi-dev",
 		model: "kimi-k2.6",
-		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
 		stopReason: "stop",
 		timestamp: Date.now(),
 	}
@@ -118,10 +125,17 @@ describe("deduplicateEnrichedPrompts", () => {
 	it("removes all but the last when many duplicates have accumulated", () => {
 		const copies = [makeEnrichedPrompt(), makeEnrichedPrompt(), makeEnrichedPrompt(), makeEnrichedPrompt()]
 		const messages: OrchestratorMessages = [
-			copies[0], makeUser("q1"), makeAssistant(),
-			copies[1], makeUser("q2"), makeAssistant(),
-			copies[2], makeUser("q3"), makeAssistant(),
-			copies[3], makeUser("q4"),
+			copies[0],
+			makeUser("q1"),
+			makeAssistant(),
+			copies[1],
+			makeUser("q2"),
+			makeAssistant(),
+			copies[2],
+			makeUser("q3"),
+			makeAssistant(),
+			copies[3],
+			makeUser("q4"),
 		]
 		const result = deduplicateEnrichedPrompts(messages)
 		const remaining = result.filter(
@@ -143,7 +157,13 @@ describe("deduplicateEnrichedPrompts", () => {
 	})
 
 	it("does not remove non-enriched-prompt custom messages", () => {
-		const nudge = { role: "custom" as const, customType: "nudge", content: "nudge", display: false, timestamp: Date.now() }
+		const nudge = {
+			role: "custom" as const,
+			customType: "nudge",
+			content: "nudge",
+			display: false,
+			timestamp: Date.now(),
+		}
 		const messages: OrchestratorMessages = [makeEnrichedPrompt(), makeEnrichedPrompt(), nudge, makeUser("q")]
 		const result = deduplicateEnrichedPrompts(messages)
 		expect(result).toContain(nudge)
