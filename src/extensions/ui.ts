@@ -9,6 +9,7 @@ import { ScriptFooter, StatsFooter, buildScriptPayload, readStatusLineCommand } 
 import { LogoHeader } from "../components/logo.js"
 import { SplashHeader } from "../components/splash-header.js"
 import { collapseAll, expandNext, resetState } from "../expand-state.js"
+import { KIMCHI_PROVIDER } from "../models.js"
 import { isBareExitAlias } from "./exit-utils.js"
 
 function modelsAreEqual(a: Model<Api>, b: Model<Api>): boolean {
@@ -186,7 +187,7 @@ export default function uiExtension(pi: ExtensionAPI) {
 					if (!isKeyRelease(data)) {
 						// Only show models from kimchi-dev provider to avoid collisions with pi-mono's built-in registry
 						// (e.g., claude-opus-4-7 exists under both anthropic and amazon-bedrock providers in pi-mono)
-						const available = ctx.modelRegistry.getAvailable().filter((m) => m.provider === "kimchi-dev")
+						const available = ctx.modelRegistry.getAvailable().filter((m) => m.provider === KIMCHI_PROVIDER)
 						const current = ctx.model
 						if (available.length > 1 && current) {
 							let idx = available.findIndex((m) => modelsAreEqual(m, current))

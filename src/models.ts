@@ -7,6 +7,9 @@ const MODELS_METADATA_API = `${KIMCHI_API}/v1/models/metadata?include_in_cli=tru
 const CHAT_COMPLETIONS_API = `${KIMCHI_API}/openai/v1`
 const FETCH_TIMEOUT_MS = 5000
 
+/** Provider name for Kimchi-served models */
+export const KIMCHI_PROVIDER = "kimchi-dev"
+
 export interface ModelMetadata {
 	slug: string
 	display_name: string
