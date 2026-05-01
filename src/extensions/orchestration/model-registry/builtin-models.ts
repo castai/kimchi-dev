@@ -20,12 +20,6 @@ import type { ModelCapabilities } from "./types.js"
  * the API once the shape is stable.
  */
 
-const KIMI_K26_DESCRIPTION = `\
-Flagship Kimi model with vision support — the key model for complex planning decisions \
-and deep research. Handles images, screenshots, and visual input with superior reasoning. \
-When a hard problem needs architectural planning, strategic analysis, or methodical \
-research, this is the model to delegate to. Best for complex multi-step tasks.`
-
 const KIMI_K25_DESCRIPTION = `\
 Kimi model with vision support — the workhorse for simpler execution tasks and \
 exploration. Handles images, screenshots, and visual input. Best for straightforward \
@@ -63,15 +57,6 @@ export const MODEL_CAPABILITIES: ReadonlyMap<string, ModelCapabilities | "ignore
 	string,
 	ModelCapabilities | "ignored"
 >([
-	[
-		"kimi-k2.6",
-		{
-			vision: true,
-			strengths: ["explore", "research", "plan", "review"],
-			tier: "heavy",
-			description: KIMI_K26_DESCRIPTION,
-		},
-	],
 	[
 		"kimi-k2.5",
 		{
