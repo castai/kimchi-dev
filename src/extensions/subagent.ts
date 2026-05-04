@@ -735,7 +735,7 @@ export default function (pi: ExtensionAPI) {
 					content: [
 						{
 							type: "text",
-							text: `Subagent failed — do NOT attempt to implement or complete this work yourself. Spawn a replacement subagent with a corrected or simplified prompt instead.\n\nError details:\n\n${JSON.stringify(error)}`,
+							text: `Subagent failed — do NOT attempt to implement or complete this work yourself. Spawn a replacement subagent with a corrected or simplified prompt instead.\n\nError details:\n\n${JSON.stringify(error, null, 2)}`,
 						},
 					],
 					details: stats,
