@@ -79,8 +79,7 @@ export default function outputFilterExtension(pi: ExtensionAPI) {
 
 		const message = event.message as AssistantMessage
 
-		for (const [, { thinkingBlock, textRef }] of insertedByIndex) {
-			// Find and remove the ThinkingContent block we inserted
+		for (const [, { thinkingBlock }] of insertedByIndex) {
 			const thinkIdx = message.content.indexOf(thinkingBlock)
 			if (thinkIdx !== -1) {
 				message.content.splice(thinkIdx, 1)
@@ -94,5 +93,19 @@ export default function outputFilterExtension(pi: ExtensionAPI) {
 				entry.textRef.text = raw
 			}
 		}
+
+		// Re-apply display filtering after the framework has had a chance to
+		// persist the raw text to history. queueMicrotask runs after the current
+		// synchronous call stack (where history persistence happens) but before
+		// the next I/O callback, which is before the TUI renders.
+		const snapshot = new Map(rawByIndex)
+		queueMicrotask(() => {
+			for (const [idx, raw] of snapshot) {
+				const entry = insertedByIndex.get(idx)
+				if (!entry) continue
+				const { visible } = splitOutputTags(raw)
+				if (visible.trim()) entry.textRef.text = visible
+			}
+		})
 	})
 }
