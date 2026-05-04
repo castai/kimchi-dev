@@ -111,7 +111,9 @@ export class ScriptFooter implements Component {
 	render(width: number): string[] {
 		const controls = this.getControlsLine()
 		const scriptLines = this.cachedLines.map((line) => truncateToWidth(line, width))
-		return controls ? [truncateToWidth(controls, width), ...scriptLines] : scriptLines
+		if (!controls) return scriptLines
+		const sep = `\x1b[2m${"─".repeat(width)}\x1b[0m`
+		return [truncateToWidth(controls, width), sep, ...scriptLines]
 	}
 }
 
