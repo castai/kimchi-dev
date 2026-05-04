@@ -80,7 +80,7 @@ Use `/tags` without arguments to see help and current static tag configuration.
 
 Tags use `key:value` format with these rules:
 - Must start and end with alphanumeric characters
-- Middle characters can include hyphens (`-`), underscores (`_`), and dots (`.`) 
+- Middle characters can include hyphens (`-`), underscores (`_`), and dots (`.`)
 - Key and value must each be 64 characters or less
 - Maximum 10 tags total (including static tags and the auto-added model tag)
 
