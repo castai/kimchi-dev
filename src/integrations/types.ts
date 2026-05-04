@@ -7,8 +7,6 @@ import type { ConfigScope } from "../config/scope.js"
  */
 export type ToolId = "opencode" | "claudecode" | "cursor" | "openclaw" | "gsd2"
 
-export const TOOL_IDS: readonly ToolId[] = ["opencode", "claudecode", "cursor", "openclaw", "gsd2"] as const
-
 /**
  * A configurable third-party tool that kimchi can point at the kimchi LLM
  * proxy. Each tool ships its own `write(scope, apiKey)` that mutates the

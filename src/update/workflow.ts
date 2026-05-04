@@ -67,7 +67,7 @@ export async function checkForUpdate(opts: CheckOptions): Promise<CheckResult> {
 
 	if (latestVersion === "") {
 		const info = await client.latestRelease(repo)
-		latestVersion = stripVersionPrefix(info.tagName)
+		latestVersion = info.tagName
 		releaseUrl = info.htmlUrl
 		saveRepoState(repo.owner, repo.name, {
 			checkedAt: Date.now(),
@@ -121,9 +121,10 @@ export async function applyUpdate(opts: UpdateOptions): Promise<UpdateResult> {
 		await client.downloadArchive(repo, opts.tag, archivePath)
 		await verifyChecksum(archivePath, expectedChecksum)
 
-		const extractedRoot = await extractTarGz(archivePath, repo.binary)
+		const binaryPath = join("bin", repo.binary)
+		const extractedRoot = await extractTarGz(archivePath, binaryPath)
 		try {
-			const newBinaryPath = join(extractedRoot, repo.binary)
+			const newBinaryPath = join(extractedRoot, binaryPath)
 			macosCodesignReSign(newBinaryPath)
 			smokeTestBinary(newBinaryPath)
 			const { backupPath } = atomicInstall(newBinaryPath, targetPath)
@@ -134,8 +135,4 @@ export async function applyUpdate(opts: UpdateOptions): Promise<UpdateResult> {
 	} finally {
 		rmSync(workDir, { recursive: true, force: true })
 	}
-}
-
-function stripVersionPrefix(tag: string): string {
-	return tag.startsWith("v") ? tag.slice(1) : tag
 }
