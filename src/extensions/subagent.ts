@@ -7,7 +7,6 @@ import {
 	type ExtensionAPI,
 	type SessionEntry,
 	type SessionHeader,
-	SettingsManager,
 	type Theme,
 } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui"
@@ -18,7 +17,6 @@ import { isBunBinary, isRunningUnderBun } from "../env.js"
 import { isToolExpanded, registerToolCall } from "../expand-state.js"
 import { findExistingFile, resolveUserPath, stripAtPrefix } from "../fs-paths.js"
 import { formatCount, formatDuration } from "./format.js"
-import { filterOutputTags, stripOutputTagWrappers } from "./output-tag-filter.js"
 import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./spinner.js"
 
 const PROMPT_MAX_LENGTH = 60
@@ -321,7 +319,6 @@ function spawnSubagent(
 	signal: AbortSignal | undefined,
 	tokenBudget: number | undefined,
 	inactivityTimeoutMs: number,
-	hideThinkingBlock: boolean,
 	onToken: (accumulated: string) => void,
 	onToolCall: (name: string, args: Record<string, unknown>, accumulated: string) => void,
 ): Promise<SubagentResult> {
@@ -398,7 +395,7 @@ function spawnSubagent(
 			} = parseSubagentEvent(line)
 			if (delta !== null) {
 				accumulated += delta
-				onToken(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated))
+				onToken(accumulated)
 			}
 			if (lineInput > 0 || lineOutput > 0) {
 				inputTokens += lineInput
@@ -567,12 +564,10 @@ const SubagentParams = Type.Object({
 })
 
 export default function (pi: ExtensionAPI) {
-	const settingsManager = SettingsManager.create()
 	const sessionCounts = new Map<string, number>()
 	activeSessionCounts = sessionCounts
 
-	pi.on("session_start", async (event, ctx) => {
-		await settingsManager.reload()
+	pi.on("session_start", (event, ctx) => {
 		if (ctx.hasUI) {
 			sessionCounts.clear()
 			ctx.ui.setStatus(FOOTER_STATUS_KEY, undefined)
@@ -687,14 +682,12 @@ export default function (pi: ExtensionAPI) {
 			const tokenBudget = params.tokenBudget !== undefined ? Number(params.tokenBudget) : undefined
 			const inactivityTimeoutMs =
 				params.inactivityTimeoutMs !== undefined ? Number(params.inactivityTimeoutMs) : INACTIVITY_TIMEOUT_MS
-			const hideThinkingBlock = settingsManager.getHideThinkingBlock()
 			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(
 				invocation,
 				ctx.cwd,
 				signal,
 				tokenBudget,
 				inactivityTimeoutMs,
-				hideThinkingBlock,
 				(text) => {
 					lastToolCall = undefined
 					onUpdate?.({ content: [{ type: "text", text }], details: undefined })
@@ -743,8 +736,7 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 
-			const resultText =
-				(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated)) || "(no output)"
+			const resultText = accumulated || "(no output)"
 			const parsed = parseSubagentResponse(resultText)
 			if (parsed === null) {
 				return {
@@ -793,7 +785,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			const name = theme.fg("success", theme.bold("subagent"))
-			const model = theme.fg("dim", `${args.provider ?? ""}/${args.model ?? ""}`)
+			const model = theme.fg("dim", `$args.provider ?? ""/${args.model ?? ""}`)
 			const left = `${icon} ${name}  ${model}`
 
 			let right = ""
