@@ -160,15 +160,20 @@ describe("pruneToolResult", () => {
 
 function makeMockPI() {
 	const handlers: Record<string, (event: unknown) => Promise<unknown>> = {}
+	const entries: Array<{ customType: string; data: unknown }> = []
 	return {
 		pi: {
 			on(event: string, handler: (e: unknown) => Promise<unknown>) {
 				handlers[event] = handler
 			},
+			appendEntry(customType: string, data: unknown) {
+				entries.push({ customType, data })
+			},
 		} as unknown as ExtensionAPI,
 		async trigger(event: string, payload: unknown) {
 			return handlers[event]?.(payload)
 		},
+		entries,
 	}
 }
 
@@ -237,5 +242,33 @@ describe("contextCompactorExtension", () => {
 		expect(result).toBeDefined()
 		// user message before cutoff is returned by reference (not cloned)
 		expect(result.messages[0]).toBe(oldUser)
+	})
+
+	it("emits tool_result_pruning entry with correct counts when pruning fires", async () => {
+		const { pi, trigger, entries } = makeMockPI()
+		contextCompactorExtension(pi)
+		await trigger("message_end", makeMessageEndEvent(40_000))
+		const oldOutput = makeToolResult("bash", "x".repeat(600)) // 600 chars, pruned to placeholder
+		const recent = Array.from({ length: 30 }, makeUser)
+		const messages = [oldOutput, ...recent] as ContextEvent["messages"]
+		await trigger("context", { messages })
+		expect(entries).toHaveLength(1)
+		expect(entries[0].customType).toBe("tool_result_pruning")
+		const data = entries[0].data as { prunedCount: number; totalCharsRemoved: number; cutoff: number }
+		expect(data.prunedCount).toBe(1)
+		expect(data.totalCharsRemoved).toBeGreaterThan(0)
+		expect(data.cutoff).toBe(1)
+	})
+
+	it("does not emit entry when no messages are actually pruned", async () => {
+		const { pi, trigger, entries } = makeMockPI()
+		contextCompactorExtension(pi)
+		await trigger("message_end", makeMessageEndEvent(40_000))
+		// old tool result is below MIN_PRUNE_CHARS — won't be pruned
+		const oldOutput = makeToolResult("bash", "tiny")
+		const recent = Array.from({ length: 30 }, makeUser)
+		const messages = [oldOutput, ...recent] as ContextEvent["messages"]
+		await trigger("context", { messages })
+		expect(entries).toHaveLength(0)
 	})
 })

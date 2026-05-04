@@ -93,15 +93,29 @@ export default function contextCompactorExtension(pi: ExtensionAPI) {
 		const cutoff = computeCutoff(messages, PROTECT_WINDOW, MAX_PROTECTED_CHARS)
 		if (cutoff === 0) return
 
-		return {
-			messages: messages.map((msg, i) => {
-				if (i >= cutoff) return msg
-				// Explicit cast required: AgentMessage = Message | CustomAgentMessages union;
-				// role check alone does not narrow to ToolResultMessage in TypeScript.
-				const m = msg as ToolResultMessage
-				if (m.role !== "toolResult") return msg
-				return pruneToolResult(m, MIN_PRUNE_CHARS)
-			}),
+		let prunedCount = 0
+		let totalCharsRemoved = 0
+
+		const pruned = messages.map((msg, i) => {
+			if (i >= cutoff) return msg
+			// Explicit cast required: AgentMessage = Message | CustomAgentMessages union;
+			// role check alone does not narrow to ToolResultMessage in TypeScript.
+			const m = msg as ToolResultMessage
+			if (m.role !== "toolResult") return msg
+			const originalLen = m.content.reduce((sum, b) => sum + (b.type === "text" ? b.text.length : 0), 0)
+			const result = pruneToolResult(m, MIN_PRUNE_CHARS)
+			const newLen = result.content.reduce((sum, b) => sum + (b.type === "text" ? b.text.length : 0), 0)
+			if (newLen < originalLen) {
+				prunedCount++
+				totalCharsRemoved += originalLen - newLen
+			}
+			return result
+		})
+
+		if (prunedCount > 0) {
+			pi.appendEntry("tool_result_pruning", { prunedCount, totalCharsRemoved, cutoff })
 		}
+
+		return { messages: pruned }
 	})
 }
