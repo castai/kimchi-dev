@@ -1,6 +1,6 @@
 // src/extensions/lsp/utils.test.ts
 import { describe, expect, it } from "vitest"
-import { detectLanguageId, fileToUri, formatDiagnostic, uriToFile } from "../../../extensions/lsp/utils.js"
+import { detectLanguageId, fileToUri, formatDiagnostic, uriToFile } from "./utils.js"
 
 describe("fileToUri", () => {
 	it("converts absolute unix path to file URI", () => {

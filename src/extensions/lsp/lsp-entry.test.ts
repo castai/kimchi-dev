@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { clientCwd } from "../../../extensions/lsp.js"
+import { clientCwd } from "../lsp.js"
 
 describe("clientCwd", () => {
 	it("returns sessionCwd for file inside it", () => {

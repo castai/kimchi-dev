@@ -1,6 +1,6 @@
 // src/extensions/lsp/edits.test.ts
 import { describe, expect, it } from "vitest"
-import { applyTextEditsToString } from "../../../extensions/lsp/edits.js"
+import { applyTextEditsToString } from "./edits.js"
 
 describe("applyTextEditsToString", () => {
 	it("applies a single-line replacement", () => {

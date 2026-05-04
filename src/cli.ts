@@ -18,6 +18,7 @@ import bashCollapseExtension from "./extensions/bash-collapse.js"
 import kimchiMinimalTintsExtension from "./extensions/kimchi-minimal-tints.js"
 import loginExtension from "./extensions/login/index.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
+import lspExtension from "./extensions/lsp.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
 import outputFilterExtension from "./extensions/output-filter-extension.js"
@@ -227,6 +228,7 @@ try {
 			kimchiMinimalTintsExtension,
 			bashCollapseExtension,
 			loopGuardExtension,
+			lspExtension,
 			mcpAdapterExtension,
 			permissionsExtension,
 			promptEnrichmentExtension(skillPaths),

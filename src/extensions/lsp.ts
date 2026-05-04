@@ -328,7 +328,9 @@ function lspRenderCall(label: string) {
 		const char = args.character !== undefined ? `:${(args.character as number) + 1}` : ""
 		const loc = filePath ? `${filePath}${line}${char}` : ""
 		const header = `${theme.fg("muted", "-")} ${theme.fg("toolTitle", theme.bold(label))}`
-		const fileLine = loc ? `  ${theme.fg("muted", "file:")} ${theme.fg("accent", "`")}${theme.fg("accent", loc)}${theme.fg("accent", "`")}` : ""
+		const fileLine = loc
+			? `  ${theme.fg("muted", "file:")} ${theme.fg("accent", "`")}${theme.fg("accent", loc)}${theme.fg("accent", "`")}`
+			: ""
 		const text = fileLine ? `${header}\n${fileLine}` : header
 		const component = context.lastComponent instanceof Container ? context.lastComponent : new Container()
 		component.clear()
