@@ -4,12 +4,14 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { isEditToolResult, isWriteToolResult } from "@mariozechner/pi-coding-agent"
 import { isKeyRelease, matchesKey } from "@mariozechner/pi-tui"
 import type { TUI } from "@mariozechner/pi-tui"
+import { RST_FG, TEAL_FG } from "../ansi.js"
 import { PromptEditor } from "../components/editor.js"
 import { ScriptFooter, StatsFooter, buildScriptPayload, readStatusLineCommand } from "../components/footer.js"
 import { LogoHeader } from "../components/logo.js"
 import { SplashHeader } from "../components/splash-header.js"
 import { collapseAll, expandNext, resetState } from "../expand-state.js"
 import { isBareExitAlias } from "./exit-utils.js"
+import { getMultiModelEnabled } from "./orchestration/prompt-enrichment.js"
 
 function modelsAreEqual(a: Model<Api>, b: Model<Api>): boolean {
 	return a.provider === b.provider && a.id === b.id
@@ -143,7 +145,17 @@ export default function uiExtension(pi: ExtensionAPI) {
 				return new StatsFooter(ctx, theme, footerData)
 			}
 			scriptCmd = cmd
-			scriptFooter = new ScriptFooter()
+			const getControlsLine = (): string | null => {
+				const parts: string[] = []
+				const perm = footerData.getExtensionStatuses().get("permissions-mode")
+				if (perm) parts.push(perm)
+				const enabled = getMultiModelEnabled()
+				const label = enabled ? `${TEAL_FG}on${RST_FG}` : theme.fg("dim", "off")
+				const shortcut = process.platform === "darwin" ? "option+tab" : "alt+tab"
+				parts.push(`${theme.fg("dim", "multi-model:")} ${label} ${theme.fg("dim", `→ ${shortcut}`)}`)
+				return parts.join(` ${theme.fg("dim", "·")} `)
+			}
+			scriptFooter = new ScriptFooter(getControlsLine)
 			scriptTui = tui
 			scriptPending = true
 			const gen = scriptGeneration

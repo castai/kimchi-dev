@@ -41,6 +41,12 @@ const MODES: Array<{ mode: PermissionMode; label: string; color: "success" | "wa
 	{ mode: "yolo", label: "yolo", color: "error" },
 ]
 
+let _currentPermissionsMode: PermissionMode = "default"
+
+export function getCurrentPermissionsMode(): PermissionMode {
+	return _currentPermissionsMode
+}
+
 export default function permissionsExtension(pi: ExtensionAPI): void {
 	pi.registerFlag("plan", {
 		description: "Start in plan mode (read-only exploration).",
@@ -155,6 +161,7 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	function updateStatus(ctx: ExtensionContext): void {
 		if (!ctx.hasUI) return
 		const mode = currentMode()
+		_currentPermissionsMode = mode
 		const active = MODES.find((m) => m.mode === mode) ?? MODES[0]
 		// Filled dot + active label hardcode kimchi palette so the cue stays legible
 		// under kimchi-minimal; unfilled dots + hint use the "text" token to match

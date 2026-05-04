@@ -8,6 +8,7 @@ import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui"
 import { RST_FG, TEAL_FG, resolvedSemanticFg } from "../ansi.js"
 import { formatCount } from "../extensions/format.js"
 import { getMultiModelEnabled } from "../extensions/orchestration/prompt-enrichment.js"
+import { getCurrentPermissionsMode } from "../extensions/permissions/index.js"
 import { getActiveSubagentCount } from "../extensions/subagent.js"
 import { getActiveTags, getCurrentPhase, parseTag } from "../extensions/tags.js"
 
@@ -87,11 +88,19 @@ export function buildScriptPayload(
 			total_output_tokens: totalOutput,
 		},
 		exceeds_200k_tokens: (usage?.tokens ?? 0) > 200_000,
+		permissions: {
+			mode: getCurrentPermissionsMode(),
+		},
+		multi_model: {
+			enabled: getMultiModelEnabled(),
+		},
 	}
 }
 
 export class ScriptFooter implements Component {
 	private cachedLines: string[] = []
+
+	constructor(private getControlsLine: () => string | null) {}
 
 	setLines(lines: string[]): void {
 		this.cachedLines = lines
@@ -100,7 +109,9 @@ export class ScriptFooter implements Component {
 	invalidate(): void {}
 
 	render(width: number): string[] {
-		return this.cachedLines.map((line) => truncateToWidth(line, width))
+		const controls = this.getControlsLine()
+		const scriptLines = this.cachedLines.map((line) => truncateToWidth(line, width))
+		return controls ? [truncateToWidth(controls, width), ...scriptLines] : scriptLines
 	}
 }
 
