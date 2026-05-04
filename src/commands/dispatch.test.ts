@@ -71,14 +71,13 @@ describe("dispatchSubcommand", () => {
 		expect(printed).toMatch(/^kimchi \d+\.\d+\.\d+/m)
 	})
 
-	it("update is still a stub and returns 1 with a 'not implemented' marker", async () => {
-		// Self-update lands in a follow-up PR. Until then it prints a stub
-		// marker so users get a clear message rather than silent dispatch.
-		errSpy.mockClear()
-		const result = await dispatchSubcommand(["update"])
-		expect(result).toEqual({ kind: "handled", exitCode: 1 })
-		const first = errSpy.mock.calls[0]?.[0] as string | undefined
-		expect(first).toContain("kimchi update: not implemented yet")
+	it("update --help prints usage and returns 0", async () => {
+		const result = await dispatchSubcommand(["update", "--help"])
+		expect(result).toEqual({ kind: "handled", exitCode: 0 })
+		const printed = logSpy.mock.calls.map((c) => String(c[0] ?? "")).join("\n")
+		expect(printed).toContain("Usage: kimchi update")
+		expect(printed).toContain("--force")
+		expect(printed).toContain("--dry-run")
 	})
 
 	// `kimchi setup` is wired but interactive (clack prompts await stdin).

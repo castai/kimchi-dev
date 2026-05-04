@@ -1,0 +1,114 @@
+import { spawnSync } from "node:child_process"
+import { copyFileSync, mkdirSync, renameSync, unlinkSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { backupDir } from "./paths.js"
+
+/**
+ * Run `<newPath> --version` and assert it exits 0. Catches a corrupt
+ * release before the rename swaps it into place. Mirrors the Go side's
+ * verifyBinary; we swallow stdout but surface the exit code so any
+ * post-mortem can see what went wrong.
+ */
+export function smokeTestBinary(newPath: string): void {
+	const result = spawnSync(newPath, ["--version"], { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] })
+	if (result.status !== 0) {
+		const detail = (result.stderr || result.stdout || "").trim()
+		throw new Error(`new binary failed --version smoke test: ${detail || `exit ${result.status}`}`)
+	}
+}
+
+/**
+ * Ad-hoc codesign the new binary on macOS so Gatekeeper doesn't kill it
+ * on first launch. Bun-compiled binaries need this whenever they're moved
+ * to a new path. Mirrors `scripts/build-binary.js` post-compile signing.
+ *
+ * No-op on non-macOS. Doesn't fail hard if `codesign` is missing — it's
+ * pre-installed on every macOS shipping with Xcode CLT, but if it's
+ * somehow unavailable, the user can still use the new binary by clicking
+ * through the first-run Gatekeeper dialog.
+ */
+export function macosCodesignReSign(newPath: string): void {
+	if (process.platform !== "darwin") return
+
+	const remove = spawnSync("codesign", ["--remove-signature", newPath], {
+		stdio: ["ignore", "pipe", "pipe"],
+		encoding: "utf-8",
+	})
+	if (remove.status !== 0 && (remove.error as NodeJS.ErrnoException | undefined)?.code !== "ENOENT") {
+		console.error(`kimchi update: codesign --remove-signature failed: ${remove.stderr.trim()}`)
+	}
+
+	const sign = spawnSync("codesign", ["--sign", "-", "--force", newPath], {
+		stdio: ["ignore", "pipe", "pipe"],
+		encoding: "utf-8",
+	})
+	if (sign.status !== 0) {
+		const detail = sign.stderr.trim() || sign.error?.message || `exit ${sign.status}`
+		throw new Error(`codesign re-sign failed: ${detail}`)
+	}
+}
+
+/**
+ * Replace `currentPath` with `newPath` atomically. Strategy depends on OS:
+ *
+ * - **Linux / macOS**: POSIX rename(2) does an inode swap, not a write,
+ *   so swapping the directory entry while the binary is executing is
+ *   safe. The running process holds the old inode; subsequent execs pick
+ *   up the new one. ETXTBSY only fires on attempts to *write to* the
+ *   running binary, which we never do.
+ *
+ * - **Windows**: cannot rename or delete a running .exe (the OS holds an
+ *   exclusive lock). Strategy used by `bun upgrade` and `deno upgrade`:
+ *   rename `kimchi.exe` → `kimchi.exe.old`, drop the new binary in as
+ *   `kimchi.exe`, leave the .old behind for the next launch to clean up.
+ *   We can't delete the old in this run because we're still it.
+ *
+ * Optionally backs up the old binary to ~/.cache/kimchi/backups/ before
+ * the swap so a corrupt new version can be rolled back manually.
+ */
+export function atomicInstall(newPath: string, currentPath: string): { backupPath?: string } {
+	const backupRoot = backupDir()
+	mkdirSync(backupRoot, { recursive: true, mode: 0o700 })
+
+	if (process.platform === "win32") {
+		const dotOld = `${currentPath}.old`
+		// If a previous update left a stale .old behind, clean it now —
+		// we'll write to dotOld below and want a clean slate.
+		try {
+			unlinkSync(dotOld)
+		} catch {
+			// non-fatal — continue
+		}
+		renameSync(currentPath, dotOld)
+		try {
+			renameSync(newPath, currentPath)
+		} catch (err) {
+			// Roll back: put the old binary back where it was so we don't leave
+			// the user without a kimchi.exe.
+			try {
+				renameSync(dotOld, currentPath)
+			} catch {
+				// already unhealthy — surface the original failure
+			}
+			throw err
+		}
+		return { backupPath: dotOld }
+	}
+
+	// POSIX: keep a copy of the current binary as a backup before the swap.
+	// rename(currentPath, backup) would also work but takes the binary out
+	// of place during the window — copyFileSync is fine since we have time.
+	const backupPath = join(backupRoot, `kimchi.${Date.now()}`)
+	try {
+		copyFileSync(currentPath, backupPath)
+	} catch {
+		// Backup is best-effort — don't fail the update if we can't write
+		// the backups dir (e.g. read-only fs).
+	}
+
+	// Atomic swap. fs.renameSync uses POSIX rename(2) under the hood.
+	mkdirSync(dirname(currentPath), { recursive: true })
+	renameSync(newPath, currentPath)
+
+	return { backupPath }
+}

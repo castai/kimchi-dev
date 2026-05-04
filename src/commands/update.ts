@@ -1,5 +1,108 @@
-import { notYetImplemented } from "./_stub.js"
+import { applyUpdate, checkForUpdate } from "../update/workflow.js"
+import { getVersion } from "../utils.js"
 
-export async function runUpdate(_args: string[]): Promise<number> {
-	return notYetImplemented("update")
+interface UpdateFlags {
+	force: boolean
+	dryRun: boolean
+}
+
+function parseFlags(args: string[]): UpdateFlags | string {
+	const flags: UpdateFlags = { force: false, dryRun: false }
+	for (const a of args) {
+		if (a === "--force" || a === "-f") flags.force = true
+		else if (a === "--dry-run") flags.dryRun = true
+		else if (a === "--help" || a === "-h") {
+			return [
+				"Usage: kimchi update [--force] [--dry-run]",
+				"",
+				"  --force, -f   Skip the confirmation prompt",
+				"  --dry-run     Check for updates without installing",
+			].join("\n")
+		} else return `unknown flag: ${a}`
+	}
+	return flags
+}
+
+/**
+ * `kimchi update` — explicit self-update entry point. Always skips the
+ * 24h cache so users get fresh results when they ask. Mirrors
+ * cmd/update.go runCLIUpdate without the harness branch (post-merge
+ * there's only one binary).
+ *
+ * On Linux/macOS the swap is atomic via POSIX rename(2); on Windows we
+ * rotate kimchi.exe → kimchi.exe.old and the user is told to restart
+ * their terminal.
+ */
+export async function runUpdate(args: string[]): Promise<number> {
+	const parsed = parseFlags(args)
+	if (typeof parsed === "string") {
+		if (parsed.startsWith("Usage:")) {
+			console.log(parsed)
+			return 0
+		}
+		console.error(`kimchi update: ${parsed}`)
+		return 2
+	}
+	const flags = parsed
+
+	const current = getVersion()
+	let check: Awaited<ReturnType<typeof checkForUpdate>>
+	try {
+		check = await checkForUpdate({ currentVersion: current, skipCache: true })
+	} catch (err) {
+		console.error(`kimchi update: failed to check for updates: ${(err as Error).message}`)
+		return 1
+	}
+
+	if (!check.hasUpdate) {
+		console.log(`kimchi: already up to date (${current})`)
+		return 0
+	}
+	if (flags.dryRun) {
+		console.log(`kimchi update available: ${current} → ${check.latestVersion}`)
+		if (check.releaseUrl) console.log(`  ${check.releaseUrl}`)
+		return 0
+	}
+
+	if (!flags.force) {
+		// Bare confirmation — read a single line from stdin. Default is "yes"
+		// on bare Enter, matching the Go side. We deliberately don't pull in
+		// @clack/prompts here because the harness's normal flow may be
+		// non-interactive (CI pipelines run `kimchi update --force`).
+		const ok = await confirm(`Kimchi update available: ${current} → ${check.latestVersion}\nUpdate? [Y/n]: `)
+		if (!ok) {
+			console.log("Update skipped.")
+			return 0
+		}
+	}
+
+	console.log(`Updating to ${check.latestVersion}…`)
+	try {
+		await applyUpdate({ tag: check.latestVersion })
+	} catch (err) {
+		console.error(`kimchi update: ${(err as Error).message}`)
+		return 1
+	}
+
+	if (process.platform === "win32") {
+		console.log(`✓ kimchi installed: ${check.latestVersion}`)
+		console.log("Restart your terminal to use the new version.")
+	} else {
+		console.log(`✓ kimchi updated to ${check.latestVersion}`)
+	}
+	return 0
+}
+
+async function confirm(prompt: string): Promise<boolean> {
+	process.stdout.write(prompt)
+	return new Promise((resolve) => {
+		const onData = (chunk: Buffer) => {
+			process.stdin.off("data", onData)
+			process.stdin.pause()
+			const answer = chunk.toString("utf-8").trim().toLowerCase()
+			resolve(answer === "" || answer === "y" || answer === "yes")
+		}
+		process.stdin.resume()
+		process.stdin.on("data", onData)
+	})
 }
