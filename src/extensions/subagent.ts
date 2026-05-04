@@ -785,7 +785,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			const name = theme.fg("success", theme.bold("subagent"))
-			const model = theme.fg("dim", `$args.provider ?? ""/${args.model ?? ""}`)
+			const model = theme.fg("dim", `${args.provider ?? ""}/${args.model ?? ""}`)
 			const left = `${icon} ${name}  ${model}`
 
 			let right = ""
