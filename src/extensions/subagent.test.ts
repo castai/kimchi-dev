@@ -512,3 +512,23 @@ describe("resolveBudgetConfig", () => {
 		expect(config?.hardLimit).toBe(150_000)
 	})
 })
+
+describe("resolveBudgetConfig NaN/Infinity handling", () => {
+	it("returns null for NaN tokenBudget", () => {
+		expect(resolveBudgetConfig(Number.NaN, undefined)).toBeNull()
+	})
+
+	it("returns null for Infinity tokenBudget", () => {
+		expect(resolveBudgetConfig(Number.POSITIVE_INFINITY, undefined)).toBeNull()
+	})
+
+	it("ignores NaN hardTokenBudget and falls back to 150%", () => {
+		const config = resolveBudgetConfig(100_000, Number.NaN)
+		expect(config?.hardLimit).toBe(150_000)
+	})
+
+	it("ignores Infinity hardTokenBudget and falls back to 150%", () => {
+		const config = resolveBudgetConfig(100_000, Number.POSITIVE_INFINITY)
+		expect(config?.hardLimit).toBe(150_000)
+	})
+})

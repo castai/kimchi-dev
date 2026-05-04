@@ -188,6 +188,18 @@ function formatBudgetSection(budget?: SubagentBudgetInfo): string {
 	return `## Token Budget\n\nYou are running as a subagent with a token budget.\n\n- Soft advisory limit: ${budget.softLimit.toLocaleString()} tokens${hardLine}\n\nYou should pace yourself as this budget is approached. Aim to finish gracefully before reaching it.\n`
 }
 
+export function parseSubagentBudgetFromEnv(
+	softBudget: string | undefined,
+	hardBudget: string | undefined,
+): SubagentBudgetInfo | undefined {
+	if (!softBudget || softBudget.length === 0) return undefined
+	const soft = Number(softBudget)
+	if (!Number.isFinite(soft) || soft <= 0) return undefined
+	const rawHard = hardBudget && hardBudget.length > 0 ? Number(hardBudget) : undefined
+	const hard = rawHard !== undefined && Number.isFinite(rawHard) && rawHard > 0 ? rawHard : undefined
+	return { softLimit: soft, hardLimit: hard }
+}
+
 export function isSubagent(): boolean {
 	return process.env.KIMCHI_SUBAGENT === "1"
 }

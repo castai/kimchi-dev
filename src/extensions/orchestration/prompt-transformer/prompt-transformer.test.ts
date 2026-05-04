@@ -6,6 +6,7 @@ import {
 	type EnvironmentInfo,
 	buildOrchestratorSystemPrompt,
 	buildSubagentSystemPrompt,
+	parseSubagentBudgetFromEnv,
 	transformPrompt,
 } from "./prompt-transformer.js"
 
@@ -390,5 +391,52 @@ describe("buildSubagentSystemPrompt budget section", () => {
 		})
 		expect(result).toContain("Soft advisory limit: 150,000 tokens")
 		expect(result).not.toContain("Hard kill ceiling")
+	})
+})
+
+describe("parseSubagentBudgetFromEnv", () => {
+	it("returns undefined for undefined soft budget", () => {
+		expect(parseSubagentBudgetFromEnv(undefined, undefined)).toBeUndefined()
+	})
+
+	it("returns undefined for empty soft budget", () => {
+		expect(parseSubagentBudgetFromEnv("", undefined)).toBeUndefined()
+	})
+
+	it("returns undefined for non-numeric soft budget", () => {
+		expect(parseSubagentBudgetFromEnv("abc", undefined)).toBeUndefined()
+	})
+
+	it("returns undefined for NaN soft budget", () => {
+		expect(parseSubagentBudgetFromEnv("NaN", undefined)).toBeUndefined()
+	})
+
+	it("returns undefined for negative soft budget", () => {
+		expect(parseSubagentBudgetFromEnv("-100", undefined)).toBeUndefined()
+	})
+
+	it("returns budget info without hard limit when hard budget omitted", () => {
+		const result = parseSubagentBudgetFromEnv("200000", undefined)
+		expect(result).toEqual({ softLimit: 200_000, hardLimit: undefined })
+	})
+
+	it("returns full budget info when both valid", () => {
+		const result = parseSubagentBudgetFromEnv("200000", "300000")
+		expect(result).toEqual({ softLimit: 200_000, hardLimit: 300_000 })
+	})
+
+	it("ignores non-numeric hard budget", () => {
+		const result = parseSubagentBudgetFromEnv("200000", "abc")
+		expect(result).toEqual({ softLimit: 200_000, hardLimit: undefined })
+	})
+
+	it("ignores NaN hard budget", () => {
+		const result = parseSubagentBudgetFromEnv("200000", "NaN")
+		expect(result).toEqual({ softLimit: 200_000, hardLimit: undefined })
+	})
+
+	it("ignores negative hard budget", () => {
+		const result = parseSubagentBudgetFromEnv("200000", "-100")
+		expect(result).toEqual({ softLimit: 200_000, hardLimit: undefined })
 	})
 })

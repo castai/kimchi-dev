@@ -47,6 +47,7 @@ import {
 	buildSingleModelSystemPrompt,
 	buildSubagentSystemPrompt,
 	isSubagent,
+	parseSubagentBudgetFromEnv,
 	transformPrompt,
 } from "./prompt-transformer/prompt-transformer.js"
 
@@ -364,10 +365,7 @@ export default function (skillPaths: string[]) {
 				// Read budget from env (injected by parent subagent spawn)
 				const softBudget = process.env.KIMCHI_SUBAGENT_SOFT_BUDGET
 				const hardBudget = process.env.KIMCHI_SUBAGENT_HARD_BUDGET
-				const budgetInfo =
-					softBudget && softBudget.length > 0
-						? { softLimit: Number(softBudget), hardLimit: hardBudget ? Number(hardBudget) : undefined }
-						: undefined
+				const budgetInfo = parseSubagentBudgetFromEnv(softBudget, hardBudget)
 
 				const systemPrompt = buildSubagentSystemPrompt(tools, env, cachedContextFiles, cachedSkills, budgetInfo)
 				return { systemPrompt }

@@ -329,9 +329,11 @@ export function resolveBudgetConfig(
 	tokenBudget: number | undefined,
 	hardTokenBudget: number | undefined,
 ): TokenBudgetConfig | null {
-	if (tokenBudget === undefined || tokenBudget <= 0) return null
+	if (!Number.isFinite(tokenBudget) || tokenBudget === undefined || tokenBudget <= 0) return null
 	const hardLimit =
-		hardTokenBudget !== undefined && hardTokenBudget > 0 ? hardTokenBudget : Math.round(tokenBudget * 1.5)
+		Number.isFinite(hardTokenBudget) && hardTokenBudget !== undefined && hardTokenBudget > 0
+			? hardTokenBudget
+			: Math.round(tokenBudget * 1.5)
 	return {
 		softLimit: tokenBudget,
 		hardLimit,
@@ -364,8 +366,12 @@ function spawnSubagent(
 			env: {
 				...process.env,
 				KIMCHI_SUBAGENT: "1",
-				KIMCHI_SUBAGENT_SOFT_BUDGET: budgetConfig ? String(budgetConfig.softLimit) : "",
-				KIMCHI_SUBAGENT_HARD_BUDGET: budgetConfig ? String(budgetConfig.hardLimit) : "",
+				...(budgetConfig
+					? {
+							KIMCHI_SUBAGENT_SOFT_BUDGET: String(budgetConfig.softLimit),
+							KIMCHI_SUBAGENT_HARD_BUDGET: String(budgetConfig.hardLimit),
+						}
+					: {}),
 			},
 		})
 
