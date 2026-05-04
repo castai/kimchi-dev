@@ -9,6 +9,7 @@ import {
 	parseSubagentEvent,
 	parseSubagentResponse,
 	prepareChildSessionFile,
+	resolveBudgetConfig,
 	truncateSubagentResult,
 	validateAttachments,
 } from "./subagent.js"
@@ -481,4 +482,33 @@ describe("truncateSubagentResult", () => {
 			}
 		})
 	}
+})
+
+describe("resolveBudgetConfig", () => {
+	it("returns null when tokenBudget is undefined", () => {
+		expect(resolveBudgetConfig(undefined, undefined)).toBeNull()
+	})
+
+	it("returns null when tokenBudget is zero or negative", () => {
+		expect(resolveBudgetConfig(0, undefined)).toBeNull()
+		expect(resolveBudgetConfig(-100, undefined)).toBeNull()
+	})
+
+	it("computes default hard limit at 150% of soft", () => {
+		const config = resolveBudgetConfig(100_000, undefined)
+		expect(config).not.toBeNull()
+		expect(config?.softLimit).toBe(100_000)
+		expect(config?.warningThreshold).toBe(80_000)
+		expect(config?.hardLimit).toBe(150_000)
+	})
+
+	it("respects explicit hardTokenBudget", () => {
+		const config = resolveBudgetConfig(100_000, 120_000)
+		expect(config?.hardLimit).toBe(120_000)
+	})
+
+	it("ignores explicit hardTokenBudget when zero or negative", () => {
+		const config = resolveBudgetConfig(100_000, 0)
+		expect(config?.hardLimit).toBe(150_000)
+	})
 })

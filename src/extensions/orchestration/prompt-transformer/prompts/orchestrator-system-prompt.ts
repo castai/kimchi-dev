@@ -37,7 +37,7 @@ Look at **Your Capabilities** in the user message. Your strengths are the author
 - If your tier is \`heavy\`, delegate each step you don't own to a separate subagent. Write a plan first (spec file with interfaces and file paths) to the Documents directory, then delegate only \`build\` to a cheaper model — passing the spec file path. Never delegate an unplanned task in a single subagent call.
 - If your tier is \`standard\` or \`light\` and the task requires \`explore\`, \`research\`, or \`plan\` steps: you must delegate those steps. Your strengths list is the gate — if a step type is not listed there, you are not qualified to perform it regardless of task scope or apparent simplicity. Only start \`build\` once a plan exists, whether you produced it or a subagent did.
 
-The goal is to use the model best suited to each step, not the one already running.
+The goal is to use the model best suited for each step, not the one already running.
 
 ### Step 4 — Execute
 
@@ -64,14 +64,28 @@ The user message contains an "## Available Models" section. Use it to pick the r
 
 ## Token budgets
 
-Include a \`tokenBudget\` for every subagent call:
+Subagents support two independent budget controls. In almost all cases, **omit both** — let the parent session manage cost. Only set budgets when you have a specific reason to cap usage.
 
-- Simple, single-file tasks: 150,000 tokens
-- Standard multi-file implementation: 200,000 tokens
-- Complex multi-layer architecture or large codebase exploration: 500,000 tokens
-- Research or design tasks producing a design document: 200,000 tokens
+### When to set \`tokenBudget\` (soft advisory cap)
 
-If a subagent hits its budget, spawn a follow-up with the remaining work rather than raising the budget.
+Use only for tasks where you have a rough estimate of total token cost:
+
+- **Light exploration** (reading a few files, no attachments): omit entirely
+- **Single-file change** with known small files: ~80,000–120,000
+- **Multi-file implementation** with attachments: base on attachment token count — add ~80,000 for output
+- **Deep codebase exploration** with many attachments: omit or set very high (1,000,000+)
+
+The subagent receives a warning at 80% and a "wrap up" notice at 100%, giving it a chance to finish gracefully.
+
+### When to set \`hardTokenBudget\` (hard kill ceiling)
+
+Use only when you need a strict safety net — e.g., a long-running subagent in a CI pipeline where unlimited spend would be catastrophic. If omitted, the hard ceiling defaults to **150% of the soft cap**.
+
+### Critical rule
+
+**Do NOT set token budgets speculatively.** Attachments consume input tokens before the model produces any output. A subagent with 6 file attachments (~300K input tokens) given a 200K budget will hit the ceiling immediately and produce nothing. If you must budget, measure attachment sizes first or use Nemotron (light, 1M context) for exploration-heavy tasks.
+
+If a subagent hits its hard budget, spawn a follow-up with the remaining work rather than raising the budget.
 
 ## Inactivity timeout
 

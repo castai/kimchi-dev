@@ -354,3 +354,41 @@ describe("buildSubagentSystemPrompt", () => {
 		expect(result).not.toContain("{{ENVIRONMENT}}")
 	})
 })
+
+describe("buildSubagentSystemPrompt budget section", () => {
+	const tools = [{ name: "read", description: "Read files" }]
+	const testEnv: EnvironmentInfo = {
+		os: "macOS",
+		username: "test",
+		homeDir: "/tmp",
+		cwd: "/tmp/proj",
+		documentsDir: "/tmp/proj/.kimchi/docs",
+		currentTime: "2026-05-01T12:00:00.000Z",
+		localDate: "2026-05-01",
+		isGitRepo: false,
+	}
+
+	it("omits budget section when no budget info is provided", () => {
+		const result = buildSubagentSystemPrompt(tools, testEnv)
+		expect(result).not.toContain("Soft advisory limit")
+		expect(result).not.toContain("Hard kill ceiling")
+	})
+
+	it("includes soft budget and hard ceiling when both present", () => {
+		const result = buildSubagentSystemPrompt(tools, testEnv, undefined, undefined, {
+			softLimit: 200_000,
+			hardLimit: 300_000,
+		})
+		expect(result).toContain("Soft advisory limit: 200,000 tokens")
+		expect(result).toContain("Hard kill ceiling: 300,000 tokens")
+		expect(result).toContain("## Token Budget")
+	})
+
+	it("includes only soft budget when hard limit omitted", () => {
+		const result = buildSubagentSystemPrompt(tools, testEnv, undefined, undefined, {
+			softLimit: 150_000,
+		})
+		expect(result).toContain("Soft advisory limit: 150,000 tokens")
+		expect(result).not.toContain("Hard kill ceiling")
+	})
+})

@@ -121,22 +121,30 @@ export function buildSingleModelSystemPrompt(
 		.replace("{{SKILLS}}", () => skillsSection)
 }
 
+export interface SubagentBudgetInfo {
+	softLimit: number
+	hardLimit?: number
+}
+
 export function buildSubagentSystemPrompt(
 	tools: readonly ToolInfo[],
 	env: EnvironmentInfo,
 	contextFiles?: readonly ContextFile[],
 	skills?: readonly Skill[],
+	budget?: SubagentBudgetInfo,
 ): string {
 	const filtered = tools.filter((t) => t.name !== SUBAGENT_TOOL_NAME)
 	const toolsSection = formatToolsSection(filtered)
 	const environmentSection = formatEnvironmentSection(env)
 	const projectContext = formatProjectContext(contextFiles)
 	const skillsSection = formatSkills(skills)
+	const budgetSection = formatBudgetSection(budget)
 	return subagentSystemPromptTemplate
 		.replace("{{TOOLS}}", () => toolsSection)
 		.replace("{{ENVIRONMENT}}", () => environmentSection)
 		.replace("{{PROJECT_CONTEXT}}", () => projectContext)
 		.replace("{{SKILLS}}", () => skillsSection)
+		.replace("{{BUDGET}}", () => budgetSection)
 }
 
 function formatToolsSection(tools: readonly ToolInfo[]): string {
@@ -171,6 +179,13 @@ function formatSkills(skills?: readonly Skill[]): string {
 	if (!skills || skills.length === 0) return ""
 	// Cast required until upstream accepts readonly Skill[]
 	return formatSkillsForPrompt(skills as Skill[])
+}
+
+function formatBudgetSection(budget?: SubagentBudgetInfo): string {
+	if (!budget) return ""
+	const hardLine =
+		budget.hardLimit !== undefined ? `\n- Hard kill ceiling: ${budget.hardLimit.toLocaleString()} tokens` : ""
+	return `## Token Budget\n\nYou are running as a subagent with a token budget.\n\n- Soft advisory limit: ${budget.softLimit.toLocaleString()} tokens${hardLine}\n\nYou should pace yourself as this budget is approached. Aim to finish gracefully before reaching it.\n`
 }
 
 export function isSubagent(): boolean {

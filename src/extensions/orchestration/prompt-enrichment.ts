@@ -360,7 +360,16 @@ export default function (skillPaths: string[]) {
 				// Filter the subagent tool out to prevent infinite delegation chains.
 				const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
 				pi.setActiveTools(activeTools)
-				const systemPrompt = buildSubagentSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
+
+				// Read budget from env (injected by parent subagent spawn)
+				const softBudget = process.env.KIMCHI_SUBAGENT_SOFT_BUDGET
+				const hardBudget = process.env.KIMCHI_SUBAGENT_HARD_BUDGET
+				const budgetInfo =
+					softBudget && softBudget.length > 0
+						? { softLimit: Number(softBudget), hardLimit: hardBudget ? Number(hardBudget) : undefined }
+						: undefined
+
+				const systemPrompt = buildSubagentSystemPrompt(tools, env, cachedContextFiles, cachedSkills, budgetInfo)
 				return { systemPrompt }
 			}
 
