@@ -87,7 +87,9 @@ function runScript(scriptPath: string, payload: object, tui: TUI, footer: Script
 
 	child.on("close", (code) => {
 		if (code === 0 && stdout) {
-			settle(stdout.split("\n").filter((l) => l.trim() !== ""))
+			const lines = stdout.split("\n")
+			while (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop()
+			settle(lines)
 		} else if (stderr) {
 			settle([`\x1b[31m[statusline error] ${stderr.trim()}\x1b[0m`])
 		} else {
