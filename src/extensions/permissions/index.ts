@@ -87,7 +87,6 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 	let cliMode: PermissionMode | undefined
 	let originalActiveTools: string[] | null = null
 	let planModeApplied = false
-	let yoloWarningShown = false
 	/** Tracks all active permission prompt abort controllers for concurrent tool calls. */
 	const activeAbortControllers = new Set<AbortController>()
 	let unsubscribeTerminalInput: (() => void) | null = null
@@ -182,13 +181,6 @@ export default function permissionsExtension(pi: ExtensionAPI): void {
 		for (const ctrl of activeAbortControllers) ctrl.abort()
 		activeAbortControllers.clear()
 		maybeShowYoloWarning(ctx, next)
-		// Show danger warning when switching to yolo mode (only once per session)
-		if (next === "yolo" && ctx.hasUI && !yoloWarningShown) {
-			yoloWarningShown = true
-			const dangerMsg =
-				"DANGER: Running in YOLO mode. All permission checks are disabled. The agent will execute commands without confirmation. This can modify or delete files. Intended for use in disposable or sandboxed environments only. Not recommended for production use."
-			ctx.ui.notify(ctx.ui.theme.fg("error", dangerMsg), "warning")
-		}
 	}
 
 	function doLoadConfig(ctx: ExtensionContext): { errors: string[] } {
