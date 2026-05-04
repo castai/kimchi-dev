@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { filterOutputTags, stripOutputTagWrappers } from "./output-tag-filter.js"
+import { filterOutputTags, splitOutputTags, stripOutputTagWrappers } from "./output-tag-filter.js"
 
 describe("stripOutputTagWrappers", () => {
 	const cases: Record<string, { input: string; expected: string }> = {
@@ -103,6 +103,65 @@ describe("filterOutputTags", () => {
 	for (const [name, { input, expected }] of Object.entries(cases)) {
 		it(name, () => {
 			expect(filterOutputTags(input)).toBe(expected)
+		})
+	}
+})
+
+describe("splitOutputTags", () => {
+	const cases: Record<string, { input: string; expected: { visible: string; thinking: string } }> = {
+		"splits complete think block from answer": {
+			input: "<think>some reasoning</think>answer",
+			expected: { visible: "answer", thinking: "some reasoning" },
+		},
+		"splits multiline think block": {
+			input: "<think>\nline one\nline two\n</think>answer",
+			expected: { visible: "answer", thinking: "\nline one\nline two\n" },
+		},
+		"splits multiple think blocks": {
+			input: "<think>first</think>middle<think>second</think>end",
+			expected: { visible: "middleend", thinking: "firstsecond" },
+		},
+		"holds incomplete think block at start (streaming hold)": {
+			input: "<think>incomplete reasoning",
+			expected: { visible: "", thinking: "" },
+		},
+		"holds incomplete think block after complete block at start": {
+			input: "<think>done</think><think>incomplete",
+			expected: { visible: "", thinking: "done" },
+		},
+		"keeps incomplete think block in visible when it follows visible text": {
+			input: "prefix<think>incomplete reasoning",
+			expected: { visible: "prefix<think>incomplete reasoning", thinking: "" },
+		},
+		"keeps visible text when second incomplete think block follows": {
+			input: "<think>done</think>visible<think>incomplete",
+			expected: { visible: "visible<think>incomplete", thinking: "done" },
+		},
+		"passes through text without think tags": {
+			input: "plain text without tags",
+			expected: { visible: "plain text without tags", thinking: "" },
+		},
+		"returns empty for empty string": {
+			input: "",
+			expected: { visible: "", thinking: "" },
+		},
+		"leaves unrelated tags in visible": {
+			input: "<b>bold</b> and <i>italic</i>",
+			expected: { visible: "<b>bold</b> and <i>italic</i>", thinking: "" },
+		},
+		"splits think block at start with content after": {
+			input: "<think>reasoning</think> actual output",
+			expected: { visible: " actual output", thinking: "reasoning" },
+		},
+		"splits text before and after think block": {
+			input: "before <think>hidden</think> after",
+			expected: { visible: "before  after", thinking: "hidden" },
+		},
+	}
+
+	for (const [name, { input, expected }] of Object.entries(cases)) {
+		it(name, () => {
+			expect(splitOutputTags(input)).toEqual(expected)
 		})
 	}
 })

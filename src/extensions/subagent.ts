@@ -18,7 +18,7 @@ import { isBunBinary, isRunningUnderBun } from "../env.js"
 import { isToolExpanded, registerToolCall } from "../expand-state.js"
 import { findExistingFile, resolveUserPath, stripAtPrefix } from "../fs-paths.js"
 import { formatCount, formatDuration } from "./format.js"
-import { filterOutputTags, stripOutputTagWrappers } from "./output-tag-filter.js"
+import { filterOutputTags, splitOutputTags } from "./output-tag-filter.js"
 import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./spinner.js"
 
 const PROMPT_MAX_LENGTH = 60
@@ -398,7 +398,7 @@ function spawnSubagent(
 			} = parseSubagentEvent(line)
 			if (delta !== null) {
 				accumulated += delta
-				onToken(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated))
+				onToken(hideThinkingBlock ? filterOutputTags(accumulated) : splitOutputTags(accumulated).visible)
 			}
 			if (lineInput > 0 || lineOutput > 0) {
 				inputTokens += lineInput
@@ -743,8 +743,7 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 
-			const resultText =
-				(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated)) || "(no output)"
+			const resultText = filterOutputTags(accumulated) || "(no output)"
 			const parsed = parseSubagentResponse(resultText)
 			if (parsed === null) {
 				return {

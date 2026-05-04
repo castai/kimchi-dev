@@ -31,7 +31,7 @@ import {
 	SettingsManager,
 	createAgentSession,
 } from "@mariozechner/pi-coding-agent"
-import { filterOutputTags, stripOutputTagWrappers } from "../../extensions/output-tag-filter.js"
+import { filterOutputTags, splitOutputTags, stripOutputTagWrappers } from "../../extensions/output-tag-filter.js"
 
 /**
  * Produces a ready-to-use AgentSession for a newSession request. The returned
@@ -59,7 +59,7 @@ type TurnContext = {
 	turnActive: boolean
 	resolve: (res: PromptResponse) => void
 	reject: (err: unknown) => void
-	streamState: { rawAccumulated: string; emittedFiltered: string }
+	streamState: { rawAccumulated: string; emittedFiltered: string; emittedThinking: string }
 }
 
 type SessionEntry = {
@@ -160,7 +160,7 @@ export class KimchiAcpAgent implements Agent {
 			turnActive: false,
 			resolve: turnResolve,
 			reject: turnReject,
-			streamState: { rawAccumulated: "", emittedFiltered: "" },
+			streamState: { rawAccumulated: "", emittedFiltered: "", emittedThinking: "" },
 		}
 		// Kick off session.prompt but don't await inside the async function body —
 		// shutdown() needs to be able to reject `result` and have the caller's await
@@ -252,19 +252,46 @@ export class KimchiAcpAgent implements Agent {
 				if (ame.type === "text_delta" && ame.delta) {
 					const hideThinkingBlock = entry.session.settingsManager.getHideThinkingBlock()
 					turn.streamState.rawAccumulated += ame.delta
-					const newProcessed = hideThinkingBlock
-						? filterOutputTags(turn.streamState.rawAccumulated)
-						: stripOutputTagWrappers(turn.streamState.rawAccumulated)
-					if (newProcessed.length > turn.streamState.emittedFiltered.length) {
-						const processedDelta = newProcessed.slice(turn.streamState.emittedFiltered.length)
-						turn.streamState.emittedFiltered = newProcessed
-						this.send({
-							sessionId,
-							update: {
-								sessionUpdate: "agent_message_chunk",
-								content: { type: "text", text: processedDelta },
-							},
-						})
+					if (hideThinkingBlock) {
+						const newProcessed = filterOutputTags(turn.streamState.rawAccumulated)
+						if (newProcessed.length > turn.streamState.emittedFiltered.length) {
+							const processedDelta = newProcessed.slice(turn.streamState.emittedFiltered.length)
+							turn.streamState.emittedFiltered = newProcessed
+							this.send({
+								sessionId,
+								update: {
+									sessionUpdate: "agent_message_chunk",
+									content: { type: "text", text: processedDelta },
+								},
+							})
+						}
+					} else {
+						// Route <think>...</think> blocks to agent_thought_chunk and
+						// non-thinking text to agent_message_chunk so inline thinking
+						// (e.g. MiniMax) is displayed as a proper thought block.
+						const { visible, thinking } = splitOutputTags(turn.streamState.rawAccumulated)
+						if (thinking.length > turn.streamState.emittedThinking.length) {
+							const thinkingDelta = thinking.slice(turn.streamState.emittedThinking.length)
+							turn.streamState.emittedThinking = thinking
+							this.send({
+								sessionId,
+								update: {
+									sessionUpdate: "agent_thought_chunk",
+									content: { type: "text", text: thinkingDelta },
+								},
+							})
+						}
+						if (visible.length > turn.streamState.emittedFiltered.length) {
+							const visibleDelta = visible.slice(turn.streamState.emittedFiltered.length)
+							turn.streamState.emittedFiltered = visible
+							this.send({
+								sessionId,
+								update: {
+									sessionUpdate: "agent_message_chunk",
+									content: { type: "text", text: visibleDelta },
+								},
+							})
+						}
 					}
 				} else if (ame.type === "thinking_delta" && ame.delta) {
 					this.send({
