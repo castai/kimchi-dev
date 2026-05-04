@@ -59,9 +59,9 @@ interface SubagentTokenUsage {
 	cacheWrite: number
 }
 
-type SoftBudgetState = "normal" | "warning" | "exceeded"
+export type SoftBudgetState = "normal" | "warning" | "exceeded"
 
-interface TokenBudgetConfig {
+export interface TokenBudgetConfig {
 	softLimit: number
 	hardLimit: number
 	warningThreshold: number
@@ -341,6 +341,41 @@ export function resolveBudgetConfig(
 	}
 }
 
+// Check and enforce token budget with soft warnings and hard kill.
+// Returns a budget-check result that the caller applies.
+export function checkBudgetState(
+	input: number,
+	output: number,
+	budgetConfig: TokenBudgetConfig | null,
+	currentState: SoftBudgetState = "normal",
+): {
+	state: SoftBudgetState
+	warning: string | null
+	kill: boolean
+} {
+	if (!budgetConfig) return { state: currentState, warning: null, kill: false }
+	const total = input + output
+
+	// Hard kill — budget definitely blown
+	if (total > budgetConfig.hardLimit) {
+		return { state: "exceeded" as SoftBudgetState, warning: null, kill: true }
+	}
+
+	// Soft exceeded — warn and let subagent finish gracefully
+	if (total > budgetConfig.softLimit && currentState !== "exceeded") {
+		const warning = `\n[subagent budget exceeded: ${formatCount(total)} / ${formatCount(budgetConfig.softLimit)} soft limit. Finishing current action, then stopping.]\n`
+		return { state: "exceeded" as SoftBudgetState, warning, kill: false }
+	}
+
+	// Warning threshold (80%)
+	if (total > budgetConfig.warningThreshold && currentState === "normal") {
+		const warning = `\n[subagent budget warning: ${formatCount(total)} / ${formatCount(budgetConfig.softLimit)} soft limit used (${Math.round((total / budgetConfig.softLimit) * 100)}%). Consider wrapping up.]\n`
+		return { state: "warning" as SoftBudgetState, warning, kill: false }
+	}
+
+	return { state: currentState, warning: null, kill: false }
+}
+
 function spawnSubagent(
 	invocation: { command: string; args: string[] },
 	cwd: string,
@@ -427,28 +462,14 @@ function spawnSubagent(
 		// Check and enforce token budget with soft warnings and hard kill
 		const checkBudget = (input: number, output: number): void => {
 			if (!budgetState) return
-			const total = input + output
-
-			// Hard kill — budget definitely blown
-			if (total > budgetState.hardLimit) {
+			const result = checkBudgetState(input, output, budgetState, budgetState.state)
+			budgetState.state = result.state
+			if (result.kill) {
 				kill("token_budget_exceeded")
 				return
 			}
-
-			// Soft exceeded — warn and let subagent finish gracefully
-			if (total > budgetState.softLimit && budgetState.state !== "exceeded") {
-				budgetState.state = "exceeded"
-				const warning = `\n[subagent budget exceeded: ${formatCount(total)} / ${formatCount(budgetState.softLimit)} soft limit. Finishing current action, then stopping.]\n`
-				accumulated += warning
-				onToken(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated))
-				return
-			}
-
-			// Warning threshold (80%)
-			if (total > budgetState.warningThreshold && budgetState.state === "normal") {
-				budgetState.state = "warning"
-				const warning = `\n[subagent budget warning: ${formatCount(total)} / ${formatCount(budgetState.softLimit)} soft limit used (${Math.round((total / budgetState.softLimit) * 100)}%). Consider wrapping up.]\n`
-				accumulated += warning
+			if (result.warning !== null) {
+				accumulated += result.warning
 				onToken(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated))
 			}
 		}

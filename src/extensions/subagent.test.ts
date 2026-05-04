@@ -5,7 +5,9 @@ import { CURRENT_SESSION_VERSION } from "@mariozechner/pi-coding-agent"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import {
 	RESULT_MAX_CHARS,
+	type TokenBudgetConfig,
 	buildSubagentArgs,
+	checkBudgetState,
 	parseSubagentEvent,
 	parseSubagentResponse,
 	prepareChildSessionFile,
@@ -530,5 +532,82 @@ describe("resolveBudgetConfig NaN/Infinity handling", () => {
 	it("ignores Infinity hardTokenBudget and falls back to 150%", () => {
 		const config = resolveBudgetConfig(100_000, Number.POSITIVE_INFINITY)
 		expect(config?.hardLimit).toBe(150_000)
+	})
+})
+
+describe("checkBudgetState", () => {
+	const makeConfig = (
+		soft: number,
+		hard = Math.round(soft * 1.5),
+		warning = Math.round(soft * 0.8),
+	): TokenBudgetConfig => ({
+		softLimit: soft,
+		hardLimit: hard,
+		warningThreshold: warning,
+	})
+
+	it("returns null with no budget config", () => {
+		expect(checkBudgetState(0, 0, null)).toEqual({ state: "normal", warning: null, kill: false })
+		expect(checkBudgetState(100_000, 100_000, null)).toEqual({ state: "normal", warning: null, kill: false })
+	})
+
+	it("returns warning at 80% threshold", () => {
+		const config = makeConfig(100_000)
+		const result = checkBudgetState(80_001, 0, config, "normal")
+		expect(result.state).toBe("warning")
+		expect(result.kill).toBe(false)
+		expect(result.warning).toContain("budget warning")
+		expect(result.warning).toContain("80%")
+	})
+
+	it("does not warn again from warning state", () => {
+		const config = makeConfig(100_000)
+		const result = checkBudgetState(90_000, 0, config, "warning")
+		expect(result.state).toBe("warning")
+		expect(result.warning).toBeNull()
+	})
+
+	it("does not warn from exceeded state", () => {
+		const config = makeConfig(100_000)
+		const result = checkBudgetState(120_000, 0, config, "exceeded")
+		expect(result.state).toBe("exceeded")
+		expect(result.warning).toBeNull()
+	})
+
+	it("returns exceeded notice at 100% soft limit", () => {
+		const config = makeConfig(100_000)
+		const result = checkBudgetState(100_001, 0, config, "normal")
+		expect(result.state).toBe("exceeded")
+		expect(result.kill).toBe(false)
+		expect(result.warning).toContain("budget exceeded")
+	})
+
+	it("triggers hard kill at 150% hard limit", () => {
+		const config = makeConfig(100_000) // hardLimit = 150_000
+		const result = checkBudgetState(150_001, 0, config, "exceeded")
+		expect(result.state).toBe("exceeded")
+		expect(result.kill).toBe(true)
+	})
+
+	it("triggers hard kill from normal state if jumped past soft limit", () => {
+		const config = makeConfig(100_000)
+		const result = checkBudgetState(180_000, 0, config, "normal")
+		expect(result.kill).toBe(true)
+	})
+
+	it("keeps state unchanged between 80% and 100%", () => {
+		const config = makeConfig(100_000)
+		const result = checkBudgetState(99_000, 0, config, "warning")
+		expect(result.state).toBe("warning")
+		expect(result.warning).toBeNull()
+		expect(result.kill).toBe(false)
+	})
+
+	it("keeps state unchanged below 80%", () => {
+		const config = makeConfig(100_000)
+		const result = checkBudgetState(79_999, 0, config, "normal")
+		expect(result.state).toBe("normal")
+		expect(result.warning).toBeNull()
+		expect(result.kill).toBe(false)
 	})
 })
