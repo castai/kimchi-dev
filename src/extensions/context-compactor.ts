@@ -42,9 +42,9 @@ export function computeCutoff(
 		}
 	}
 
-	// If cutoff is at or beyond the last message, there's nothing before it to prune.
-	if (cutoff >= messages.length) return 0
-	return cutoff
+	// Clamp to last message: if recent outputs blew the char budget, still prune everything
+	// older than the final message rather than silently skipping compaction entirely.
+	return Math.min(cutoff, Math.max(0, messages.length - 1))
 }
 
 /**

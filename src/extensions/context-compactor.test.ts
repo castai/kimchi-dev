@@ -1,7 +1,7 @@
 import type { TextContent, ToolResultMessage } from "@mariozechner/pi-ai"
-import type { ContextEvent } from "@mariozechner/pi-coding-agent"
+import type { ContextEvent, ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { describe, expect, it } from "vitest"
-import { computeCutoff, pruneToolResult } from "./context-compactor.js"
+import contextCompactorExtension, { computeCutoff, pruneToolResult } from "./context-compactor.js"
 
 // helpers
 function makeToolResult(toolName: string, text: string, isError = false): ToolResultMessage {
@@ -51,6 +51,16 @@ describe("computeCutoff", () => {
 	it("returns 0 when array length <= PROTECT_WINDOW", () => {
 		const messages = [makeToolResult("bash", "x".repeat(200))]
 		expect(computeCutoff(messages as ContextEvent["messages"], PROTECT_WINDOW, MAX_PROTECTED_CHARS)).toBe(0)
+	})
+
+	it("returns length-1 when tail message alone exceeds MAX_PROTECTED_CHARS (not 0)", () => {
+		// bug: old guard returned 0, silently skipping compaction
+		const messages = [
+			makeToolResult("bash", "old"),
+			makeToolResult("bash", "x".repeat(150)), // index 1 (last) overflows budget
+		]
+		// cutoff should be 1 (protect only last message), not 0
+		expect(computeCutoff(messages as ContextEvent["messages"], PROTECT_WINDOW, MAX_PROTECTED_CHARS)).toBe(1)
 	})
 
 	it("cuts at PROTECT_WINDOW boundary when chars are small", () => {
@@ -143,5 +153,89 @@ describe("pruneToolResult", () => {
 		expect(result.toolName).toBe(msg.toolName)
 		expect(result.isError).toBe(msg.isError)
 		expect(result.timestamp).toBe(msg.timestamp)
+	})
+})
+
+// ── contextCompactorExtension (event wiring) ─────────────────────────────────
+
+function makeMockPI() {
+	const handlers: Record<string, (event: unknown) => Promise<unknown>> = {}
+	return {
+		pi: {
+			on(event: string, handler: (e: unknown) => Promise<unknown>) {
+				handlers[event] = handler
+			},
+		} as unknown as ExtensionAPI,
+		async trigger(event: string, payload: unknown) {
+			return handlers[event]?.(payload)
+		},
+	}
+}
+
+function makeMessageEndEvent(inputTokens: number) {
+	return {
+		message: {
+			role: "assistant" as const,
+			usage: {
+				input: inputTokens,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: inputTokens,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			content: [],
+			model: "test",
+			timestamp: 0,
+		},
+	}
+}
+
+describe("contextCompactorExtension", () => {
+	it("returns undefined when below token threshold", async () => {
+		const { pi, trigger } = makeMockPI()
+		contextCompactorExtension(pi)
+		await trigger("message_end", makeMessageEndEvent(1_000))
+		const result = await trigger("context", {
+			messages: [makeToolResult("bash", "x".repeat(600))] as ContextEvent["messages"],
+		})
+		expect(result).toBeUndefined()
+	})
+
+	it("returns undefined when above threshold but nothing to prune (cutoff = 0)", async () => {
+		const { pi, trigger } = makeMockPI()
+		contextCompactorExtension(pi)
+		await trigger("message_end", makeMessageEndEvent(40_000))
+		// 3 messages — fits within PROTECT_WINDOW=30, chars well under MAX_PROTECTED_CHARS
+		const messages = [makeUser(), makeAssistant(), makeToolResult("bash", "small")]
+		const result = await trigger("context", { messages: messages as ContextEvent["messages"] })
+		expect(result).toBeUndefined()
+	})
+
+	it("prunes tool results before the cutoff when above threshold", async () => {
+		const { pi, trigger } = makeMockPI()
+		contextCompactorExtension(pi)
+		await trigger("message_end", makeMessageEndEvent(40_000))
+		// 1 old tool result + 30 recent messages → cutoff = 1, index 0 is pruned
+		const oldOutput = makeToolResult("bash", "x".repeat(600)) // > MIN_PRUNE_CHARS=500
+		const recent = Array.from({ length: 30 }, makeUser)
+		const messages = [oldOutput, ...recent] as ContextEvent["messages"]
+		const result = (await trigger("context", { messages })) as { messages: ContextEvent["messages"] }
+		expect(result).toBeDefined()
+		const pruned = result.messages[0] as ToolResultMessage
+		expect((pruned.content[0] as TextContent).text).toContain("[compacted: bash output")
+	})
+
+	it("passes non-tool-result messages through unchanged before cutoff", async () => {
+		const { pi, trigger } = makeMockPI()
+		contextCompactorExtension(pi)
+		await trigger("message_end", makeMessageEndEvent(40_000))
+		const oldUser = makeUser()
+		const recent = Array.from({ length: 30 }, makeUser)
+		const messages = [oldUser, ...recent] as ContextEvent["messages"]
+		const result = (await trigger("context", { messages })) as { messages: ContextEvent["messages"] }
+		expect(result).toBeDefined()
+		// user message before cutoff is returned by reference (not cloned)
+		expect(result.messages[0]).toBe(oldUser)
 	})
 })
