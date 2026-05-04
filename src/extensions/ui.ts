@@ -9,10 +9,21 @@ import { ScriptFooter, StatsFooter, buildScriptPayload, readStatusLineCommand } 
 import { LogoHeader } from "../components/logo.js"
 import { SplashHeader } from "../components/splash-header.js"
 import { collapseAll, expandNext, resetState } from "../expand-state.js"
+import { KIMCHI_PROVIDER } from "../models.js"
 import { isBareExitAlias } from "./exit-utils.js"
 
 function modelsAreEqual(a: Model<Api>, b: Model<Api>): boolean {
 	return a.provider === b.provider && a.id === b.id
+}
+
+/** Validate that a model is from the kimchi-dev provider */
+export function validateKimchiModel(model: Model<Api>): void {
+	if (model.provider !== KIMCHI_PROVIDER) {
+		throw new Error(
+			`Model ${model.id} from provider "${model.provider}" is not supported. ` +
+				`Only ${KIMCHI_PROVIDER} models are allowed to avoid API conflicts.`,
+		)
+	}
 }
 
 const HORIZONTAL_PADDING = 2
@@ -184,7 +195,9 @@ export default function uiExtension(pi: ExtensionAPI) {
 			unsubModelCycleInput = ctx.ui.onTerminalInput((data) => {
 				if (matchesKey(data, "ctrl+p")) {
 					if (!isKeyRelease(data)) {
-						const available = ctx.modelRegistry.getAvailable()
+						// Only show models from kimchi-dev provider to avoid collisions with pi-mono's built-in registry
+						// (e.g., claude-opus-4-7 exists under both anthropic and amazon-bedrock providers in pi-mono)
+						const available = ctx.modelRegistry.getAvailable().filter((m) => m.provider === KIMCHI_PROVIDER)
 						const current = ctx.model
 						if (available.length > 1 && current) {
 							let idx = available.findIndex((m) => modelsAreEqual(m, current))
