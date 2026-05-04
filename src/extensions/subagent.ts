@@ -732,7 +732,12 @@ export default function (pi: ExtensionAPI) {
 					detail: truncateSubagentResult(rawDetail, childSessionFile),
 				}
 				return {
-					content: [{ type: "text", text: JSON.stringify(error) }],
+					content: [
+						{
+							type: "text",
+							text: `Subagent failed — do NOT attempt to implement or complete this work yourself. Spawn a replacement subagent with a corrected or simplified prompt instead.\n\nError details:\n\n${JSON.stringify(error, null, 2)}`,
+						},
+					],
 					details: stats,
 					isError: true,
 				}
@@ -746,7 +751,7 @@ export default function (pi: ExtensionAPI) {
 					content: [
 						{
 							type: "text",
-							text: `Protocol violation: subagent response is not valid JSON.\n\nRaw output:\n\n${truncateSubagentResult(resultText, childSessionFile)}`,
+							text: `Subagent returned an unstructured response (protocol violation). Do NOT attempt to fix or complete this work manually — spawn a new subagent with a simpler or corrected prompt instead.\n\nRaw output:\n\n${truncateSubagentResult(resultText, childSessionFile)}`,
 						},
 					],
 					details: stats,
