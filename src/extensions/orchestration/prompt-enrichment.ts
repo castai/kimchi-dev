@@ -186,7 +186,9 @@ export default function (skillPaths: string[]) {
 				if (unsubAltTab) unsubAltTab()
 				if (ctx.hasUI) {
 					unsubAltTab = ctx.ui.onTerminalInput((data) => {
-						if (matchesKey(data, "alt+tab")) {
+						// matchesKey() handles Kitty protocol and CSI-u sequences;
+						// \x1b\t is the legacy sequence sent by macOS terminals for Option+Tab
+						if (matchesKey(data, "alt+tab") || data === "\x1b\t") {
 							if (!isKeyRelease(data)) {
 								multiModelEnabled = !multiModelEnabled
 								ctx.ui.setStatus("multi-model", undefined)
