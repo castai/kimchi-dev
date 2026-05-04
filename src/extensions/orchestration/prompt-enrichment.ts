@@ -108,7 +108,27 @@ let multiModelEnabled = readMultiModelArgv()
 
 const ENRICHED_PROMPT_CUSTOM_TYPE = "enriched-prompt"
 
-function deduplicateEnrichedPrompts(messages: OrchestratorMessages): OrchestratorMessages {
+/**
+ * Tracks which model last received an enriched-prompt injection so the
+ * capabilities block is only sent once per model, not on every user turn.
+ */
+export class EnrichmentGuard {
+	private lastModelId: string | null = null
+
+	/** Returns true if enrichment should be injected for this model ID. */
+	shouldEnrich(modelId: string): boolean {
+		if (modelId === this.lastModelId) return false
+		this.lastModelId = modelId
+		return true
+	}
+
+	/** Resets the guard, e.g. when multi-model is toggled off and back on. */
+	reset(): void {
+		this.lastModelId = null
+	}
+}
+
+export function deduplicateEnrichedPrompts(messages: OrchestratorMessages): OrchestratorMessages {
 	const lastIdx = messages.findLastIndex(
 		(m) =>
 			m.role === "custom" &&
@@ -190,6 +210,7 @@ export default function (skillPaths: string[]) {
 			// circuits the input-handler chain.
 			const continuationNudge = new ContinuationNudge()
 			const emptyTurnNudge = new EmptyTurnNudge()
+			const enrichmentGuard = new EnrichmentGuard()
 
 			pi.on("input", async (event) => {
 				if (event.source === "extension") return
@@ -254,6 +275,14 @@ export default function (skillPaths: string[]) {
 				}
 
 				const currentModel = ctx.model ? { id: ctx.model.id, name: ctx.model.id } : undefined
+				const currentModelId = currentModel?.id ?? ""
+
+				// Only inject capabilities on the first turn or when the model changes.
+				// Re-injecting every turn accumulates duplicate capability blocks in the
+				// context window, inflating token usage and confusing the model.
+				if (!enrichmentGuard.shouldEnrich(currentModelId)) {
+					return { action: "continue" as const }
+				}
 
 				// Non-interactive (--print/--mode rpc) and debug-prompts mode: replace the user
 				// text inline. The "handled" + sendUserMessage path below relies on the TUI event
