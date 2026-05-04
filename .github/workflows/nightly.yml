@@ -168,6 +168,8 @@ jobs:
         run: |
           PREV_SHA=$(gh release view nightly --json targetCommitish -q .targetCommitish 2>/dev/null || echo "")
           {
+            echo "> ⚠️ **Unstable nightly build.** No support. Use a tagged release for production."
+            echo
             echo "Nightly build of \`master\` at \`${GITHUB_SHA::7}\`."
             echo
             echo "Version: \`$VERSION\`"
