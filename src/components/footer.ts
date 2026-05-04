@@ -113,7 +113,7 @@ export class ScriptFooter implements Component {
 		const scriptLines = this.cachedLines.map((line) => truncateToWidth(line, width))
 		if (!controls) return scriptLines
 		const sep = `\x1b[2m${"─".repeat(width)}\x1b[0m`
-		return [truncateToWidth(controls, width), sep, ...scriptLines]
+		return [...scriptLines, sep, truncateToWidth(controls, width)]
 	}
 }
 
