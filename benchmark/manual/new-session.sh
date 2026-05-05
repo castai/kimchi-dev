@@ -109,17 +109,24 @@ run_all = os.path.join(session_dir, "run-all.sh")
 cols = len(tasks)
 rows = len(models)
 
-# Build AppleScript: create top row with vertical splits, then add rows with horizontal splits
-as_lines = ["      set g0_0 to current session"]
+# Build AppleScript: create a NEW TAB, then split into a grid (cols=tasks, rows=models)
+as_lines = []
+# First pane in the new tab
+as_lines.append("      set g0_0 to current session of newTab")
+# Create remaining columns via vertical splits
 for c in range(1, cols):
     as_lines.append(f"      set g{c}_0 to (split vertically with default profile of g{c-1}_0)")
+# Create rows via horizontal splits
 for r in range(1, rows):
     for c in range(cols):
         as_lines.append(f"      set g{c}_{r} to (split horizontally with default profile of g{c}_{r-1})")
+# Write commands
 for r in range(rows):
     for c in range(cols):
         i = r * cols + c
         if i < len(all_scripts):
+                # NOTE: iTerm2's `write text` sends keystrokes and returns immediately —
+            # it does NOT wait for the command to finish.
             as_lines.append(f'      tell g{c}_{r} to write text "{all_scripts[i]}"')
 as_body = "\n".join(as_lines)
 
@@ -137,7 +144,8 @@ if osascript -e 'id of application "iTerm2"' &>/dev/null 2>&1; then
   osascript <<APPLESCRIPT
 tell application "iTerm2"
   tell current window
-    tell current tab
+    set newTab to (create tab with default profile)
+    tell newTab
 {as_body}
     end tell
   end tell

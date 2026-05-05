@@ -13,26 +13,26 @@ SESSIONS_DIR = IMPROVEMENT_DIR / "sessions"
 
 TASK_CRITERIA = {
     "simple": {
-        "min_subagents": 1,
+        "min_subagents": 0,
         "max_subagents": 2,
         "max_tokens": 300_000,
         "max_duration_s": 300,
     },
     "complex": {
-        "min_subagents": 2,
-        "max_subagents": 6,
+        "min_subagents": 1,
+        "max_subagents": 5,
         "max_tokens": 700_000,
         "max_duration_s": 600,
     },
     "complex-single": {
-        "min_subagents": 1,
-        "max_subagents": 5,
+        "min_subagents": 0,
+        "max_subagents": 0,
         "max_tokens": 500_000,
         "max_duration_s": 600,
     },
     "research": {
         "min_subagents": 0,
-        "max_subagents": 0,
+        "max_subagents": 1,
         "max_tokens": 30_000,
         "max_duration_s": 120,
     },

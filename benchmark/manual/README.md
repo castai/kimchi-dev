@@ -122,6 +122,37 @@ sessions/session-01/
 
 `compare-sessions.py` calls `analyze-session.py` automatically if `analysis.json` is missing for either session.
 
+## Self-Improvement Loop
+
+The self-improvement loop is an autonomous process that iteratively builds, benchmarks, analyses, and applies targeted code changes to improve harness performance. See `self-improvement.md` for the full protocol.
+
+### Running
+
+From the repo root:
+
+```bash
+./benchmark/manual/start-self-improvement.sh
+```
+
+This launches `kimchi` in `--yolo` mode with the self-improvement prompt. The agent will cycle through build → benchmark → analyse → code change phases automatically, stopping when a stopping condition is met (see `self-improvement.md` for details).
+
+### Custom improvement goals
+
+To steer the self-improvement loop toward specific areas, create an `improvement-goals.md` file in the benchmark directory:
+
+```bash
+cat > benchmark/manual/improvement-goals.md << 'EOF'
+## Improvement Goals
+
+- Reduce token consumption on complex-single tasks by 30%
+- Investigate why kimi-k2.5 generates empty tool calls
+EOF
+```
+
+When `improvement-goals.md` exists, its contents are automatically appended to the self-improvement prompt. Delete or rename the file to run without custom goals.
+
+The file is gitignored — each developer can maintain their own goals without affecting others.
+
 ## Historical findings
 
 See `SUMMARY.md` for a token trajectory table across the first 10 sessions and the five changes that had the largest measurable impact on token consumption and output quality.
