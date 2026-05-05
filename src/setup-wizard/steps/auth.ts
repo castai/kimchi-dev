@@ -9,26 +9,28 @@ import type { WizardState } from "../state.js"
  *
  *   1. **Saved-key frame** — when a key is already available (env var or
  *      ~/.config/kimchi/config.json), offer "use saved / enter new" (Y/n).
- *      On Y the existing key is validated against the API and accepted;
- *      on N we fall through to the input frame so the user can replace it.
+ *      On Y the existing key is validated and accepted; on N we fall
+ *      through to the input frame so the user can replace it.
  *   2. **Input frame** — prompt for a key, validate, retry on failure
  *      (with the validator's suggestions printed). On success the key is
- *      persisted to config.json so future runs land in frame 1.
+ *      written to config.json so future runs land in frame 1.
  *
- * Note: $KIMCHI_API_KEY still wins at runtime — it's read fresh on every
- * launch, so a key entered here is saved to config.json but won't take
- * effect until the user unsets the env var.
+ * The wizard's persistence is split with runDoneStep: this step writes
+ * a newly-entered key to ~/.config/kimchi/config.json; runDoneStep then
+ * exports state.apiKey to the user's shell profile so future shells see
+ * $KIMCHI_API_KEY automatically. The current shell session keeps
+ * whatever $KIMCHI_API_KEY was set to on entry until it's reloaded or
+ * unset.
  */
 export async function runAuthStep(state: WizardState, opts: { backable: boolean }): Promise<void> {
 	const envKey = process.env.KIMCHI_API_KEY
 	const fileKey = readApiKeyFromConfigFile()
-	const currentKey = envKey && envKey.length > 0 ? envKey : (fileKey ?? "")
-	const source: "env" | "file" | "none" = envKey && envKey.length > 0 ? "env" : fileKey ? "file" : "none"
+	const fromEnv = !!(envKey && envKey.length > 0)
+	const currentKey = fromEnv ? (envKey as string) : (fileKey ?? "")
 
 	if (currentKey.length > 0) {
-		const sourceLabel = source === "env" ? "$KIMCHI_API_KEY" : "~/.config/kimchi/config.json"
 		const r = await confirm({
-			message: `An API key is already configured (from ${sourceLabel}). Keep it?`,
+			message: "An API key is already configured. Keep it?",
 			initialValue: true,
 			backable: opts.backable,
 		})
@@ -51,9 +53,9 @@ export async function runAuthStep(state: WizardState, opts: { backable: boolean 
 			}
 			s.stop(`Saved key failed validation: ${result.error ?? "unknown error"}`)
 			console.log("  Replace it below, press Esc to go back, or Ctrl-C to abort.")
-		} else if (source === "env") {
+		} else if (fromEnv) {
 			console.log(
-				"  Note: $KIMCHI_API_KEY is set and will still win at runtime until unset. The new key below is saved to config.json for future shells.",
+				"  Note: this shell still has $KIMCHI_API_KEY set; the new key will be written to config.json and your shell profile, so new shells pick it up automatically. To use it here, run 'unset KIMCHI_API_KEY' or open a new terminal.",
 			)
 		}
 	}
