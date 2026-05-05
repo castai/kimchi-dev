@@ -4,6 +4,10 @@ import { Container, Spacer, Text } from "@mariozechner/pi-tui"
 import { ToolBlockView, buildToolCallHeader, getTextContent } from "../components/tool-block.js"
 import { isToolExpanded, registerToolCall } from "../expand-state.js"
 
+export function collapseCommand(command: string | undefined): string {
+	return (command ?? "").replace(/\n+/g, " ⏎ ")
+}
+
 export default function (pi: ExtensionAPI) {
 	const baseDef = createBashToolDefinition(process.cwd())
 
@@ -16,7 +20,10 @@ export default function (pi: ExtensionAPI) {
 
 		renderCall(args, theme, ctx) {
 			const view = ctx.lastComponent instanceof ToolBlockView ? ctx.lastComponent : new ToolBlockView()
-			buildToolCallHeader(view, "bash", args.command ?? "", theme, ctx)
+			// Bash commands can be multiline (e.g. heredocs); collapse newlines
+			// so the single-line header doesn't overflow onto multiple rows.
+			const command = collapseCommand(args.command)
+			buildToolCallHeader(view, "bash", command, theme, ctx)
 			return view
 		},
 
