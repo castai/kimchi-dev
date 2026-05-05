@@ -222,7 +222,7 @@ export class KimchiAcpAgent implements Agent {
 			// calling dispose(). dispose() is synchronous and returns void, so
 			// async extension handlers (e.g. telemetry drain, shutdown marker)
 			// would be fire-and-forgotten if we relied on dispose() alone.
-			await entry.session.extensionRunner?.emit({ type: "session_shutdown", cause } as { type: "session_shutdown" })
+			await entry.session.extensionRunner?.emit({ type: "session_shutdown", reason: "quit" })
 			entry.session.dispose()
 		}
 		this.sessions.clear()

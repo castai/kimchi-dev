@@ -8,7 +8,7 @@
 import { StringEnum } from "@mariozechner/pi-ai"
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Container, Spacer, Text } from "@mariozechner/pi-tui"
-import { Type } from "@sinclair/typebox"
+import { Type } from "typebox"
 import { formatCount } from "../format.js"
 import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "../spinner.js"
 import { shutdownBrowserPool } from "./browser-pool.js"

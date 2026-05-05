@@ -21,7 +21,7 @@ import type {
 	ThemeColor,
 } from "@mariozechner/pi-coding-agent"
 import { Container, Text } from "@mariozechner/pi-tui"
-import { Type } from "@sinclair/typebox"
+import { Type } from "typebox"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

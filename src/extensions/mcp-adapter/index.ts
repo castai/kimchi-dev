@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ToolInfo, ToolRenderResultOptions } from "@mariozechner/pi-coding-agent"
 import { Theme, keyHint } from "@mariozechner/pi-coding-agent"
-import { Type } from "@sinclair/typebox"
+import { Type } from "typebox"
 import type { DirectToolSpec } from "./types.js"
 import { formatToolName } from "./types.js"
 import { type Component, Text } from "@mariozechner/pi-tui"
