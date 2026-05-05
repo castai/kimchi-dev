@@ -32,7 +32,8 @@ const KIMCHI_FLAGS: FlagDoc[] = [
 	{ name: "--allow-tool <rule>", description: "Add session permission allow rules (comma-separated)" },
 	{ name: "--deny-tool <rule>", description: "Add session permission deny rules (comma-separated)" },
 	{ name: "--plan", description: "Start in plan mode (read-only)" },
-	{ name: "--auto", description: "Start in auto/yolo mode" },
+	{ name: "--auto", description: "Start in auto mode (run freely, classifier guards)" },
+	{ name: "--yolo", description: "Start in yolo mode (run freely, no classifier - DANGER)" },
 	{ name: "--permissions-config <path>", description: "Replace the merged permissions config with this file" },
 	{ name: "--verbose", description: "Force verbose startup (overrides quietStartup)" },
 	{ name: "--help, -h", description: "Show this help" },
@@ -41,7 +42,7 @@ const KIMCHI_FLAGS: FlagDoc[] = [
 
 const KIMCHI_ENV: FlagDoc[] = [
 	{ name: "KIMCHI_API_KEY", description: "Kimchi API key (overrides config.json apiKey)" },
-	{ name: "KIMCHI_PERMISSIONS", description: "Initial permissions mode: default | plan | auto" },
+	{ name: "KIMCHI_PERMISSIONS", description: "Initial permissions mode: default | plan | auto | yolo" },
 	{ name: "KIMCHI_TELEMETRY_ENABLED", description: "Enable telemetry (1/true). Off by default." },
 	{ name: "KIMCHI_TAGS", description: "Comma-separated `key:value` tags applied to every LLM request" },
 	{ name: "KIMCHI_NO_UPDATE_CHECK", description: "Disable the background self-update probe" },
