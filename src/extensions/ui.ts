@@ -36,6 +36,20 @@ function patchTuiPadding(tui: TUI) {
 // Track splash state globally so other extensions can reset it
 let splashActive = false
 let currentEditor: PromptEditor | undefined
+let pasteImageHandler: (() => void) | undefined
+
+export function setPasteImageHandler(handler: () => void): void {
+	pasteImageHandler = handler
+}
+
+/**
+ * Show or clear a short status string right-aligned on the prompt's first row,
+ * next to the placeholder. Used by the clipboard-image extension to surface
+ * pending pasted attachments. Pass `null` to clear.
+ */
+export function setPendingImageIndicator(text: string | null): void {
+	currentEditor?.setPendingImageIndicator(text)
+}
 
 /**
  * Reset splash mode and switch to chat view.
@@ -188,6 +202,9 @@ export default function uiExtension(pi: ExtensionAPI) {
 				ctx.ui.setToolsExpanded(false)
 			})
 			currentEditor = editor
+			if (pasteImageHandler) {
+				editor.onPasteImage = pasteImageHandler
+			}
 			return editor
 		})
 
