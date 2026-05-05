@@ -66,13 +66,13 @@ jobs:
         run: pnpm run build:binary
 
       - name: Package binary
-        run: tar -czf kimchi-code_${{ matrix.os }}_${{ matrix.arch }}.tar.gz -C dist bin share
+        run: tar -czf kimchi_${{ matrix.os }}_${{ matrix.arch }}.tar.gz -C dist bin share
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kimchi-code_${{ matrix.os }}_${{ matrix.arch }}
-          path: kimchi-code_${{ matrix.os }}_${{ matrix.arch }}.tar.gz
+          name: kimchi_${{ matrix.os }}_${{ matrix.arch }}
+          path: kimchi_${{ matrix.os }}_${{ matrix.arch }}.tar.gz
 
   smoke-test:
     needs: [build]
@@ -88,12 +88,12 @@ jobs:
       - name: Download linux binary
         uses: actions/download-artifact@v4
         with:
-          name: kimchi-code_linux_amd64
+          name: kimchi_linux_amd64
 
       - name: Extract binary into dist/
         run: |
           mkdir -p dist
-          tar -xzf kimchi-code_linux_amd64.tar.gz -C dist
+          tar -xzf kimchi_linux_amd64.tar.gz -C dist
 
       - name: Smoke tests
         run: pnpm run test:smoke
@@ -103,6 +103,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -112,12 +114,13 @@ jobs:
       - name: Generate checksums
         run: |
           cd artifacts
-          sha256sum kimchi-code_*.tar.gz > checksums.txt
+          sha256sum kimchi_*.tar.gz > checksums.txt
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
         with:
           files: |
-            artifacts/kimchi-code_*.tar.gz
+            artifacts/kimchi_*.tar.gz
             artifacts/checksums.txt
+            scripts/install.sh
           generate_release_notes: true

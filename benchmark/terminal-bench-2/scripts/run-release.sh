@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run terminal-bench against the latest published kimchi-code release. The
+# Run terminal-bench against the latest published kimchi release. The
 # agent downloads the tarball from GitHub, verifies its sha256, and installs
 # it inside the container. No local build toolchain required.
 #
@@ -19,7 +19,7 @@ cd "$BENCH_DIR"
 unset KIMCHI_CODE_BINARY
 
 exec uv run --python 3.14 harbor run \
-    --agent-import-path kimchi_agent:KimchiCode \
+    --agent-import-path kimchi_agent:Kimchi \
     --env docker \
     --model "${MODEL:-kimchi-dev/kimi-k2.5}" \
     --ae "KIMCHI_API_KEY=$KIMCHI_API_KEY" \

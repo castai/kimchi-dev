@@ -53,7 +53,7 @@ describe("resolveAuxiliaryFilesDir", () => {
 
 		beforeEach(() => {
 			tmpBase = join(tmpdir(), `kimchi-resolver-test-${process.pid}`)
-			// Simulate dist/bin/kimchi-code + dist/share/kimchi/package.json
+			// Simulate dist/bin/kimchi + dist/share/kimchi/package.json
 			mkdirSync(join(tmpBase, "bin"), { recursive: true })
 			mkdirSync(join(tmpBase, "share", "kimchi"), { recursive: true })
 			writeFileSync(join(tmpBase, "share", "kimchi", "package.json"), "{}")
@@ -64,20 +64,20 @@ describe("resolveAuxiliaryFilesDir", () => {
 		})
 
 		it("returns sibling share dir when package.json exists next to the binary", () => {
-			const execPath = join(tmpBase, "bin", "kimchi-code")
+			const execPath = join(tmpBase, "bin", "kimchi")
 			const env: Record<string, string | undefined> = {}
 			expect(resolveAuxiliaryFilesDir(env, home, execPath)).toBe(join(tmpBase, "share", "kimchi"))
 		})
 
 		it("PI_PACKAGE_DIR takes precedence over sibling share dir", () => {
-			const execPath = join(tmpBase, "bin", "kimchi-code")
+			const execPath = join(tmpBase, "bin", "kimchi")
 			const env = { PI_PACKAGE_DIR: "/custom/path" }
 			expect(resolveAuxiliaryFilesDir(env, home, execPath)).toBe("/custom/path")
 		})
 
 		it("falls through to XDG when sibling share dir has no package.json", () => {
 			rmSync(join(tmpBase, "share", "kimchi", "package.json"))
-			const execPath = join(tmpBase, "bin", "kimchi-code")
+			const execPath = join(tmpBase, "bin", "kimchi")
 			const env = { XDG_DATA_HOME: "/xdg/data" }
 			expect(resolveAuxiliaryFilesDir(env, home, execPath)).toBe("/xdg/data/kimchi")
 		})

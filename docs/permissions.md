@@ -1,6 +1,6 @@
 # Permissions
 
-kimchi-code gates every tool call through a three-mode permission system.
+kimchi gates every tool call through a three-mode permission system.
 Switch modes at any time with **`shift+tab`** or `/permissions mode <name>`.
 
 ## Modes

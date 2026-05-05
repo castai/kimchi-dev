@@ -1,6 +1,4 @@
-# Kimchi-dev Smoke-Testing Benchmark
-
-A manual benchmark for testing AI coding orchestrators against three fixed tasks. Sessions are numbered sequentially; each session runs the same prompts and produces JSONL logs that can be analyzed and compared across sessions.
+# Kimchi Smoke-Testing Benchmark
 
 ## Setup
 
@@ -8,12 +6,12 @@ Edit `benchmark.json` to match your environment:
 
 ```json
 {
-  "binary": "/path/to/your/kimchi-code",
+  "binary": "/path/to/your/kimchi",
   "models": ["kimi-k2.5", "minimax-m2.7"]
 }
 ```
 
-- `binary` — path to the kimchi-code binary (`~` is expanded)
+- `binary` — path to the kimchi binary (`~` is expanded)
 - `models` — list of model IDs to benchmark; scripts are generated for every model × task combination
 
 ## Workflow

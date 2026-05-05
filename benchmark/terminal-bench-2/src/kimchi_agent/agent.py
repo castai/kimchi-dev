@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 # The release tarball (and local `pnpm run build:binary` output) is laid out as
-# `bin/kimchi-code` + `share/kimchi/{package.json, theme/, export-html/}`. We
+# `bin/kimchi` + `share/kimchi/{package.json, theme/, export-html/}`. We
 # preserve that layout under /installed-agent so the binary can find its auxiliary
 # files via PI_PACKAGE_DIR (see src/entry.ts → resolveAuxiliaryFilesDir).
 INSTALL_DIR = "/installed-agent"
@@ -33,12 +33,12 @@ CONTAINER_SESSIONS_DIR = f"{CONTAINER_LOGS_DIR}/sessions"
 CONTAINER_MAIN_SESSION = f"{CONTAINER_SESSIONS_DIR}/main.jsonl"
 
 
-class KimchiCode(BaseInstalledAgent):
-    """Harbor agent that runs the kimchi-code binary inside the task container.
+class Kimchi(BaseInstalledAgent):
+    """Harbor agent that runs the kimchi binary inside the task container.
 
     Binary source:
         1. If ``KIMCHI_CODE_BINARY`` is set on the host, that file is uploaded.
-        2. Otherwise, the latest GitHub release from ``castai/kimchi-dev`` is
+        2. Otherwise, the latest GitHub release from ``castai/kimchi`` is
            downloaded, sha256-verified, and extracted on the host, then uploaded.
 
     Model routing is always via the Kimchi LLM gateway (``https://llm.kimchi.dev``) using ``KIMCHI_API_KEY``;
@@ -68,7 +68,7 @@ class KimchiCode(BaseInstalledAgent):
 
     @staticmethod
     def name() -> str:
-        return "kimchi-code"
+        return "kimchi"
 
     def get_version_command(self) -> str | None:
         # PI_PACKAGE_DIR tells entry.ts where to find package.json + theme/; without it
@@ -80,7 +80,7 @@ class KimchiCode(BaseInstalledAgent):
 
     async def install(self, environment: BaseEnvironment) -> None:
         host_stage_dir = await self._resolve_host_stage_dir(environment)
-        # Upload the stage dir verbatim. It contains bin/kimchi-code and
+        # Upload the stage dir verbatim. It contains bin/kimchi and
         # share/kimchi/{package.json, theme/, export-html/} — resolved at runtime via PI_PACKAGE_DIR.
         await environment.upload_dir(source_dir=host_stage_dir, target_dir=UPLOAD_STAGE_DIR)
         await self.exec_as_root(
@@ -96,7 +96,7 @@ class KimchiCode(BaseInstalledAgent):
     async def _resolve_host_stage_dir(self, environment: BaseEnvironment) -> Path:
         """Return the host directory to upload — a ``bin/`` + ``share/kimchi/`` tree."""
         if self._config.binary_path is not None:
-            # KIMCHI_CODE_BINARY points at the binary (e.g. dist/bin/kimchi-code). The stage dir is
+            # KIMCHI_CODE_BINARY points at the binary (e.g. dist/bin/kimchi). The stage dir is
             # the tarball-layout root two levels up (e.g. dist/), which also holds share/kimchi/.
             stage_dir = self._config.binary_path.parent.parent
             share_marker = stage_dir / SHARE_RELPATH / "package.json"
@@ -111,7 +111,7 @@ class KimchiCode(BaseInstalledAgent):
         with GitHubClient(token=self._config.github_token) as gh:
             release = gh.resolve_latest(self._config.github_repo)
             self.logger.info(
-                "Fetching kimchi-code release",
+                "Fetching kimchi release",
                 extra={"tag": release.tag_name, "arch": arch, "repo": self._config.github_repo},
             )
             return gh.download_and_extract(release, arch)
@@ -131,7 +131,7 @@ class KimchiCode(BaseInstalledAgent):
             case _:
                 raise RuntimeError(
                     f"Unsupported container arch (ELF e_machine=0x{e_machine or '??'}); "
-                    "kimchi-code release assets only cover amd64/arm64"
+                    "kimchi release assets only cover amd64/arm64"
                 )
 
     @with_prompt_template
@@ -147,7 +147,7 @@ class KimchiCode(BaseInstalledAgent):
                 "(e.g. kimchi-dev/kimi-k2.5, kimchi-dev/glm-5-fp8, kimchi-dev/minimax-m2.7)"
             )
         if "/" not in self.model_name:
-            # kimchi-code's built-in pi-ai catalog also registers models like kimi-k2.5 under
+            # kimchi's built-in pi-ai catalog also registers models like kimi-k2.5 under
             # the opencode provider. Without a qualifier the resolver may pick opencode and
             # fail auth with the kimchi key, so we force the caller to be explicit.
             raise ValueError(

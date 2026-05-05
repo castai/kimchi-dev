@@ -184,7 +184,7 @@ export function readTelemetryConfig(configPath?: string): TelemetryConfig {
 }
 
 /**
- * Load the kimchi-code configuration.
+ * Load the kimchi configuration.
  *
  * API key resolution order:
  *   1. KIMCHI_API_KEY environment variable (highest precedence)
@@ -240,6 +240,30 @@ export function writeSkillPaths(paths: string[], configPath?: string): void {
 
 export function writeApiKey(key: string, configPath?: string): void {
 	writeConfigField("apiKey", key, configPath ?? KIMCHI_CONFIG_PATH)
+}
+
+/**
+ * Persist telemetry.enabled in the kimchi config.json. Used by
+ * `kimchi config telemetry on|off`. The reader (readTelemetryConfig) already
+ * honours an env-var override, so this is a no-op for sessions where
+ * KIMCHI_TELEMETRY_ENABLED is set — but the persisted value is still useful
+ * for fresh shells.
+ */
+export function writeTelemetryEnabled(enabled: boolean, configPath?: string): void {
+	const path = configPath ?? KIMCHI_CONFIG_PATH
+	let raw: Record<string, unknown> = {}
+	try {
+		raw = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>
+	} catch {
+		// file missing or invalid — start fresh
+	}
+	const t = (raw.telemetry as Record<string, unknown> | undefined) ?? {}
+	t.enabled = enabled
+	raw.telemetry = t
+	mkdirSync(dirname(path), { recursive: true })
+	const tmp = `${path}.${process.pid}.tmp`
+	writeFileSync(tmp, `${JSON.stringify(raw, null, 2)}\n`, "utf-8")
+	renameSync(tmp, path)
 }
 
 export function clearApiKey(configPath?: string): void {
