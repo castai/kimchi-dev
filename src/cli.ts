@@ -19,6 +19,7 @@ import contextCompactorExtension from "./extensions/context-compactor.js"
 import kimchiMinimalTintsExtension from "./extensions/kimchi-minimal-tints.js"
 import loginExtension from "./extensions/login/index.js"
 import loopGuardExtension from "./extensions/loop-guard.js"
+import lspPostEditVerifyExtension from "./extensions/lsp-post-edit-verify.js"
 import lspExtension from "./extensions/lsp.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
@@ -247,6 +248,7 @@ try {
 			toolRendererExtension,
 			webFetchExtension,
 			webSearchExtension,
+			lspPostEditVerifyExtension,
 			loginExtension,
 		]
 
