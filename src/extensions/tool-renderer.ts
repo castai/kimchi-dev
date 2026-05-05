@@ -1,14 +1,16 @@
 import type { ExtensionAPI, ToolDefinition } from "@mariozechner/pi-coding-agent"
 import {
-	editToolDefinition,
-	findToolDefinition,
-	grepToolDefinition,
-	lsToolDefinition,
-	readToolDefinition,
-	writeToolDefinition,
+	createEditToolDefinition,
+	createFindToolDefinition,
+	createGrepToolDefinition,
+	createLsToolDefinition,
+	createReadToolDefinition,
+	createWriteToolDefinition,
 } from "@mariozechner/pi-coding-agent"
 import { ToolBlockView, buildToolCallHeader, getTextContent } from "../components/tool-block.js"
 import { isToolExpanded, registerToolCall } from "../expand-state.js"
+
+type ToolFactory = (cwd: string) => ToolDefinition
 
 function formatArgs(toolName: string, args: Record<string, unknown>): string {
 	const raw = (() => {
@@ -61,23 +63,30 @@ function formatSummary(toolName: string, content: string, isError: boolean): str
 	}
 }
 
-const builtins = [
-	readToolDefinition,
-	editToolDefinition,
-	writeToolDefinition,
-	grepToolDefinition,
-	findToolDefinition,
-	lsToolDefinition,
+const builtinFactories: ToolFactory[] = [
+	createReadToolDefinition as ToolFactory,
+	createEditToolDefinition as ToolFactory,
+	createWriteToolDefinition as ToolFactory,
+	createGrepToolDefinition as ToolFactory,
+	createFindToolDefinition as ToolFactory,
+	createLsToolDefinition as ToolFactory,
 ]
 
 export default function toolRendererExtension(pi: ExtensionAPI) {
-	for (const builtin of builtins) {
+	for (const factory of builtinFactories) {
+		const baseDef = factory(process.cwd())
+		const toolName = baseDef.name
+
 		pi.registerTool({
-			...(builtin as unknown as ToolDefinition),
+			...baseDef,
+
+			execute(toolCallId, params, signal, onUpdate, ctx) {
+				return factory(ctx.cwd).execute(toolCallId, params, signal, onUpdate, ctx)
+			},
 
 			renderCall(args, theme, ctx) {
 				const view = ctx.lastComponent instanceof ToolBlockView ? ctx.lastComponent : new ToolBlockView()
-				buildToolCallHeader(view, builtin.name, formatArgs(builtin.name, args as Record<string, unknown>), theme, ctx)
+				buildToolCallHeader(view, toolName, formatArgs(toolName, args as Record<string, unknown>), theme, ctx)
 				return view
 			},
 
@@ -92,7 +101,7 @@ export default function toolRendererExtension(pi: ExtensionAPI) {
 					view.setFooter(theme.fg("toolOutput", content), "")
 					view.setExtra([])
 				} else {
-					const summary = formatSummary(builtin.name, content, ctx.isError)
+					const summary = formatSummary(toolName, content, ctx.isError)
 					view.setFooter(theme.fg("dim", summary), theme.fg("dim", "ctrl+o to expand"))
 					view.setExtra([])
 				}

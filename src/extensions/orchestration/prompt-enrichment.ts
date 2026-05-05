@@ -25,7 +25,7 @@ import { existsSync } from "node:fs"
 import { homedir, platform, userInfo } from "node:os"
 import { isAbsolute, join, normalize, resolve } from "node:path"
 import type { AssistantMessage, ImageContent, TextContent } from "@mariozechner/pi-ai"
-import { type ExtensionAPI, type Skill, loadSkills } from "@mariozechner/pi-coding-agent"
+import { type ExtensionAPI, type Skill, getAgentDir, loadSkills } from "@mariozechner/pi-coding-agent"
 import { isKeyRelease, matchesKey } from "@mariozechner/pi-tui"
 import { ANSI, fg } from "../../ansi.js"
 import { getAvailableModels } from "../../startup-context.js"
@@ -335,7 +335,9 @@ export default function (skillPaths: string[]) {
 			cachedContextFiles ??= loadProjectContextFiles(ctx.cwd)
 			cachedSkills ??= loadSkills({
 				cwd: ctx.cwd,
+				agentDir: getAgentDir(),
 				skillPaths: expandSkillPaths(skillPaths, ctx.cwd),
+				includeDefaults: true,
 			}).skills
 
 			const now = new Date()
