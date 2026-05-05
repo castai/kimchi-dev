@@ -77,9 +77,7 @@ export default function (pi: ExtensionAPI): void {
 		state = next
 		const text = buildWarningText(total, config, next)
 		if (text === null) return
-		pi.sendMessage(
-			{ customType: "budget_warning", content: [{ type: "text", text }], display: false },
-			{ triggerTurn: true },
-		)
+		const customType = next === "exceeded" ? "budget_exceeded" : "budget_warning"
+		pi.sendMessage({ customType, content: [{ type: "text", text }], display: false }, { triggerTurn: true })
 	})
 }

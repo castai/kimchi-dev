@@ -180,7 +180,9 @@ describe("budgetFeedbackExtension turn_end handler", () => {
 		fireTurnEnd(handler, 10_000, 0) // already exceeded — no inject
 
 		expect(sendMessage).toHaveBeenCalledTimes(2)
+		expect(sendMessage.mock.calls[0][0].customType).toBe("budget_warning")
 		expect(sendMessage.mock.calls[0][0].content[0].text).toContain("budget warning")
+		expect(sendMessage.mock.calls[1][0].customType).toBe("budget_exceeded")
 		expect(sendMessage.mock.calls[1][0].content[0].text).toContain("budget exceeded")
 	})
 
@@ -227,6 +229,7 @@ describe("budgetFeedbackExtension turn_end handler", () => {
 
 		fireTurnEnd(handler, 150_000, 0)
 		expect(sendMessage).toHaveBeenCalledTimes(1)
+		expect(sendMessage.mock.calls[0][0].customType).toBe("budget_exceeded")
 		expect(sendMessage.mock.calls[0][0].content[0].text).toContain("budget exceeded")
 	})
 })
