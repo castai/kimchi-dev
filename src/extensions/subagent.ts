@@ -484,7 +484,7 @@ function spawnSubagent(
 						kill("token_budget_exceeded")
 					} else if (result.warning !== null) {
 						accumulated += result.warning
-						onToken(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated))
+						onToken(accumulated)
 					}
 				}
 			}
