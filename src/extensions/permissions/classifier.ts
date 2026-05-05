@@ -1,7 +1,11 @@
 import { complete } from "@mariozechner/pi-ai"
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent"
+import type { Api, Model } from "@mariozechner/pi-ai"
+import type { ModelRegistry } from "@mariozechner/pi-coding-agent"
 import classifierSystemPrompt from "./prompts/classifier-system-prompt.js"
 import type { ClassifierResult, ClassifierVerdict } from "./types.js"
+
+/** Tag added to every classifier LLM request for cost tracking. */
+export const CLASSIFIER_REQUEST_TAG = "source:classifier"
 
 export interface ClassifyInput {
 	toolName: string
@@ -14,21 +18,21 @@ export interface ClassifierOptions {
 }
 
 export async function classifyToolCall(
-	ctx: ExtensionContext,
+	model: Model<Api>,
+	modelRegistry: ModelRegistry,
 	call: ClassifyInput,
 	options: ClassifierOptions,
+	signal?: AbortSignal,
 ): Promise<ClassifierResult> {
-	const model = ctx.model
-	if (!model) return unavailable("no model configured")
-
-	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model)
+	const auth = await modelRegistry.getApiKeyAndHeaders(model)
 	if (!auth.ok || !auth.apiKey) return unavailable("no API key for classifier")
+
+	if (signal?.aborted) return unavailable("classifier aborted")
 
 	const controller = new AbortController()
 	const timeoutHandle = setTimeout(() => controller.abort(), options.timeoutMs)
-	const outerSignal = ctx.signal
 	const onOuterAbort = () => controller.abort()
-	outerSignal?.addEventListener("abort", onOuterAbort)
+	signal?.addEventListener("abort", onOuterAbort)
 
 	try {
 		const response = await complete(
@@ -43,7 +47,19 @@ export async function classifyToolCall(
 					},
 				],
 			},
-			{ apiKey: auth.apiKey, headers: auth.headers, signal: controller.signal },
+			{
+				apiKey: auth.apiKey,
+				headers: auth.headers,
+				signal: controller.signal,
+				onPayload: (payload: unknown) => {
+					if (payload && typeof payload === "object") {
+						const p = payload as Record<string, unknown>
+						const existing = Array.isArray(p.tags) ? (p.tags as string[]) : []
+						p.tags = [CLASSIFIER_REQUEST_TAG, ...existing]
+					}
+					return payload
+				},
+			},
 		)
 
 		const text = response.content
@@ -57,7 +73,7 @@ export async function classifyToolCall(
 		return unavailable(aborted ? "classifier timeout" : `classifier error: ${(err as Error).message}`)
 	} finally {
 		clearTimeout(timeoutHandle)
-		outerSignal?.removeEventListener("abort", onOuterAbort)
+		signal?.removeEventListener("abort", onOuterAbort)
 	}
 }
 
