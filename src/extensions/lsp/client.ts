@@ -172,7 +172,6 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string): Prom
 		// Bun global available at runtime but not typed — use globalThis cast
 		// biome-ignore lint/suspicious/noExplicitAny: Bun not typed without @types/bun
 		const Bun = (globalThis as any).Bun
-		// biome-ignore lint/suspicious/noExplicitAny: Bun not typed without @types/bun
 		const proc = Bun.spawn([config.command, ...(config.args ?? [])], {
 			cwd,
 			stdin: "pipe",

@@ -1,7 +1,7 @@
 // CLI logic — imported dynamically by entry.ts after PI_PACKAGE_DIR is set.
 // All static imports here (extensions, pi-mono) are safe because the env is already configured.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
@@ -44,6 +44,7 @@ import { getVersion } from "./utils.js"
 const telemetryConfig = readTelemetryConfig()
 
 let sessionId: string | undefined
+let sessionFile: string | undefined
 // ACP mode runs JSON-RPC over stdio; the "To resume:" print (even remapped to
 // stderr via console.log = console.error inside runAcpMode) is noise in IDE
 // logs and not actionable — the IDE owns session continuation. Decide once,
@@ -53,7 +54,12 @@ const helpOrVersion = isHelpOrVersionArgs(process.argv.slice(2))
 
 process.on("exit", (code) => {
 	if (code === 0 && !acpMode) {
-		const resumeCmd = sessionId ? `kimchi-code --session ${sessionId}` : "kimchi-code --continue"
+		// Only print a session-specific hint if the session file was actually
+		// flushed to disk. Empty sessions (immediate exit) never get persisted,
+		// so `--session <id>` would fail to resolve. Fall back to --continue,
+		// which finds the most recent persisted session for this cwd.
+		const persisted = sessionId && sessionFile && existsSync(sessionFile)
+		const resumeCmd = persisted ? `kimchi --session ${sessionId}` : "kimchi --continue"
 		console.log(`\nTo resume: ${resumeCmd}`)
 	}
 })
@@ -62,6 +68,7 @@ function sessionIdCaptureExtension(pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx: ExtensionContext) => {
 		try {
 			sessionId = ctx.sessionManager.getSessionId()
+			sessionFile = ctx.sessionManager.getSessionFile()
 		} catch {
 			// ignore — exit handler falls back to --continue
 		}
