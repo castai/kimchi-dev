@@ -11,7 +11,11 @@ on:
         default: false
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
 
 jobs:
   preflight:
@@ -93,6 +97,7 @@ jobs:
             runner: ubuntu-24.04-arm
 
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -144,6 +149,9 @@ jobs:
     needs: [preflight, smoke-test]
     if: needs.preflight.outputs.should-build == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
