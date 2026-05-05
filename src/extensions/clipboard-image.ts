@@ -227,9 +227,24 @@ function modelSupportsImages(modelId: string | undefined): boolean {
 	return meta?.input_modalities.includes("image") ?? false
 }
 
+// Build the prefix of `[Image #N]` markers we splice into the user's text on
+// submit. Mirrors Claude's UX: every image attached to a turn gets a stable
+// numeric reference the user can name in their prompt, and the counter runs
+// continuously across all turns in a session.
+function buildImageMarkerPrefix(startIndex: number, count: number): string {
+	if (count <= 0) return ""
+	const markers: string[] = []
+	for (let i = 0; i < count; i++) markers.push(`[Image #${startIndex + i}]`)
+	return markers.join(" ")
+}
+
 export default function clipboardImageExtension(pi: ExtensionAPI) {
 	let pendingImages: ImageContent[] = []
 	let currentCtx: ExtensionContext | null = null
+	// Per-session running counter of images attached to user turns. Resets on
+	// session_start so that a new conversation always begins at #1 — same
+	// behavior as Claude's UI.
+	let imageCounter = 0
 
 	setPasteImageHandler(() => {
 		// onPasteImage is synchronous (void), but clipboard read is async.
@@ -295,6 +310,7 @@ export default function clipboardImageExtension(pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		currentCtx = ctx
 		pendingImages = []
+		imageCounter = 0
 		// Editor is rebuilt on every session_start; re-push the current state
 		// so the indicator survives session resets that don't clear pendingImages
 		// (currently always empty here, but defensive).
@@ -302,10 +318,29 @@ export default function clipboardImageExtension(pi: ExtensionAPI) {
 	})
 
 	pi.on("input", (event) => {
-		if (pendingImages.length === 0) return
-		const images = [...(event.images ?? []), ...pendingImages]
+		// Combine any images already attached to the input event (e.g. from
+		// another extension or a future drag-drop path) with our pending paste
+		// queue. Both deserve `[Image #N]` markers so the user can refer to them
+		// in their prompt and the model gets a textual cue to align text with
+		// pixels.
+		const incoming = event.images ?? []
+		const totalImages = incoming.length + pendingImages.length
+		if (totalImages === 0) return
+
+		const images = [...incoming, ...pendingImages]
 		pendingImages = []
 		updateIndicator()
-		return { action: "transform" as const, text: event.text, images }
+
+		const startIndex = imageCounter + 1
+		imageCounter += totalImages
+		const prefix = buildImageMarkerPrefix(startIndex, totalImages)
+		// Preserve a single space between the marker prefix and any user-typed
+		// text. If the user submitted with an empty prompt, the markers become
+		// the entire visible message — which is fine, the user explicitly chose
+		// to send images alone.
+		const trimmed = event.text.trimStart()
+		const text = trimmed ? `${prefix} ${trimmed}` : prefix
+
+		return { action: "transform" as const, text, images }
 	})
 }
