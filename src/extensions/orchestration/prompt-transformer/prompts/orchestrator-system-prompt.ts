@@ -75,7 +75,7 @@ Use only for tasks where you have a rough estimate of total token cost:
 - **Multi-file implementation** with attachments: base on attachment token count — add ~80,000 for output
 - **Deep codebase exploration** with many attachments: omit or set very high (1,000,000+)
 
-The subagent receives a warning message at ~80% and a wrap-up notice at 100%, injected into its conversation as a user message so it can react before the hard ceiling is reached.
+The subagent receives a warning message at ~80% and a wrap-up notice at 100%, injected into its conversation as a user message between turns so it can react before the hard ceiling is reached. Warnings are delivered between tool rounds, not mid-tool — a long-running tool call delays the warning until that call returns.
 
 ### When to set \`hardTokenBudget\` (hard kill ceiling)
 

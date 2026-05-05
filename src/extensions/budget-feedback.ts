@@ -1,42 +1,85 @@
-import { createInterface } from "node:readline"
+// Runs inside subagent processes only. After every turn, reads the assistant
+// message's usage, accumulates running totals, and on transitions across the
+// soft-budget thresholds (80%, 100%) injects a steering message into the
+// running conversation so the model sees its budget status before the next
+// LLM call.
+//
+// The `display: false` flag keeps the warning out of the visible UI but in the
+// model's context — the human watching the parent's terminal already sees the
+// same warning via the parent's `accumulated` buffer.
+//
+// Cache-read tokens are excluded from the count to mirror the parent's
+// resolveBudgetConfig / checkBudgetState semantics.
+
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 
-export default function (pi: ExtensionAPI) {
-	if (process.env.KIMCHI_SUBAGENT !== "1" || process.env.KIMCHI_SUBAGENT_SUPPORTS_BUDGET_FEEDBACK !== "1") {
-		return
+interface BudgetConfig {
+	softLimit: number
+	warningThreshold: number
+}
+
+type BudgetState = "normal" | "warning" | "exceeded"
+
+interface UsageLike {
+	input?: number
+	output?: number
+}
+
+export function parseBudgetConfig(softBudget: string | undefined): BudgetConfig | null {
+	if (!softBudget || softBudget.length === 0) return null
+	const soft = Number(softBudget)
+	if (!Number.isFinite(soft) || soft <= 0) return null
+	return {
+		softLimit: soft,
+		warningThreshold: Math.round(soft * 0.8),
 	}
+}
 
-	const rl = createInterface({ input: process.stdin })
+export function nextBudgetState(total: number, config: BudgetConfig, current: BudgetState): BudgetState {
+	if (total > config.softLimit) return "exceeded"
+	if (total > config.warningThreshold) return current === "exceeded" ? "exceeded" : "warning"
+	return current
+}
 
-	// The parent process can send us budget events on stdin.  We read them
-	// as newline-delimited JSON and inject each one into the session as a
-	// user message so the subagent model can react.
-	rl.on("line", (line) => {
-		let event: Record<string, unknown>
-		try {
-			event = JSON.parse(line)
-		} catch {
-			// Not a JSON line — ignore.  Stdin may carry other data.
-			return
-		}
-		const type = event.type
-		if (type === "budget_warning") {
-			const used = Number(event.used)
-			const limit = Number(event.limit)
-			const percent = Number(event.percent)
-			const text = `[budget warning: ${used.toLocaleString()} / ${limit.toLocaleString()} soft limit used (${percent}%). Consider wrapping up.]`
-			pi.sendMessage(
-				{ customType: "budget_warning", content: [{ type: "text", text }], display: false },
-				{ triggerTurn: true },
-			)
-		} else if (type === "budget_exceeded") {
-			const used = Number(event.used)
-			const limit = Number(event.limit)
-			const text = `[budget exceeded: ${used.toLocaleString()} / ${limit.toLocaleString()} soft limit. Finishing current action, then stopping.]`
-			pi.sendMessage(
-				{ customType: "budget_exceeded", content: [{ type: "text", text }], display: false },
-				{ triggerTurn: true },
-			)
-		}
+export function buildWarningText(total: number, config: BudgetConfig, next: BudgetState): string | null {
+	const used = total.toLocaleString()
+	const limit = config.softLimit.toLocaleString()
+	if (next === "exceeded") {
+		return `[budget exceeded: ${used} / ${limit} soft limit. Finishing current action, then stopping.]`
+	}
+	if (next === "warning") {
+		const percent = Math.round((total / config.softLimit) * 100)
+		return `[budget warning: ${used} / ${limit} soft limit used (${percent}%). Consider wrapping up.]`
+	}
+	return null
+}
+
+export default function (pi: ExtensionAPI): void {
+	if (process.env.KIMCHI_SUBAGENT !== "1") return
+
+	const config = parseBudgetConfig(process.env.KIMCHI_SUBAGENT_SOFT_BUDGET)
+	if (!config) return
+
+	let inputTokens = 0
+	let outputTokens = 0
+	let state: BudgetState = "normal"
+
+	pi.on("turn_end", (event) => {
+		const message = event.message as { usage?: UsageLike } | undefined
+		const usage = message?.usage
+		if (!usage) return
+		inputTokens += typeof usage.input === "number" ? usage.input : 0
+		outputTokens += typeof usage.output === "number" ? usage.output : 0
+		const total = inputTokens + outputTokens
+		const prev = state
+		const next = nextBudgetState(total, config, state)
+		if (next === prev) return
+		state = next
+		const text = buildWarningText(total, config, next)
+		if (text === null) return
+		pi.sendMessage(
+			{ customType: "budget_warning", content: [{ type: "text", text }], display: false },
+			{ triggerTurn: true },
+		)
 	})
 }
