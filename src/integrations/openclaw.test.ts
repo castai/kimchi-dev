@@ -20,16 +20,16 @@ describe("buildOpenClawProviderBlock", () => {
 		expect(block.baseUrl).toBe("https://llm.kimchi.dev/openai/v1")
 		expect(block.apiKey).toBe("${KIMCHI_API_KEY}")
 		expect(block.api).toBe("openai-completions")
-		expect(block.models.length).toBe(5)
+		expect(block.models.length).toBe(6)
 	})
 
 	it("includes per-model id/name/contextWindow/maxTokens", () => {
 		const block = buildOpenClawProviderBlock() as {
 			models: Array<{ id: string; name: string; contextWindow: number; maxTokens: number }>
 		}
-		const main = block.models.find((m) => m.id === "kimchi/kimi-k2.5")
+		const main = block.models.find((m) => m.id === "kimchi/kimi-k2.6")
 		expect(main).toBeDefined()
-		expect(main?.name).toBe("Kimi K2.5")
+		expect(main?.name).toBe("Kimi K2.6")
 		expect(main?.contextWindow).toBe(262_144)
 		expect(main?.maxTokens).toBe(32_768)
 	})
@@ -38,6 +38,7 @@ describe("buildOpenClawProviderBlock", () => {
 describe("buildOpenClawModelsCatalog", () => {
 	it("maps each model id to its display alias", () => {
 		const catalog = buildOpenClawModelsCatalog()
+		expect(catalog["kimchi/kimi-k2.6"]).toEqual({ alias: "Kimi K2.6" })
 		expect(catalog["kimchi/kimi-k2.5"]).toEqual({ alias: "Kimi K2.5" })
 		expect(catalog["kimchi/nemotron-3-super-fp4"]).toEqual({ alias: "Nemotron 3 Super FP4" })
 		expect(catalog["kimchi/minimax-m2.7"]).toEqual({ alias: "MiniMax M2.7" })

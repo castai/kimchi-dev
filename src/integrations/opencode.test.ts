@@ -181,7 +181,7 @@ describe("opencode tool registration", () => {
 			expect(written.provider.other).toEqual({ keep: true })
 			expect(written.provider.kimchi).toBeDefined()
 			expect((written.provider.kimchi as { options: { apiKey: string } }).options.apiKey).toBe("test-key-123")
-			expect(written.model).toBe("kimchi/kimi-k2.5")
+			expect(written.model).toBe("kimchi/kimi-k2.6")
 			expect(written.compaction).toEqual({ auto: true })
 		} finally {
 			globalThis.fetch = originalFetch

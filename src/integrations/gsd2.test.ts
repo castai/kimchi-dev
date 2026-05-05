@@ -12,28 +12,31 @@ describe("buildGsd2ModelsConfig", () => {
 		}
 		expect(cfg.providers.kimchi.apiKey).toBe("test-key")
 		expect(cfg.providers.kimchi.baseUrl).toBe("https://llm.kimchi.dev/openai/v1")
-		expect(cfg.providers.kimchi.defaultModel).toBe("kimi-k2.5")
+		expect(cfg.providers.kimchi.defaultModel).toBe("kimi-k2.6")
 	})
 
-	it("emits all five models with cost metadata (Opus/Sonnet billed, kimchi models free)", () => {
+	it("emits all six models with cost metadata (Opus/Sonnet billed, kimchi models free)", () => {
 		const cfg = buildGsd2ModelsConfig("k") as {
 			providers: { kimchi: { models: Array<{ id: string; cost: { input: number } }> } }
 		}
 		const models = cfg.providers.kimchi.models
-		expect(models.length).toBe(5)
+		expect(models.length).toBe(6)
 		const opus = models.find((m) => m.id === "claude-opus-4-6")
 		expect(opus?.cost).toEqual({ input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 })
 		const sonnet = models.find((m) => m.id === "claude-sonnet-4-6")
 		expect(sonnet?.cost).toEqual({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 })
-		const main = models.find((m) => m.id === "kimi-k2.5")
-		expect(main?.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 })
+		for (const slug of ["kimi-k2.6", "kimi-k2.5", "nemotron-3-super-fp4", "minimax-m2.7"]) {
+			const m = models.find((x) => x.id === slug)
+			expect(m?.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 })
+		}
 	})
 
-	it("Main model accepts text+image input, others text only", () => {
+	it("Kimi models accept text+image input, others text only", () => {
 		const cfg = buildGsd2ModelsConfig("k") as {
 			providers: { kimchi: { models: Array<{ id: string; input: string[] }> } }
 		}
 		const models = cfg.providers.kimchi.models
+		expect(models.find((m) => m.id === "kimi-k2.6")?.input).toEqual(["text", "image"])
 		expect(models.find((m) => m.id === "kimi-k2.5")?.input).toEqual(["text", "image"])
 		expect(models.find((m) => m.id === "nemotron-3-super-fp4")?.input).toEqual(["text"])
 		expect(models.find((m) => m.id === "claude-opus-4-6")?.input).toEqual(["text"])
@@ -56,9 +59,15 @@ describe("buildGsd2Preferences", () => {
 		// Coding model for research + subagent + light tier.
 		expect(prefs).toContain("research: kimchi/nemotron-3-super-fp4")
 		expect(prefs).toContain("subagent: kimchi/nemotron-3-super-fp4")
-		// Sub model for execution_simple + discuss.
+		// Sub model for execution_simple + discuss + standard tier.
 		expect(prefs).toContain("discuss: kimchi/minimax-m2.7")
 		expect(prefs).toContain("execution_simple: kimchi/minimax-m2.7")
+	})
+
+	it("uses the new tier_models shape (light → coding, standard → sub, heavy → [main, opus])", () => {
+		expect(prefs).toContain("light: kimchi/nemotron-3-super-fp4")
+		expect(prefs).toContain("standard: kimchi/minimax-m2.7")
+		expect(prefs).toMatch(/heavy:\s*\n\s*- kimchi\/kimi-k2\.6\s*\n\s*- kimchi\/claude-opus-4-6/)
 	})
 
 	it("hardcodes the worktree+squash git defaults", () => {

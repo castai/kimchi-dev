@@ -14,11 +14,11 @@ describe("mergeCursorConfig", () => {
 		const mc = out.aiSettings.modelConfig
 		// Composer / spec / deep-search / background / ensemble run on Main; cmd-k +
 		// plan-execution on Coding; quick-agent on Sub.
-		expect(mc.composer.modelName).toBe("kimchi/kimi-k2.5")
-		expect(mc.spec.modelName).toBe("kimchi/kimi-k2.5")
-		expect(mc["deep-search"].modelName).toBe("kimchi/kimi-k2.5")
-		expect(mc["background-composer"].modelName).toBe("kimchi/kimi-k2.5")
-		expect(mc["composer-ensemble"].modelName).toBe("kimchi/kimi-k2.5")
+		expect(mc.composer.modelName).toBe("kimchi/kimi-k2.6")
+		expect(mc.spec.modelName).toBe("kimchi/kimi-k2.6")
+		expect(mc["deep-search"].modelName).toBe("kimchi/kimi-k2.6")
+		expect(mc["background-composer"].modelName).toBe("kimchi/kimi-k2.6")
+		expect(mc["composer-ensemble"].modelName).toBe("kimchi/kimi-k2.6")
 		expect(mc["cmd-k"].modelName).toBe("kimchi/nemotron-3-super-fp4")
 		expect(mc["plan-execution"].modelName).toBe("kimchi/nemotron-3-super-fp4")
 		expect(mc["quick-agent"].modelName).toBe("kimchi/minimax-m2.7")
@@ -27,15 +27,15 @@ describe("mergeCursorConfig", () => {
 	it("appends our model slugs to userAddedModels without duplicating existing ones", () => {
 		const initial = {
 			aiSettings: {
-				userAddedModels: ["other/model-a", "kimchi/kimi-k2.5"],
+				userAddedModels: ["other/model-a", "kimchi/kimi-k2.6"],
 			},
 		}
 		const out = mergeCursorConfig(initial) as { aiSettings: { userAddedModels: string[] } }
-		// "other/model-a" is preserved, "kimchi/kimi-k2.5" isn't duplicated, the
+		// "other/model-a" is preserved, "kimchi/kimi-k2.6" isn't duplicated, the
 		// other two kimchi slugs are appended.
 		expect(out.aiSettings.userAddedModels).toEqual([
 			"other/model-a",
-			"kimchi/kimi-k2.5",
+			"kimchi/kimi-k2.6",
 			"kimchi/nemotron-3-super-fp4",
 			"kimchi/minimax-m2.7",
 		])
@@ -44,7 +44,7 @@ describe("mergeCursorConfig", () => {
 	it("removes our slugs from modelOverrideDisabled while leaving unrelated entries alone", () => {
 		const initial = {
 			aiSettings: {
-				modelOverrideDisabled: ["kimchi/kimi-k2.5", "other/keep-me", "kimchi/minimax-m2.7"],
+				modelOverrideDisabled: ["kimchi/kimi-k2.6", "other/keep-me", "kimchi/minimax-m2.7"],
 			},
 		}
 		const out = mergeCursorConfig(initial) as { aiSettings: { modelOverrideDisabled: string[] } }

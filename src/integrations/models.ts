@@ -22,9 +22,20 @@ export interface KimchiModel {
 }
 
 export const MAIN_MODEL: KimchiModel = {
+	slug: "kimi-k2.6",
+	displayName: "Kimi K2.6",
+	description: "Primary model for reasoning, planning, code generation, and image processing.",
+	toolCall: true,
+	reasoning: true,
+	supportsImages: true,
+	inputModalities: ["text", "image"],
+	limits: { contextWindow: 262_144, maxOutputTokens: 32_768 },
+}
+
+export const KIMI_K25_MODEL: KimchiModel = {
 	slug: "kimi-k2.5",
 	displayName: "Kimi K2.5",
-	description: "Primary model for reasoning, planning, code generation, and image processing.",
+	description: "Previous Kimi model for reasoning, planning, and code generation.",
 	toolCall: true,
 	reasoning: true,
 	supportsImages: true,
@@ -72,4 +83,11 @@ export const SONNET_MODEL: KimchiModel = {
 	limits: { contextWindow: 1_000_000, maxOutputTokens: 128_000 },
 }
 
-export const ALL_MODELS: ReadonlyArray<KimchiModel> = [MAIN_MODEL, CODING_MODEL, SUB_MODEL, OPUS_MODEL, SONNET_MODEL]
+export const ALL_MODELS: ReadonlyArray<KimchiModel> = [
+	MAIN_MODEL,
+	CODING_MODEL,
+	SUB_MODEL,
+	OPUS_MODEL,
+	SONNET_MODEL,
+	KIMI_K25_MODEL,
+]

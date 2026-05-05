@@ -3,7 +3,7 @@ import type { ConfigScope } from "../config/scope.js"
 import { resolveScopePath } from "../config/scope.js"
 import { BASE_URL, PROVIDER_NAME } from "./constants.js"
 import { findBinary } from "./detect.js"
-import { CODING_MODEL, MAIN_MODEL, OPUS_MODEL, SONNET_MODEL, SUB_MODEL } from "./models.js"
+import { CODING_MODEL, KIMI_K25_MODEL, MAIN_MODEL, OPUS_MODEL, SONNET_MODEL, SUB_MODEL } from "./models.js"
 import { register } from "./registry.js"
 
 const GSD_PREFERENCES_PATH = "~/.gsd/preferences.md"
@@ -30,6 +30,7 @@ const CATALOG: CatalogEntry[] = [
 	{ model: OPUS_MODEL, input: ["text"], cost: COST_OPUS },
 	{ model: SONNET_MODEL, input: ["text"], cost: COST_SONNET },
 	{ model: MAIN_MODEL, input: ["text", "image"], cost: COST_FREE },
+	{ model: KIMI_K25_MODEL, input: ["text", "image"], cost: COST_FREE },
 	{ model: CODING_MODEL, input: ["text"], cost: COST_FREE },
 	{ model: SUB_MODEL, input: ["text"], cost: COST_FREE },
 ]
@@ -86,8 +87,10 @@ dynamic_routing:
   enabled: false
   tier_models:
     light: ${slug(CODING_MODEL)}
-    standard: ${slug(MAIN_MODEL)}
-    heavy: ${slug(OPUS_MODEL)}
+    standard: ${slug(SUB_MODEL)}
+    heavy:
+      - ${slug(MAIN_MODEL)}
+      - ${slug(OPUS_MODEL)}
   budget_pressure: false
 token_profile: balanced
 skill_discovery: suggest
