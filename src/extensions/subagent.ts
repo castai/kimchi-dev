@@ -636,7 +636,7 @@ const SubagentParams = Type.Object({
 	tokenBudget: Type.Optional(
 		Type.Union([Type.Integer({ minimum: 1 }), Type.String({ pattern: "^[1-9][0-9]*$" })], {
 			description:
-				"**Soft advisory cap** on total tokens (input + output) the subagent should aim to stay under. The subagent receives a warning at ~80% and a final wrap-up notice at 100%, giving it a chance to finish gracefully. Use when you need cost guidance — not for strict enforcement. Omit by default.",
+				"**Soft advisory cap** on uncached input + output tokens (cache-read tokens are excluded from the count). A warning is shown in the parent output at ~80% and a wrap-up notice at 100%. The subagent knows the limit from its system prompt but does not receive real-time feedback. Use for cost guidance — not strict enforcement. Omit by default.",
 		}),
 	),
 	hardTokenBudget: Type.Optional(

@@ -185,7 +185,7 @@ function formatBudgetSection(budget?: SubagentBudgetInfo): string {
 	if (!budget) return ""
 	const hardLine =
 		budget.hardLimit !== undefined ? `\n- Hard kill ceiling: ${budget.hardLimit.toLocaleString()} tokens` : ""
-	return `## Token Budget\n\nYou are running as a subagent with a token budget.\n\n- Soft advisory limit: ${budget.softLimit.toLocaleString()} tokens${hardLine}\n\nYou should pace yourself as this budget is approached. Aim to finish gracefully before reaching it.\n`
+	return `## Token Budget\n\nYou are running as a subagent with a token budget.\n\n- Soft advisory limit: ${budget.softLimit.toLocaleString()} tokens${hardLine}\n\nPlan your work to fit within this budget. You will not receive runtime usage updates — the parent process monitors consumption and may stop you if the hard ceiling is reached.\n`
 }
 
 export function parseSubagentBudgetFromEnv(

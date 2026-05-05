@@ -75,7 +75,7 @@ Use only for tasks where you have a rough estimate of total token cost:
 - **Multi-file implementation** with attachments: base on attachment token count — add ~80,000 for output
 - **Deep codebase exploration** with many attachments: omit or set very high (1,000,000+)
 
-The subagent receives a warning at 80% and a "wrap up" notice at 100%, giving it a chance to finish gracefully.
+The subagent only knows its budget limits from its system prompt. Runtime warnings at ~80% and wrap-up at 100% are inserted into the output stream the parent sees, not sent back to the subagent. The subagent has no runtime usage feedback, so the prompt itself must be sized to fit comfortably within the budget.
 
 ### When to set \`hardTokenBudget\` (hard kill ceiling)
 
