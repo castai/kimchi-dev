@@ -1,12 +1,13 @@
 import type { ExtensionAPI, ToolDefinition } from "@mariozechner/pi-coding-agent"
 import {
-	editToolDefinition,
-	findToolDefinition,
-	grepToolDefinition,
-	lsToolDefinition,
-	readToolDefinition,
-	writeToolDefinition,
+	createEditToolDefinition,
+	createFindToolDefinition,
+	createGrepToolDefinition,
+	createLsToolDefinition,
+	createReadToolDefinition,
+	createWriteToolDefinition,
 } from "@mariozechner/pi-coding-agent"
+import type { TSchema } from "typebox"
 import { ToolBlockView, buildToolCallHeader, getTextContent } from "../components/tool-block.js"
 import { isToolExpanded, registerToolCall } from "../expand-state.js"
 
@@ -61,44 +62,46 @@ function formatSummary(toolName: string, content: string, isError: boolean): str
 	}
 }
 
-const builtins = [
-	readToolDefinition,
-	editToolDefinition,
-	writeToolDefinition,
-	grepToolDefinition,
-	findToolDefinition,
-	lsToolDefinition,
-]
+function buildBuiltinTool<TParams extends TSchema, TDetails>(
+	factory: (cwd: string) => ToolDefinition<TParams, TDetails>,
+): ToolDefinition<TParams, TDetails> {
+	const meta = factory(process.cwd())
+	return {
+		...meta,
+		execute(toolCallId, params, signal, onUpdate, ctx) {
+			return factory(ctx.cwd).execute(toolCallId, params, signal, onUpdate, ctx)
+		},
+		renderCall(args, theme, ctx) {
+			const view = ctx.lastComponent instanceof ToolBlockView ? ctx.lastComponent : new ToolBlockView()
+			buildToolCallHeader(view, meta.name, formatArgs(meta.name, args as Record<string, unknown>), theme, ctx)
+			return view
+		},
+		renderResult(result, options, theme, ctx) {
+			const view = ctx.lastComponent instanceof ToolBlockView ? ctx.lastComponent : new ToolBlockView()
+			const content = getTextContent(result)
+
+			registerToolCall(ctx.toolCallId)
+			view.setDivider((s: string) => theme.fg("borderMuted", s))
+
+			if (isToolExpanded(ctx.toolCallId) && content) {
+				view.setFooter(theme.fg("toolOutput", content), "")
+				view.setExtra([])
+			} else {
+				const summary = formatSummary(meta.name, content, ctx.isError)
+				view.setFooter(theme.fg("dim", summary), theme.fg("dim", "ctrl+o to expand"))
+				view.setExtra([])
+			}
+
+			return view
+		},
+	}
+}
 
 export default function toolRendererExtension(pi: ExtensionAPI) {
-	for (const builtin of builtins) {
-		pi.registerTool({
-			...(builtin as unknown as ToolDefinition),
-
-			renderCall(args, theme, ctx) {
-				const view = ctx.lastComponent instanceof ToolBlockView ? ctx.lastComponent : new ToolBlockView()
-				buildToolCallHeader(view, builtin.name, formatArgs(builtin.name, args as Record<string, unknown>), theme, ctx)
-				return view
-			},
-
-			renderResult(result, options, theme, ctx) {
-				const view = ctx.lastComponent instanceof ToolBlockView ? ctx.lastComponent : new ToolBlockView()
-				const content = getTextContent(result)
-
-				registerToolCall(ctx.toolCallId)
-				view.setDivider((s: string) => theme.fg("borderMuted", s))
-
-				if (isToolExpanded(ctx.toolCallId) && content) {
-					view.setFooter(theme.fg("toolOutput", content), "")
-					view.setExtra([])
-				} else {
-					const summary = formatSummary(builtin.name, content, ctx.isError)
-					view.setFooter(theme.fg("dim", summary), theme.fg("dim", "ctrl+o to expand"))
-					view.setExtra([])
-				}
-
-				return view
-			},
-		})
-	}
+	pi.registerTool(buildBuiltinTool(createReadToolDefinition))
+	pi.registerTool(buildBuiltinTool(createEditToolDefinition))
+	pi.registerTool(buildBuiltinTool(createWriteToolDefinition))
+	pi.registerTool(buildBuiltinTool(createGrepToolDefinition))
+	pi.registerTool(buildBuiltinTool(createFindToolDefinition))
+	pi.registerTool(buildBuiltinTool(createLsToolDefinition))
 }

@@ -1,8 +1,8 @@
 diff --git a/dist/cli/args.js b/dist/cli/args.js
-index 60fb3b9c763006fd2a4d761aa93e4746d66dfa2f..79c30e0671ef38280fda9224f270e7af1e91da8d 100644
+index c9f34fef8e473c203dbbfc1603b69beb8f5d8d2b..bec90c470284e05946e4c6e9c0ae95952d7a3b8e 100644
 --- a/dist/cli/args.js
 +++ b/dist/cli/args.js
-@@ -288,6 +288,7 @@ ${chalk.bold("Examples:")}
+@@ -281,6 +281,7 @@ ${chalk.bold("Examples:")}
    ${APP_NAME} --export session.jsonl output.html
  
  ${chalk.bold("Environment Variables:")}
@@ -11,14 +11,14 @@ index 60fb3b9c763006fd2a4d761aa93e4746d66dfa2f..79c30e0671ef38280fda9224f270e7af
    ANTHROPIC_OAUTH_TOKEN            - Anthropic OAuth token (alternative to API key)
    OPENAI_API_KEY                   - OpenAI GPT API key
 diff --git a/dist/core/model-resolver.js b/dist/core/model-resolver.js
-index b8b1369b7b186b572b7fe8524eedbb6c22e1bb37..fba65f033fe305ed65aa413a8882f1231b6e3052 100644
+index 3ffb1439bf059d787aee4bf314c89cb28b6b4959..275c5dc3c02bdba4932fd14587c70ca8f08e9333 100644
 --- a/dist/core/model-resolver.js
 +++ b/dist/core/model-resolver.js
-@@ -31,6 +31,7 @@ export const defaultModelPerProvider = {
-     opencode: "claude-opus-4-6",
-     "opencode-go": "kimi-k2.5",
+@@ -33,6 +33,7 @@ export const defaultModelPerProvider = {
+     opencode: "kimi-k2.6",
+     "opencode-go": "kimi-k2.6",
      "kimi-coding": "kimi-for-coding",
 +    "kimchi-dev": "kimi-k2.5",
- };
- /**
-  * Helper to check if a model ID looks like an alias (no date suffix)
+     "cloudflare-workers-ai": "@cf/moonshotai/kimi-k2.6",
+     "cloudflare-ai-gateway": "workers-ai/@cf/moonshotai/kimi-k2.6",
+     xiaomi: "mimo-v2.5-pro",
