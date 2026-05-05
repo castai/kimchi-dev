@@ -155,9 +155,10 @@ function copyDir(src: string, dst: string): void {
 }
 
 /**
- * Copy a single file from src to dst, preserving permissions.
+ * Copy a single file from src to dst. copyFileSync preserves the source's
+ * mode bits on POSIX by default — its third argument is for COPYFILE_*
+ * behavioral flags (range 0–7), not file permissions.
  */
 function copyFile(src: string, dst: string): void {
-	const stat = statSync(src)
-	copyFileSync(src, dst, stat.mode)
+	copyFileSync(src, dst)
 }

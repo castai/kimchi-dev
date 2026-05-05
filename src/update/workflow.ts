@@ -76,7 +76,11 @@ export async function checkForUpdate(opts: CheckOptions): Promise<CheckResult> {
 		})
 	}
 
-	const hasUpdate = !compareSemverGte(opts.currentVersion, latestVersion)
+	// GitHub release tags carry a leading "v" (e.g. "v0.0.23"); compareSemverGte
+	// only parses bare semver, so strip the prefix here. We keep `latestVersion`
+	// itself unchanged so cached state and user-facing messages still show the
+	// canonical tag name.
+	const hasUpdate = !compareSemverGte(opts.currentVersion, latestVersion.replace(/^v/, ""))
 	return {
 		currentVersion: opts.currentVersion,
 		latestVersion,
