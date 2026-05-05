@@ -22,14 +22,13 @@ import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./sp
 const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
 export const RESULT_MAX_CHARS = 8000
+const MAX_CONCURRENT_SUBAGENTS = 50
 
 let activeSessionCounts: Map<string, number> | null = null
+let activeSubagentCount = 0
 
 export function getActiveSubagentCount(): number {
-	if (!activeSessionCounts) return 0
-	let total = 0
-	for (const n of activeSessionCounts.values()) total += n
-	return total
+	return activeSubagentCount
 }
 const STDERR_MAX = 8192
 const TIMEOUT_MS = 30 * 60 * 1000
@@ -768,6 +767,20 @@ export default function (pi: ExtensionAPI) {
 			const args = buildSubagentArgs(params, validated.resolved, collectExtensionArgs(), childSessionFile)
 			const invocation = getSubagentInvocation(args)
 
+			if (activeSubagentCount >= MAX_CONCURRENT_SUBAGENTS) {
+				const zeroUsage: SubagentTokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Too many active subagents (${activeSubagentCount}/${MAX_CONCURRENT_SUBAGENTS}). Finish existing subagents before spawning new ones.`,
+						},
+					],
+					details: { durationMs: 0, tokenUsage: zeroUsage },
+					isError: true,
+				}
+			}
+
 			let lastToolCall: string | undefined
 			const tokenBudget = params.tokenBudget !== undefined ? Number(params.tokenBudget) : undefined
 			const hardTokenBudget = params.hardTokenBudget !== undefined ? Number(params.hardTokenBudget) : undefined
@@ -775,6 +788,7 @@ export default function (pi: ExtensionAPI) {
 
 			const inactivityTimeoutMs =
 				params.inactivityTimeoutMs !== undefined ? Number(params.inactivityTimeoutMs) : INACTIVITY_TIMEOUT_MS
+			activeSubagentCount++
 			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(
 				invocation,
 				ctx.cwd,
@@ -792,7 +806,9 @@ export default function (pi: ExtensionAPI) {
 					lastToolCall = `${name}${argHint}`
 					onUpdate?.({ content: [{ type: "text", text }], details: lastToolCall })
 				},
-			)
+			).finally(() => {
+				activeSubagentCount--
+			})
 
 			pi.appendEntry<SubagentEndCheckpoint>(CHECKPOINT_END_TYPE, {
 				toolCallId: _toolCallId,

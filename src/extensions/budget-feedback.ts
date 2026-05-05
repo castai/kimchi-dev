@@ -58,11 +58,11 @@ export default function (pi: ExtensionAPI): void {
 	if (process.env.KIMCHI_SUBAGENT !== "1") return
 
 	const config = parseBudgetConfig(process.env.KIMCHI_SUBAGENT_SOFT_BUDGET)
-	if (!config) return
 
 	let inputTokens = 0
 	let outputTokens = 0
 	let state: BudgetState = "normal"
+	let turnCount = 0
 
 	pi.on("turn_end", (event) => {
 		const message = event.message as { usage?: UsageLike } | undefined
@@ -71,13 +71,25 @@ export default function (pi: ExtensionAPI): void {
 		inputTokens += typeof usage.input === "number" ? usage.input : 0
 		outputTokens += typeof usage.output === "number" ? usage.output : 0
 		const total = inputTokens + outputTokens
-		const prev = state
-		const next = nextBudgetState(total, config, state)
-		if (next === prev) return
-		state = next
-		const text = buildWarningText(total, config, next)
-		if (text === null) return
-		const customType = next === "exceeded" ? "budget_exceeded" : "budget_warning"
-		pi.sendMessage({ customType, content: [{ type: "text", text }], display: false }, { triggerTurn: true })
+		turnCount += 1
+
+		if (config) {
+			const prev = state
+			const next = nextBudgetState(total, config, state)
+			if (next === prev) return
+			state = next
+			const text = buildWarningText(total, config, next)
+			if (text === null) return
+			const customType = next === "exceeded" ? "budget_exceeded" : "budget_warning"
+			pi.sendMessage({ customType, content: [{ type: "text", text }], display: false }, { triggerTurn: true })
+			return
+		}
+
+		// No budget configured — emit an actionable usage report that forces the model to confront the burn rate
+		const text = `[SYSTEM TOKEN REPORT] Turn ${turnCount} — cumulative ${total.toLocaleString()} tokens (${inputTokens.toLocaleString()} input + ${outputTokens.toLocaleString()} output).\nThis report is real-time feedback. Use it:\n- If you're re-reading files you've already covered, STOP and wrap up.\n- If the last few turns each burned >50K input tokens, STOP after the current tool call.\n- Return your findings now. The orchestrator can spawn a fresh subagent for deeper work. Do NOT over-investigate.`
+		pi.sendMessage(
+			{ customType: "budget_usage_report", content: [{ type: "text", text }], display: false },
+			{ triggerTurn: false },
+		)
 	})
 }

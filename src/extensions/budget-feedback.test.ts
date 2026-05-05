@@ -127,13 +127,27 @@ describe("budgetFeedbackExtension turn_end handler", () => {
 		expect(handlers.has("turn_end")).toBe(false)
 	})
 
-	it("does not register handler when soft budget is unset", () => {
+	it("registers handler when soft budget is unset (reports usage without limits)", () => {
 		process.env.KIMCHI_SUBAGENT = "1"
 		// biome-ignore lint/performance/noDelete: process.env coerces assignments to strings
 		delete process.env.KIMCHI_SUBAGENT_SOFT_BUDGET
-		const { api, handlers } = setup()
+		const { api, handlers, sendMessage } = setup()
 		budgetFeedbackExtension(api)
-		expect(handlers.has("turn_end")).toBe(false)
+		expect(handlers.has("turn_end")).toBe(true)
+
+		const handler = handlers.get("turn_end")
+		if (!handler) throw new Error("handler not registered")
+		fireTurnEnd(handler, 10_000, 2_000)
+
+		expect(sendMessage).toHaveBeenCalledTimes(1)
+		const call = sendMessage.mock.calls[0]
+		expect(call[0].customType).toBe("budget_usage_report")
+		expect(call[0].display).toBe(false)
+		expect(call[0].content[0].text).toContain("SYSTEM TOKEN REPORT")
+		expect(call[0].content[0].text).toContain("12,000")
+		expect(call[0].content[0].text).toContain("Turn 1")
+		expect(call[0].content[0].text).toContain("STOP")
+		expect(call[1]).toEqual({ triggerTurn: false })
 	})
 
 	it("does not inject below warning threshold", () => {
@@ -145,6 +159,29 @@ describe("budgetFeedbackExtension turn_end handler", () => {
 		if (!handler) throw new Error("handler not registered")
 		fireTurnEnd(handler, 50_000, 0)
 		expect(sendMessage).not.toHaveBeenCalled()
+	})
+
+	it("reports usage on every turn when no budget is set", () => {
+		process.env.KIMCHI_SUBAGENT = "1"
+		// biome-ignore lint/performance/noDelete: process.env coerces assignments to strings
+		delete process.env.KIMCHI_SUBAGENT_SOFT_BUDGET
+		const { api, handlers, sendMessage } = setup()
+		budgetFeedbackExtension(api)
+		const handler = handlers.get("turn_end")
+		if (!handler) throw new Error("handler not registered")
+
+		fireTurnEnd(handler, 5_000, 1_000)
+		expect(sendMessage).toHaveBeenCalledTimes(1)
+		expect(sendMessage.mock.calls[0][0].customType).toBe("budget_usage_report")
+		expect(sendMessage.mock.calls[0][0].content[0].text).toContain("[SYSTEM TOKEN REPORT]")
+		expect(sendMessage.mock.calls[0][0].content[0].text).toContain("Turn 1")
+		expect(sendMessage.mock.calls[0][0].content[0].text).toContain("6,000")
+
+		fireTurnEnd(handler, 10_000, 2_000)
+		expect(sendMessage).toHaveBeenCalledTimes(2)
+		expect(sendMessage.mock.calls[1][0].customType).toBe("budget_usage_report")
+		expect(sendMessage.mock.calls[1][0].content[0].text).toContain("Turn 2")
+		expect(sendMessage.mock.calls[1][0].content[0].text).toContain("18,000")
 	})
 
 	it("injects exactly once when crossing 80%", () => {
