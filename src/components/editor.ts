@@ -28,6 +28,7 @@ export class PromptEditor extends CustomEditor {
 	private readonly kb: KeybindingsManager
 	private expandHandler?: () => void
 	private _splashMode = false
+	private _pendingImageIndicator: string | null = null
 
 	constructor(tui: TUI, editorTheme: EditorTheme, keybindings: KeybindingsManager, appTheme: Theme) {
 		super(tui, editorTheme, keybindings)
@@ -41,6 +42,18 @@ export class PromptEditor extends CustomEditor {
 
 	setExpandHandler(handler: () => void) {
 		this.expandHandler = handler
+	}
+
+	/**
+	 * Show a short status string right-aligned on the prompt's first line
+	 * (the placeholder row). Stays visible regardless of editor content until
+	 * cleared with `null`. Used by the clipboard-image extension to surface
+	 * pending pasted attachments.
+	 */
+	setPendingImageIndicator(text: string | null) {
+		if (this._pendingImageIndicator === text) return
+		this._pendingImageIndicator = text
+		this.tui.requestRender()
 	}
 
 	override handleInput(data: string) {
@@ -60,7 +73,19 @@ export class PromptEditor extends CustomEditor {
 
 		const innerWidth = this._splashMode ? Math.min(EDITOR_WIDTH, width - 4) : width
 		const contentWidth = innerWidth - CHEVRON_WIDTH
-		const lines = super.render(contentWidth)
+
+		// When an attachment indicator is shown, the editor body must wrap one
+		// indicator-width earlier on every row so the indicator (always pinned to
+		// the first row's right edge) never collides with typed text. Computed
+		// before super.render() because we need the *narrower* layout up front.
+		const indicatorRaw = this._pendingImageIndicator
+		const indicatorVisibleWidth = indicatorRaw ? visibleWidth(indicatorRaw) : 0
+		const indicatorGutter = indicatorVisibleWidth > 0 ? 1 : 0
+		const contentRenderWidth = Math.max(
+			1,
+			indicatorVisibleWidth > 0 ? contentWidth - indicatorVisibleWidth - indicatorGutter : contentWidth,
+		)
+		const lines = super.render(contentRenderWidth)
 
 		const leftPad = this._splashMode ? Math.max(0, Math.floor((width - innerWidth) / 2)) : 0
 		const pad = leftPad > 0 ? " ".repeat(leftPad) : ""
@@ -78,12 +103,28 @@ export class PromptEditor extends CustomEditor {
 		const bottomBorder = pad + rebuildBorder(lines[bottomIdx], innerWidth, border)
 		const result: string[] = [topBorder]
 
+		// Right-aligned status segment pinned to the first content row of the
+		// prompt. Always shown when set: typed text is wrapped one indicator-
+		// width earlier (see contentRenderWidth above) so the indicator never
+		// collides with text. Persists across empty/non-empty editor states
+		// until cleared via setPendingImageIndicator(null).
+		const indicatorStyled = indicatorRaw ? `${muted}${indicatorRaw}${RST_FG}` : ""
+
 		if (this.getText().length === 0) {
 			const cursorMarker = "\x1b_pi:c\x07"
 			const cursor = `${cursorMarker}${cursorColor}\x1b[7m \x1b[0m`
-			const placeholderWidth = CHEVRON_WIDTH + 1 + visibleWidth(PLACEHOLDER_TEXT)
+			// Reserve room for the indicator (plus one space gutter) on the right.
+			// If the placeholder no longer fits, drop it entirely rather than
+			// truncating mid-word — the cursor still anchors the row.
+			const cursorCellWidth = 1 // the inverse-video space rendered for the cursor
+			const leadWidth = CHEVRON_WIDTH + cursorCellWidth
+			const placeholderBudget = innerWidth - leadWidth - indicatorVisibleWidth - indicatorGutter
+			const placeholderText = placeholderBudget >= visibleWidth(PLACEHOLDER_TEXT) ? PLACEHOLDER_TEXT : ""
+			const placeholderRendered = placeholderText.length > 0 ? `${muted}${placeholderText}${RST_FG}` : ""
+			const usedWidth = leadWidth + visibleWidth(placeholderText) + indicatorVisibleWidth + indicatorGutter
+			const middlePad = " ".repeat(Math.max(0, innerWidth - usedWidth))
 			result.push(
-				`${pad}${chevronColor}❯${RST_FG} ${cursor}${muted}${PLACEHOLDER_TEXT}${RST_FG}${" ".repeat(Math.max(0, innerWidth - placeholderWidth))}`,
+				`${pad}${chevronColor}❯${RST_FG} ${cursor}${placeholderRendered}${middlePad}${indicatorStyled}${indicatorGutter > 0 ? " " : ""}`,
 			)
 		} else {
 			const contentLines = lines.slice(1, bottomIdx)
@@ -96,8 +137,17 @@ export class PromptEditor extends CustomEditor {
 						? line.replaceAll("\x1b[7m", `${cursorColor}\x1b[7m`).replaceAll("\x1b[0m", `\x1b[0m${textColor}`)
 						: line
 				const prefix = i === cursorIdx ? `${chevronColor}❯${RST_FG} ` : "  "
-				const rightPad = " ".repeat(Math.max(0, contentWidth - visibleWidth(styled)))
-				result.push(`${pad}${prefix}${textColor}${styled}${rightPad}${RST_FG}`)
+				const styledWidth = visibleWidth(styled)
+				if (i === 0 && indicatorVisibleWidth > 0) {
+					// First row hosts the indicator. Editor body was rendered at
+					// contentRenderWidth so styledWidth <= contentRenderWidth and the
+					// gap below is always non-negative.
+					const gap = " ".repeat(Math.max(0, contentWidth - styledWidth - indicatorVisibleWidth))
+					result.push(`${pad}${prefix}${textColor}${styled}${RST_FG}${gap}${indicatorStyled}`)
+				} else {
+					const rightPad = " ".repeat(Math.max(0, contentWidth - styledWidth))
+					result.push(`${pad}${prefix}${textColor}${styled}${rightPad}${RST_FG}`)
+				}
 			}
 		}
 

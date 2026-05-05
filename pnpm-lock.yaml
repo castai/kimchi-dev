@@ -95,6 +95,34 @@ importers:
       vitest:
         specifier: ^3.1.1
         version: 3.2.4(@types/node@22.19.17)(tsx@4.21.0)(yaml@2.8.3)
+    optionalDependencies:
+      '@mariozechner/clipboard-darwin-arm64':
+        specifier: 0.3.2
+        version: 0.3.2
+      '@mariozechner/clipboard-darwin-universal':
+        specifier: 0.3.2
+        version: 0.3.2
+      '@mariozechner/clipboard-darwin-x64':
+        specifier: 0.3.2
+        version: 0.3.2
+      '@mariozechner/clipboard-linux-arm64-gnu':
+        specifier: 0.3.2
+        version: 0.3.2
+      '@mariozechner/clipboard-linux-arm64-musl':
+        specifier: 0.3.2
+        version: 0.3.2
+      '@mariozechner/clipboard-linux-x64-gnu':
+        specifier: 0.3.2
+        version: 0.3.2
+      '@mariozechner/clipboard-linux-x64-musl':
+        specifier: 0.3.2
+        version: 0.3.2
+      '@mariozechner/clipboard-win32-arm64-msvc':
+        specifier: 0.3.2
+        version: 0.3.2
+      '@mariozechner/clipboard-win32-x64-msvc':
+        specifier: 0.3.2
+        version: 0.3.2
 
 packages:
 
