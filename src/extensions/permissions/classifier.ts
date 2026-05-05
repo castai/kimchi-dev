@@ -27,6 +27,8 @@ export async function classifyToolCall(
 	const auth = await modelRegistry.getApiKeyAndHeaders(model)
 	if (!auth.ok || !auth.apiKey) return unavailable("no API key for classifier")
 
+	if (signal?.aborted) return unavailable("classifier aborted")
+
 	const controller = new AbortController()
 	const timeoutHandle = setTimeout(() => controller.abort(), options.timeoutMs)
 	const onOuterAbort = () => controller.abort()

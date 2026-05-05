@@ -412,9 +412,9 @@ async function handleConfirm(
 /**
  * Pick the cheapest available model for the classifier.
  *
- * Strategy: prefer the model with the lowest per-token input cost that has
- * a configured API key. Falls back to `ctx.model` (the orchestrator's model)
- * when no cheaper alternative is available.
+ * Strategy: prefer the model with the lowest per-token input cost.
+ * Falls back to `ctx.model` (the orchestrator's model) when no
+ * alternatives are available in the registry.
  */
 function resolveClassifierModel(ctx: ExtensionContext): Model<Api> | undefined {
 	const available = ctx.modelRegistry.getAvailable()
@@ -422,7 +422,7 @@ function resolveClassifierModel(ctx: ExtensionContext): Model<Api> | undefined {
 
 	// Sort ascending by input cost — cheapest first.
 	const sorted = [...available].sort((a, b) => a.cost.input - b.cost.input)
-	return sorted[0] ?? ctx.model
+	return sorted[0]
 }
 
 function splitFlag(raw: boolean | string | undefined): string[] {
