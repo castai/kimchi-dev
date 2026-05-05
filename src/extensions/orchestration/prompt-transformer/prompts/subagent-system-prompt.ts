@@ -6,6 +6,7 @@ export default [
 {{ENVIRONMENT}}`,
 	TOOLS_SECTION,
 	DOCUMENTS_SECTION,
+	"{{BUDGET}}",
 	SUBAGENT_RESPONSE_PROTOCOL,
 	`## Guidelines
 

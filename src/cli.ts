@@ -15,6 +15,7 @@ import {
 } from "./config.js"
 import { isBunBinary } from "./env.js"
 import bashCollapseExtension from "./extensions/bash-collapse.js"
+import budgetFeedbackExtension from "./extensions/budget-feedback.js"
 import contextCompactorExtension from "./extensions/context-compactor.js"
 import kimchiMinimalTintsExtension from "./extensions/kimchi-minimal-tints.js"
 import loginExtension from "./extensions/login/index.js"
@@ -234,6 +235,7 @@ try {
 			kimchiMinimalTintsExtension,
 			bashCollapseExtension,
 			loopGuardExtension,
+			budgetFeedbackExtension,
 			lspExtension,
 			mcpAdapterExtension,
 			permissionsExtension,

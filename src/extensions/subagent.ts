@@ -59,6 +59,18 @@ interface SubagentTokenUsage {
 	cacheWrite: number
 }
 
+export type SoftBudgetState = "normal" | "warning" | "exceeded"
+
+export interface TokenBudgetConfig {
+	softLimit: number
+	hardLimit: number
+	warningThreshold: number
+}
+
+interface BudgetState extends TokenBudgetConfig {
+	state: SoftBudgetState
+}
+
 interface SubagentResult {
 	exitCode: number
 	accumulated: string
@@ -313,11 +325,64 @@ export function parseSubagentEvent(line: string): ParsedSubagentEvent {
 	return empty
 }
 
+export function resolveBudgetConfig(
+	tokenBudget: number | undefined,
+	hardTokenBudget: number | undefined,
+): TokenBudgetConfig | null {
+	if (!Number.isFinite(tokenBudget) || tokenBudget === undefined || tokenBudget <= 0) return null
+	const hardLimit = Math.max(
+		tokenBudget,
+		Number.isFinite(hardTokenBudget) && hardTokenBudget !== undefined && hardTokenBudget > 0
+			? hardTokenBudget
+			: Math.round(tokenBudget * 1.5),
+	)
+	return {
+		softLimit: tokenBudget,
+		hardLimit,
+		warningThreshold: Math.round(tokenBudget * 0.8),
+	}
+}
+
+// Check and enforce token budget with soft warnings and hard kill.
+// Returns a budget-check result that the caller applies.
+export function checkBudgetState(
+	input: number,
+	output: number,
+	budgetConfig: TokenBudgetConfig | null,
+	currentState: SoftBudgetState = "normal",
+): {
+	state: SoftBudgetState
+	warning: string | null
+	kill: boolean
+} {
+	if (!budgetConfig) return { state: currentState, warning: null, kill: false }
+	const total = input + output
+
+	// Hard kill — budget definitely blown
+	if (total > budgetConfig.hardLimit) {
+		return { state: "exceeded" as SoftBudgetState, warning: null, kill: true }
+	}
+
+	// Soft exceeded — warn and let subagent finish gracefully
+	if (total > budgetConfig.softLimit && currentState !== "exceeded") {
+		const warning = `\n[subagent budget exceeded: ${formatCount(total)} / ${formatCount(budgetConfig.softLimit)} soft limit. Finishing current action, then stopping.]\n`
+		return { state: "exceeded" as SoftBudgetState, warning, kill: false }
+	}
+
+	// Warning threshold (80%)
+	if (total > budgetConfig.warningThreshold && currentState === "normal") {
+		const warning = `\n[subagent budget warning: ${formatCount(total)} / ${formatCount(budgetConfig.softLimit)} soft limit used (${Math.round((total / budgetConfig.softLimit) * 100)}%). Consider wrapping up.]\n`
+		return { state: "warning" as SoftBudgetState, warning, kill: false }
+	}
+
+	return { state: currentState, warning: null, kill: false }
+}
+
 function spawnSubagent(
 	invocation: { command: string; args: string[] },
 	cwd: string,
 	signal: AbortSignal | undefined,
-	tokenBudget: number | undefined,
+	budgetConfig: TokenBudgetConfig | null,
 	inactivityTimeoutMs: number,
 	onToken: (accumulated: string) => void,
 	onToolCall: (name: string, args: Record<string, unknown>, accumulated: string) => void,
@@ -335,7 +400,16 @@ function spawnSubagent(
 			cwd,
 			shell: false,
 			stdio: ["ignore", "pipe", "pipe"],
-			env: { ...process.env, KIMCHI_SUBAGENT: "1" },
+			env: {
+				...process.env,
+				KIMCHI_SUBAGENT: "1",
+				...(budgetConfig
+					? {
+							KIMCHI_SUBAGENT_SOFT_BUDGET: String(budgetConfig.softLimit),
+							KIMCHI_SUBAGENT_HARD_BUDGET: String(budgetConfig.hardLimit),
+						}
+					: {}),
+			},
 		})
 
 		let buffer = ""
@@ -347,6 +421,9 @@ function spawnSubagent(
 		let cacheWriteTokens = 0
 		let failureReason: SubagentFailureReason | undefined
 		let closed = false
+
+		// Budget state machine
+		const budgetState: BudgetState | null = budgetConfig ? { ...budgetConfig, state: "normal" } : null
 
 		let inactivityHandle = setTimeout(() => kill("output_stalled"), inactivityTimeoutMs)
 		const resetInactivity = () => {
@@ -400,8 +477,15 @@ function spawnSubagent(
 			if (lineInput > 0 || lineOutput > 0) {
 				inputTokens += lineInput
 				outputTokens += lineOutput
-				if (tokenBudget !== undefined && tokenBudget > 0 && inputTokens + outputTokens > tokenBudget) {
-					kill("token_budget_exceeded")
+				if (budgetState) {
+					const result = checkBudgetState(inputTokens, outputTokens, budgetState, budgetState.state)
+					budgetState.state = result.state
+					if (result.kill) {
+						kill("token_budget_exceeded")
+					} else if (result.warning !== null) {
+						accumulated += result.warning
+						onToken(accumulated)
+					}
 				}
 			}
 			cacheReadTokens += lineCacheRead
@@ -552,7 +636,13 @@ const SubagentParams = Type.Object({
 	tokenBudget: Type.Optional(
 		Type.Union([Type.Integer({ minimum: 1 }), Type.String({ pattern: "^[1-9][0-9]*$" })], {
 			description:
-				"Maximum total tokens (input + output) the subagent may consume. Subagent is killed when exceeded. Omit unless you have an explicit reason to cap token usage — do not set this speculatively.",
+				"**Soft advisory cap** on uncached input + output tokens (cache-read tokens are excluded from the count). The subagent receives a budget warning injected into its conversation at ~80% and a wrap-up notice at 100%, delivered between turn boundaries (not mid-tool). Use for cost guidance — not strict enforcement. Omit by default.",
+		}),
+	),
+	hardTokenBudget: Type.Optional(
+		Type.Union([Type.Integer({ minimum: 1 }), Type.String({ pattern: "^[1-9][0-9]*$" })], {
+			description:
+				"**Hard ceiling** on total tokens. The subagent is killed with token_budget_exceeded only when this ceiling is breached (default: 150% of tokenBudget if tokenBudget is set). Omit unless you need a strict kill threshold.",
 		}),
 	),
 	inactivityTimeoutMs: Type.Optional(
@@ -680,13 +770,16 @@ export default function (pi: ExtensionAPI) {
 
 			let lastToolCall: string | undefined
 			const tokenBudget = params.tokenBudget !== undefined ? Number(params.tokenBudget) : undefined
+			const hardTokenBudget = params.hardTokenBudget !== undefined ? Number(params.hardTokenBudget) : undefined
+			const budgetConfig = resolveBudgetConfig(tokenBudget, hardTokenBudget)
+
 			const inactivityTimeoutMs =
 				params.inactivityTimeoutMs !== undefined ? Number(params.inactivityTimeoutMs) : INACTIVITY_TIMEOUT_MS
 			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(
 				invocation,
 				ctx.cwd,
 				signal,
-				tokenBudget,
+				budgetConfig,
 				inactivityTimeoutMs,
 				(text) => {
 					lastToolCall = undefined

@@ -47,6 +47,7 @@ import {
 	buildSingleModelSystemPrompt,
 	buildSubagentSystemPrompt,
 	isSubagent,
+	parseSubagentBudgetFromEnv,
 	transformPrompt,
 } from "./prompt-transformer/prompt-transformer.js"
 
@@ -360,7 +361,13 @@ export default function (skillPaths: string[]) {
 				// Filter the subagent tool out to prevent infinite delegation chains.
 				const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
 				pi.setActiveTools(activeTools)
-				const systemPrompt = buildSubagentSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
+
+				// Read budget from env (injected by parent subagent spawn)
+				const softBudget = process.env.KIMCHI_SUBAGENT_SOFT_BUDGET
+				const hardBudget = process.env.KIMCHI_SUBAGENT_HARD_BUDGET
+				const budgetInfo = parseSubagentBudgetFromEnv(softBudget, hardBudget)
+
+				const systemPrompt = buildSubagentSystemPrompt(tools, env, cachedContextFiles, cachedSkills, budgetInfo)
 				return { systemPrompt }
 			}
 
