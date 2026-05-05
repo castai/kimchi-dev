@@ -23,9 +23,9 @@
 import { execSync } from "node:child_process"
 import { existsSync } from "node:fs"
 import { homedir, platform, userInfo } from "node:os"
-import { isAbsolute, join, normalize, resolve } from "node:path"
+import { join } from "node:path"
 import type { AssistantMessage, ImageContent, TextContent } from "@mariozechner/pi-ai"
-import { type ExtensionAPI, type Skill, getAgentDir, loadSkills } from "@mariozechner/pi-coding-agent"
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { isKeyRelease, matchesKey } from "@mariozechner/pi-tui"
 import { ANSI, fg } from "../../ansi.js"
 import { getAvailableModels } from "../../startup-context.js"
@@ -49,24 +49,6 @@ import {
 	isSubagent,
 	transformPrompt,
 } from "./prompt-transformer/prompt-transformer.js"
-
-function expandSkillPaths(configuredPaths: string[], cwd: string): string[] {
-	const home = homedir()
-	const expanded: string[] = []
-	for (const p of configuredPaths) {
-		if (isAbsolute(p)) {
-			expanded.push(normalize(p))
-		} else if (p.startsWith("~/")) {
-			expanded.push(resolve(home, p.slice(2)))
-		} else {
-			const fromHome = resolve(home, p)
-			const fromCwd = resolve(cwd, p)
-			if (fromHome.startsWith(`${home}/`) || fromHome === home) expanded.push(fromHome)
-			if (fromCwd.startsWith(`${cwd}/`) || fromCwd === cwd) expanded.push(fromCwd)
-		}
-	}
-	return expanded
-}
 
 function safeUsername(): string {
 	try {
@@ -229,238 +211,229 @@ export function getMultiModelEnabled(): boolean {
 	return multiModelEnabled
 }
 
-export default function (skillPaths: string[]) {
-	return (pi: ExtensionAPI) => {
-		const subagentMode = isSubagent()
+export default function (pi: ExtensionAPI) {
+	const subagentMode = isSubagent()
 
-		pi.registerFlag("debug-prompts", {
-			type: "boolean",
-			description: "Print enriched prompts in the UI (default: hidden)",
-			default: false,
-		})
+	pi.registerFlag("debug-prompts", {
+		type: "boolean",
+		description: "Print enriched prompts in the UI (default: hidden)",
+		default: false,
+	})
 
-		pi.registerFlag("multi-model", {
-			type: "boolean",
-			description: "Enable multi-model orchestration (default: enabled). Toggle with alt+tab.",
-			default: true,
-		})
+	pi.registerFlag("multi-model", {
+		type: "boolean",
+		description: "Enable multi-model orchestration (default: enabled). Toggle with alt+tab.",
+		default: true,
+	})
 
-		// For sub agents we don't want to transform the prompt sent from parent with model capabilities
-		if (!subagentMode) {
-			const registry = new ModelRegistry(getAvailableModels())
+	// For sub agents we don't want to transform the prompt sent from parent with model capabilities
+	if (!subagentMode) {
+		const registry = new ModelRegistry(getAvailableModels())
 
-			// Announce newly available API models that have no capability entry yet.
-			for (const warning of registry.warnings) {
-				console.log(
-					`${fg(ANSI.accent, ` New model available: "kimchi-dev/${warning.modelId}"`)}\n${fg(ANSI.dim, " Update the app or add the new model to model capabilities config to unlock orchestration support.")}`,
-				)
-			}
-
-			// Global terminal input listener so alt+tab works even when a
-			// dialog (e.g. permission prompt) has focus instead of the editor.
-			let unsubAltTab: (() => void) | null = null
-			pi.on("session_start", async (_event, ctx) => {
-				if (unsubAltTab) unsubAltTab()
-				if (ctx.hasUI) {
-					unsubAltTab = ctx.ui.onTerminalInput((data) => {
-						if (matchesKey(data, "alt+tab")) {
-							if (!isKeyRelease(data)) {
-								multiModelEnabled = !multiModelEnabled
-								ctx.ui.setStatus("multi-model", undefined)
-							}
-							return { consume: true }
-						}
-						return undefined
-					})
-				}
-			})
-
-			// Detect the inverse of the context-event nudge below: the orchestrator reasons
-			// in prose, announces it will delegate, and ends its turn without emitting the
-			// `subagent` tool call. The agent loop would otherwise exit and wait for another
-			// user prompt. Nudge once per user-input cycle, and only when no tool has fired
-			// that cycle — so genuine end-of-task summaries are left alone. Mirrors AISI
-			// Inspect's `on_continue`.
-			//
-			// The reset handler is registered BEFORE the enrichment handler below because
-			// that one returns `{action: "handled"}` in interactive mode, which short-
-			// circuits the input-handler chain.
-			const continuationNudge = new ContinuationNudge()
-			const emptyTurnNudge = new EmptyTurnNudge()
-			const enrichmentGuard = new EnrichmentGuard()
-
-			pi.on("input", async (event) => {
-				if (event.source === "extension") return
-				continuationNudge.resetForNewUserInput()
-				emptyTurnNudge.resetForNewUserInput()
-			})
-
-			pi.on("tool_execution_start", async () => {
-				continuationNudge.recordToolCall()
-			})
-
-			pi.on("message_update", (event) => {
-				if (!continuationNudge.isNudgeResponsePending()) return
-				const ame = event.assistantMessageEvent
-				if (ame.type !== "text_delta") return
-				const message = event.message as AssistantMessage
-				const content = message.content[ame.contentIndex]
-				if (content?.type === "text") {
-					continuationNudge.accumulateResponse(content.text)
-					content.text = ""
-				}
-			})
-
-			pi.on("turn_end", async (event) => {
-				if (event.message.role !== "assistant") return
-
-				if (continuationNudge.isNudgeResponsePending()) {
-					if (continuationNudge.isDoneSignalReceived()) {
-						return
-					}
-				}
-
-				if (emptyTurnNudge.evaluateTurn(event.message)) {
-					pi.sendMessage(
-						{ customType: NUDGE_CUSTOM_TYPE, content: EMPTY_TURN_NUDGE_TEXT, display: false },
-						{ deliverAs: "followUp" },
-					)
-					return
-				}
-
-				if (!continuationNudge.evaluateTurn(event.message)) return
-				pi.sendMessage(
-					{ customType: NUDGE_CUSTOM_TYPE, content: CONTINUATION_NUDGE_TEXT, display: false },
-					{ deliverAs: "followUp" },
-				)
-			})
-
-			pi.on("input", async (event, ctx) => {
-				if (event.source === "extension") {
-					return { action: "continue" as const }
-				}
-
-				// Steering and follow-up messages arrive while the agent is streaming
-				// (ctx.isIdle() === false, i.e. session.isStreaming === true).
-				// Skip enrichment and let them pass through unchanged
-				if (!ctx.isIdle()) {
-					return { action: "continue" as const }
-				}
-
-				if (!multiModelEnabled) {
-					return { action: "continue" as const }
-				}
-
-				const currentModel = ctx.model ? { id: ctx.model.id, name: ctx.model.id } : undefined
-				const currentModelId = currentModel?.id ?? ""
-
-				// Only inject capabilities on the first turn or when the model changes.
-				// Re-injecting every turn accumulates duplicate capability blocks in the
-				// context window, inflating token usage and confusing the model.
-				if (!enrichmentGuard.shouldEnrich(currentModelId)) {
-					return { action: "continue" as const }
-				}
-
-				// Non-interactive (--print/--mode rpc) and debug-prompts mode: replace the user
-				// text inline. The "handled" + sendUserMessage path below relies on the TUI event
-				// loop staying alive long enough for the queued message to drain — in --print mode
-				// the loop returns as soon as session.prompt resolves and disposeRuntime cancels
-				// the in-flight LLM call, so nothing is ever sent. Transforming inline lets the
-				// caller's await session.prompt(enrichedPrompt) do the work synchronously.
-				const debugPrompts = pi.getFlag("debug-prompts") === true
-				if (debugPrompts || !ctx.hasUI) {
-					const enrichedPrompt = transformPrompt(event.text, registry, currentModel)
-					return { action: "transform" as const, text: enrichedPrompt, images: event.images }
-				}
-
-				// In UI mode the original user message is sent separately via sendUserMessage,
-				// so the task text must not be duplicated inside the enriched-prompt header.
-				const enrichedPrompt = transformPrompt(event.text, registry, currentModel, false)
-				pi.sendMessage(
-					{
-						customType: ENRICHED_PROMPT_CUSTOM_TYPE,
-						content: [{ type: "text", text: enrichedPrompt }],
-						display: false,
-					},
-					{ deliverAs: "nextTurn" },
-				)
-				const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: event.text }]
-				if (event.images) userContent.push(...event.images)
-				pi.sendUserMessage(userContent)
-
-				return { action: "handled" as const }
-			})
-
-			pi.on("context", async (event) => {
-				let messages = stripStaleNudges(event.messages)
-				messages = deduplicateEnrichedPrompts(messages)
-				messages = stripEmptyToolCalls(messages)
-				if (messages !== event.messages) return { messages }
-			})
-		} else {
-			// Subagents skip orchestrator-specific transforms but still benefit from
-			// stripping phantom empty-name tool calls. Some models (notably Kimi K2.x
-			// and MiniMax M2.7) emit empty tool calls after a real write/edit call,
-			// which the runtime rejects with a "Tool  not found" result that would
-			// otherwise accumulate in the subagent's context across turns.
-			pi.on("context", async (event) => {
-				const messages = stripEmptyToolCalls(event.messages)
-				if (messages !== event.messages) return { messages }
-			})
+		// Announce newly available API models that have no capability entry yet.
+		for (const warning of registry.warnings) {
+			console.log(
+				`${fg(ANSI.accent, ` New model available: "kimchi-dev/${warning.modelId}"`)}\n${fg(ANSI.dim, " Update the app or add the new model to model capabilities config to unlock orchestration support.")}`,
+			)
 		}
 
-		const platformNames: Record<string, string> = { darwin: "macOS", win32: "Windows" }
-		const cachedOs = platformNames[platform()] ?? platform()
-		const cachedUsername = safeUsername()
-		const cachedHomeDir = homedir()
-
-		let cachedContextFiles: ContextFile[] | undefined
-		let cachedSkills: Skill[] | undefined
-		let cachedGitRemote: string | undefined | null = null
-
-		pi.on("before_agent_start", async (_event, ctx) => {
-			const tools = pi.getAllTools()
-			cachedContextFiles ??= loadProjectContextFiles(ctx.cwd)
-			cachedSkills ??= loadSkills({
-				cwd: ctx.cwd,
-				agentDir: getAgentDir(),
-				skillPaths: expandSkillPaths(skillPaths, ctx.cwd),
-				includeDefaults: false,
-			}).skills
-
-			const now = new Date()
-			const isGitRepo = existsSync(join(ctx.cwd, ".git", "HEAD"))
-			if (isGitRepo && cachedGitRemote === null) {
-				cachedGitRemote = readGitRemote(ctx.cwd)
+		// Global terminal input listener so alt+tab works even when a
+		// dialog (e.g. permission prompt) has focus instead of the editor.
+		let unsubAltTab: (() => void) | null = null
+		pi.on("session_start", async (_event, ctx) => {
+			if (unsubAltTab) unsubAltTab()
+			if (ctx.hasUI) {
+				unsubAltTab = ctx.ui.onTerminalInput((data) => {
+					if (matchesKey(data, "alt+tab")) {
+						if (!isKeyRelease(data)) {
+							multiModelEnabled = !multiModelEnabled
+							ctx.ui.setStatus("multi-model", undefined)
+						}
+						return { consume: true }
+					}
+					return undefined
+				})
 			}
-			const env: EnvironmentInfo = {
-				os: cachedOs,
-				username: cachedUsername,
-				homeDir: cachedHomeDir,
-				cwd: ctx.cwd,
-				documentsDir: join(ctx.cwd, ".kimchi", "docs"),
-				currentTime: now.toISOString(),
-				localDate: now.toLocaleDateString("en-CA"),
-				isGitRepo,
-				gitBranch: isGitRepo ? getGitBranch(ctx.cwd) : undefined,
-				gitRemote: isGitRepo ? (cachedGitRemote ?? undefined) : undefined,
+		})
+
+		// Detect the inverse of the context-event nudge below: the orchestrator reasons
+		// in prose, announces it will delegate, and ends its turn without emitting the
+		// `subagent` tool call. The agent loop would otherwise exit and wait for another
+		// user prompt. Nudge once per user-input cycle, and only when no tool has fired
+		// that cycle — so genuine end-of-task summaries are left alone. Mirrors AISI
+		// Inspect's `on_continue`.
+		//
+		// The reset handler is registered BEFORE the enrichment handler below because
+		// that one returns `{action: "handled"}` in interactive mode, which short-
+		// circuits the input-handler chain.
+		const continuationNudge = new ContinuationNudge()
+		const emptyTurnNudge = new EmptyTurnNudge()
+		const enrichmentGuard = new EnrichmentGuard()
+
+		pi.on("input", async (event) => {
+			if (event.source === "extension") return
+			continuationNudge.resetForNewUserInput()
+			emptyTurnNudge.resetForNewUserInput()
+		})
+
+		pi.on("tool_execution_start", async () => {
+			continuationNudge.recordToolCall()
+		})
+
+		pi.on("message_update", (event) => {
+			if (!continuationNudge.isNudgeResponsePending()) return
+			const ame = event.assistantMessageEvent
+			if (ame.type !== "text_delta") return
+			const message = event.message as AssistantMessage
+			const content = message.content[ame.contentIndex]
+			if (content?.type === "text") {
+				continuationNudge.accumulateResponse(content.text)
+				content.text = ""
+			}
+		})
+
+		pi.on("turn_end", async (event) => {
+			if (event.message.role !== "assistant") return
+
+			if (continuationNudge.isNudgeResponsePending()) {
+				if (continuationNudge.isDoneSignalReceived()) {
+					return
+				}
 			}
 
-			if (subagentMode) {
-				// Filter the subagent tool out to prevent infinite delegation chains.
-				const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
-				pi.setActiveTools(activeTools)
-				const systemPrompt = buildSubagentSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
-				return { systemPrompt }
+			if (emptyTurnNudge.evaluateTurn(event.message)) {
+				pi.sendMessage(
+					{ customType: NUDGE_CUSTOM_TYPE, content: EMPTY_TURN_NUDGE_TEXT, display: false },
+					{ deliverAs: "followUp" },
+				)
+				return
+			}
+
+			if (!continuationNudge.evaluateTurn(event.message)) return
+			pi.sendMessage(
+				{ customType: NUDGE_CUSTOM_TYPE, content: CONTINUATION_NUDGE_TEXT, display: false },
+				{ deliverAs: "followUp" },
+			)
+		})
+
+		pi.on("input", async (event, ctx) => {
+			if (event.source === "extension") {
+				return { action: "continue" as const }
+			}
+
+			// Steering and follow-up messages arrive while the agent is streaming
+			// (ctx.isIdle() === false, i.e. session.isStreaming === true).
+			// Skip enrichment and let them pass through unchanged
+			if (!ctx.isIdle()) {
+				return { action: "continue" as const }
 			}
 
 			if (!multiModelEnabled) {
-				const systemPrompt = buildSingleModelSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
-				return { systemPrompt }
+				return { action: "continue" as const }
 			}
 
-			const systemPrompt = buildOrchestratorSystemPrompt(tools, env, cachedContextFiles, cachedSkills)
-			return { systemPrompt }
+			const currentModel = ctx.model ? { id: ctx.model.id, name: ctx.model.id } : undefined
+			const currentModelId = currentModel?.id ?? ""
+
+			// Only inject capabilities on the first turn or when the model changes.
+			// Re-injecting every turn accumulates duplicate capability blocks in the
+			// context window, inflating token usage and confusing the model.
+			if (!enrichmentGuard.shouldEnrich(currentModelId)) {
+				return { action: "continue" as const }
+			}
+
+			// Non-interactive (--print/--mode rpc) and debug-prompts mode: replace the user
+			// text inline. The "handled" + sendUserMessage path below relies on the TUI event
+			// loop staying alive long enough for the queued message to drain — in --print mode
+			// the loop returns as soon as session.prompt resolves and disposeRuntime cancels
+			// the in-flight LLM call, so nothing is ever sent. Transforming inline lets the
+			// caller's await session.prompt(enrichedPrompt) do the work synchronously.
+			const debugPrompts = pi.getFlag("debug-prompts") === true
+			if (debugPrompts || !ctx.hasUI) {
+				const enrichedPrompt = transformPrompt(event.text, registry, currentModel)
+				return { action: "transform" as const, text: enrichedPrompt, images: event.images }
+			}
+
+			// In UI mode the original user message is sent separately via sendUserMessage,
+			// so the task text must not be duplicated inside the enriched-prompt header.
+			const enrichedPrompt = transformPrompt(event.text, registry, currentModel, false)
+			pi.sendMessage(
+				{
+					customType: ENRICHED_PROMPT_CUSTOM_TYPE,
+					content: [{ type: "text", text: enrichedPrompt }],
+					display: false,
+				},
+				{ deliverAs: "nextTurn" },
+			)
+			const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: event.text }]
+			if (event.images) userContent.push(...event.images)
+			pi.sendUserMessage(userContent)
+
+			return { action: "handled" as const }
+		})
+
+		pi.on("context", async (event) => {
+			let messages = stripStaleNudges(event.messages)
+			messages = deduplicateEnrichedPrompts(messages)
+			messages = stripEmptyToolCalls(messages)
+			if (messages !== event.messages) return { messages }
+		})
+	} else {
+		// Subagents skip orchestrator-specific transforms but still benefit from
+		// stripping phantom empty-name tool calls. Some models (notably Kimi K2.x
+		// and MiniMax M2.7) emit empty tool calls after a real write/edit call,
+		// which the runtime rejects with a "Tool  not found" result that would
+		// otherwise accumulate in the subagent's context across turns.
+		pi.on("context", async (event) => {
+			const messages = stripEmptyToolCalls(event.messages)
+			if (messages !== event.messages) return { messages }
 		})
 	}
+
+	const platformNames: Record<string, string> = { darwin: "macOS", win32: "Windows" }
+	const cachedOs = platformNames[platform()] ?? platform()
+	const cachedUsername = safeUsername()
+	const cachedHomeDir = homedir()
+
+	let cachedContextFiles: ContextFile[] | undefined
+	let cachedGitRemote: string | undefined | null = null
+
+	pi.on("before_agent_start", async (_event, ctx) => {
+		const tools = pi.getAllTools()
+		cachedContextFiles ??= loadProjectContextFiles(ctx.cwd)
+
+		const now = new Date()
+		const isGitRepo = existsSync(join(ctx.cwd, ".git", "HEAD"))
+		if (isGitRepo && cachedGitRemote === null) {
+			cachedGitRemote = readGitRemote(ctx.cwd)
+		}
+		const env: EnvironmentInfo = {
+			os: cachedOs,
+			username: cachedUsername,
+			homeDir: cachedHomeDir,
+			cwd: ctx.cwd,
+			documentsDir: join(ctx.cwd, ".kimchi", "docs"),
+			currentTime: now.toISOString(),
+			localDate: now.toLocaleDateString("en-CA"),
+			isGitRepo,
+			gitBranch: isGitRepo ? getGitBranch(ctx.cwd) : undefined,
+			gitRemote: isGitRepo ? (cachedGitRemote ?? undefined) : undefined,
+		}
+
+		if (subagentMode) {
+			// Filter the subagent tool out to prevent infinite delegation chains.
+			const activeTools = pi.getActiveTools().filter((name) => name !== "subagent")
+			pi.setActiveTools(activeTools)
+			const systemPrompt = buildSubagentSystemPrompt(tools, env, cachedContextFiles)
+			return { systemPrompt }
+		}
+
+		if (!multiModelEnabled) {
+			const systemPrompt = buildSingleModelSystemPrompt(tools, env, cachedContextFiles)
+			return { systemPrompt }
+		}
+
+		const systemPrompt = buildOrchestratorSystemPrompt(tools, env, cachedContextFiles)
+		return { systemPrompt }
+	})
 }

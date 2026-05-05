@@ -43,6 +43,4 @@ You must call \`set_phase\` before every block of work. Never take an action wit
 
 The session starts in \`explore\` phase by default. Call \`set_phase\` immediately when your work type changes. Only one phase is active at a time — the most recent call wins.`
 
-export const FOOTER = `{{PROJECT_CONTEXT}}
-
-{{SKILLS}}`
+export const FOOTER = "{{PROJECT_CONTEXT}}"
