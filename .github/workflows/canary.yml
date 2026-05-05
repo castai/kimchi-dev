@@ -1,0 +1,215 @@
+name: Canary
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'src/**'
+      - 'patches/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'tsconfig.json'
+      - 'biome.json'
+      - 'scripts/**'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Build even if HEAD hasn't moved since the last canary"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canary
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      should-build: ${{ steps.gate.outputs.should-build }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: version
+        run: |
+          DATE=$(date -u +%Y%m%d)
+          SHA=${GITHUB_SHA::7}
+          echo "version=0.0.0-canary.${DATE}.${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if HEAD unchanged
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ "$FORCE" = "true" ]; then
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PREV=$(gh release view canary --json targetCommitish -q .targetCommitish 2>/dev/null || echo "")
+          if [ -n "$PREV" ] && [ "$PREV" = "$GITHUB_SHA" ]; then
+            echo "Canary already built for $GITHUB_SHA"
+            echo "should-build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  checks:
+    needs: [preflight]
+    if: needs.preflight.outputs.should-build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          bun: "true"
+          playwright: "true"
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Check (lint + type check)
+        run: pnpm run check
+
+      - name: Test
+        run: pnpm run test
+
+  build:
+    needs: [preflight, checks]
+    if: needs.preflight.outputs.should-build == 'true'
+    strategy:
+      matrix:
+        include:
+          - target: bun-darwin-x64
+            os: darwin
+            arch: amd64
+            runner: macos-15
+          - target: bun-darwin-arm64
+            os: darwin
+            arch: arm64
+            runner: macos-15
+          - target: bun-linux-x64
+            os: linux
+            arch: amd64
+            runner: ubuntu-latest
+          - target: bun-linux-arm64
+            os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          bun: "true"
+
+      - name: Set version
+        run: node scripts/set-version.js "${{ needs.preflight.outputs.version }}"
+
+      - name: Build binary
+        run: pnpm run build:binary
+
+      - name: Package binary
+        run: tar -czf kimchi-code-canary_${{ matrix.os }}_${{ matrix.arch }}.tar.gz -C dist bin share
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kimchi-code-canary_${{ matrix.os }}_${{ matrix.arch }}
+          path: kimchi-code-canary_${{ matrix.os }}_${{ matrix.arch }}.tar.gz
+
+  smoke-test:
+    needs: [preflight, build]
+    if: needs.preflight.outputs.should-build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          bun: "true"
+
+      - name: Download linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: kimchi-code-canary_linux_amd64
+
+      - name: Extract binary into dist/
+        run: |
+          mkdir -p dist
+          tar -xzf kimchi-code-canary_linux_amd64.tar.gz -C dist
+
+      - name: Smoke tests
+        run: pnpm run test:smoke
+
+  release:
+    needs: [preflight, smoke-test]
+    if: needs.preflight.outputs.should-build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum kimchi-code-canary_*.tar.gz > checksums.txt
+
+      - name: Build release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          PREV_SHA=$(gh release view canary --json targetCommitish -q .targetCommitish 2>/dev/null || echo "")
+          {
+            echo "> ⚠️ **Unstable canary build.** No support. Use a tagged release for production."
+            echo
+            echo "Canary build of \`master\` at \`${GITHUB_SHA::7}\`."
+            echo
+            echo "Version: \`$VERSION\`"
+            echo
+            if [ -n "$PREV_SHA" ] && git rev-parse "$PREV_SHA" >/dev/null 2>&1; then
+              echo "## Changes since last canary"
+              echo
+              git log --pretty=format:"- %s (%h)" "${PREV_SHA}..HEAD"
+            else
+              echo "Initial canary."
+            fi
+          } > release-notes.md
+
+      - name: Replace canary release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          gh release delete canary --yes --cleanup-tag 2>/dev/null || true
+          gh release create canary \
+            --title "Canary $VERSION" \
+            --notes-file release-notes.md \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            artifacts/kimchi-code-canary_*.tar.gz \
+            artifacts/checksums.txt
