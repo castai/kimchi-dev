@@ -1,8 +1,8 @@
 /**
- * Minimal ambient typings for `bun:sqlite`. We only use it from
- * `src/integrations/cursor.ts` and only at runtime in the Bun-compiled
- * binary; pulling all of `@types/bun` would shadow Node types in this
- * mostly-Node codebase, so we declare just the surface we touch.
+ * Minimal ambient typings for `bun:sqlite`, used only by `cursor.ts`
+ * and only at runtime in the Bun-compiled binary. Pulling all of
+ * `@types/bun` would shadow Node types in this mostly-Node codebase,
+ * so we declare just the surface we touch.
  */
 declare module "bun:sqlite" {
 	export class Statement<R = unknown, P extends unknown[] = unknown[]> {
