@@ -490,12 +490,19 @@ export function parseSubagentResponse(text: string): SubagentResponse | null {
 		if (fromFence !== null) return fromFence
 	}
 
+	// Walk backwards through candidate `{` positions, trying each as the
+	// start of the JSON object. This handles cases where the accumulated
+	// text contains brace patterns like Go route placeholders
+	// (e.g. `/tasks/{id}`) that precede the actual JSON response.
 	const lastClose = trimmed.lastIndexOf("}")
 	if (lastClose !== -1) {
-		const firstOpen = trimmed.lastIndexOf("{", lastClose)
-		if (firstOpen !== -1) {
-			const fromBlock = tryParse(trimmed.slice(firstOpen, lastClose + 1))
+		let searchFrom = lastClose
+		while (searchFrom >= 0) {
+			const openIdx = trimmed.lastIndexOf("{", searchFrom)
+			if (openIdx === -1) break
+			const fromBlock = tryParse(trimmed.slice(openIdx, lastClose + 1))
 			if (fromBlock !== null) return fromBlock
+			searchFrom = openIdx - 1
 		}
 	}
 
