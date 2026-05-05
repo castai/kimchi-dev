@@ -129,6 +129,28 @@ export class EnrichmentGuard {
 }
 
 /**
+ * Shape of a tool-call content block as emitted in assistant messages.
+ * Defined narrowly here because the upstream `OrchestratorMessages` type does
+ * not export the per-block discriminated-union members we need to narrow on.
+ */
+type ToolCallBlock = { type: "toolCall"; name: string; id?: string }
+
+function isToolCallBlock(block: unknown): block is ToolCallBlock {
+	return (
+		typeof block === "object" &&
+		block !== null &&
+		"type" in block &&
+		(block as { type: unknown }).type === "toolCall" &&
+		"name" in block &&
+		typeof (block as { name: unknown }).name === "string"
+	)
+}
+
+function isEmptyToolCallBlock(block: unknown): block is ToolCallBlock {
+	return isToolCallBlock(block) && block.name.trim() === ""
+}
+
+/**
  * Strip empty-name tool calls and their error results from the context.
  *
  * Some models (notably Kimi K2.x) emit tool calls with empty name/id fields.
@@ -136,25 +158,19 @@ export class EnrichmentGuard {
  * "Tool  not found" error results that accumulate in the context window and
  * waste tokens on every subsequent LLM call. This filter removes those
  * dead-end pairs so they do not inflate the context.
+ *
+ * Returns the original `messages` reference unchanged when there is nothing
+ * to strip, so callers can use referential equality to detect a no-op.
  */
 export function stripEmptyToolCalls(messages: OrchestratorMessages): OrchestratorMessages {
 	// Collect tool-call IDs that have empty names so we can remove their results.
 	const emptyCallIds = new Set<string>()
-	let changed = false
 
 	for (const msg of messages) {
 		if (msg.role === "assistant" && "content" in msg && Array.isArray(msg.content)) {
 			for (const block of msg.content) {
-				if (
-					typeof block === "object" &&
-					block !== null &&
-					"type" in block &&
-					(block as { type: string }).type === "toolCall" &&
-					"name" in block &&
-					!(block as { name: string }).name.trim()
-				) {
-					const id = (block as { id?: string }).id ?? ""
-					emptyCallIds.add(id)
+				if (isEmptyToolCallBlock(block)) {
+					emptyCallIds.add(block.id ?? "")
 				}
 			}
 		}
@@ -162,22 +178,11 @@ export function stripEmptyToolCalls(messages: OrchestratorMessages): Orchestrato
 
 	if (emptyCallIds.size === 0) return messages
 
+	let changed = false
 	const filtered: OrchestratorMessages = []
 	for (const msg of messages) {
 		if (msg.role === "assistant" && "content" in msg && Array.isArray(msg.content)) {
-			const cleaned = msg.content.filter((block) => {
-				if (
-					typeof block === "object" &&
-					block !== null &&
-					"type" in block &&
-					(block as { type: string }).type === "toolCall" &&
-					"name" in block &&
-					!(block as { name: string }).name.trim()
-				) {
-					return false
-				}
-				return true
-			})
+			const cleaned = msg.content.filter((block) => !isEmptyToolCallBlock(block))
 			if (cleaned.length !== msg.content.length) {
 				changed = true
 				if (cleaned.length > 0) {
