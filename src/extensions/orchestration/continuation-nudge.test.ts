@@ -262,21 +262,21 @@ describe("EmptyTurnNudge", () => {
 		expect(guard.evaluateTurn(emptyMessage)).toBe(true)
 	})
 
-	it("does not nudge on an empty turn without a preceding tool-call-only turn", () => {
+	it("nudges on an empty first turn (no preceding turn at all)", () => {
 		const guard = new EmptyTurnNudge()
-		expect(guard.evaluateTurn(emptyMessage)).toBe(false)
+		expect(guard.evaluateTurn(emptyMessage)).toBe(true)
 	})
 
-	it("does not nudge on an empty turn after a text-only turn", () => {
+	it("nudges on an empty turn after a text-only turn", () => {
 		const guard = new EmptyTurnNudge()
 		guard.evaluateTurn(textOnlyMessage)
-		expect(guard.evaluateTurn(emptyMessage)).toBe(false)
+		expect(guard.evaluateTurn(emptyMessage)).toBe(true)
 	})
 
-	it("does not nudge on an empty turn after a text-and-tool-call turn", () => {
+	it("nudges on an empty turn after a text-and-tool-call turn", () => {
 		const guard = new EmptyTurnNudge()
 		guard.evaluateTurn(textAndToolCallMessage)
-		expect(guard.evaluateTurn(emptyMessage)).toBe(false)
+		expect(guard.evaluateTurn(emptyMessage)).toBe(true)
 	})
 
 	it("treats whitespace-only text as empty", () => {
@@ -302,18 +302,13 @@ describe("EmptyTurnNudge", () => {
 		expect(guard.evaluateTurn(emptyMessage)).toBe(false)
 	})
 
-	it("resets on new user input", () => {
+	it("re-arms after resetForNewUserInput", () => {
 		const guard = new EmptyTurnNudge()
-		guard.evaluateTurn(toolCallMessage)
-		guard.resetForNewUserInput()
-		expect(guard.evaluateTurn(emptyMessage)).toBe(false)
-	})
-
-	it("re-arms after a new tool-call-only turn", () => {
-		const guard = new EmptyTurnNudge()
-		guard.evaluateTurn(toolCallMessage)
 		expect(guard.evaluateTurn(emptyMessage)).toBe(true)
-		guard.evaluateTurn(toolCallMessage)
+		// Already nudged this cycle — second empty should not nudge
+		expect(guard.evaluateTurn(emptyMessage)).toBe(false)
+		// Reset re-arms the nudge for the next user-input cycle
+		guard.resetForNewUserInput()
 		expect(guard.evaluateTurn(emptyMessage)).toBe(true)
 	})
 })

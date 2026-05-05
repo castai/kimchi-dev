@@ -128,6 +128,83 @@ export class EnrichmentGuard {
 	}
 }
 
+/**
+ * Shape of a tool-call content block as emitted in assistant messages.
+ * Defined narrowly here because the upstream `OrchestratorMessages` type does
+ * not export the per-block discriminated-union members we need to narrow on.
+ */
+type ToolCallBlock = { type: "toolCall"; name: string; id?: string }
+
+function isToolCallBlock(block: unknown): block is ToolCallBlock {
+	return (
+		typeof block === "object" &&
+		block !== null &&
+		"type" in block &&
+		(block as { type: unknown }).type === "toolCall" &&
+		"name" in block &&
+		typeof (block as { name: unknown }).name === "string"
+	)
+}
+
+function isEmptyToolCallBlock(block: unknown): block is ToolCallBlock {
+	return isToolCallBlock(block) && block.name.trim() === ""
+}
+
+/**
+ * Strip empty-name tool calls and their error results from the context.
+ *
+ * Some models (notably Kimi K2.x) emit tool calls with empty name/id fields.
+ * The runtime rejects these before the extension hook fires, producing
+ * "Tool  not found" error results that accumulate in the context window and
+ * waste tokens on every subsequent LLM call. This filter removes those
+ * dead-end pairs so they do not inflate the context.
+ *
+ * Returns the original `messages` reference unchanged when there is nothing
+ * to strip, so callers can use referential equality to detect a no-op.
+ */
+export function stripEmptyToolCalls(messages: OrchestratorMessages): OrchestratorMessages {
+	// Collect tool-call IDs that have empty names so we can remove their results.
+	const emptyCallIds = new Set<string>()
+
+	for (const msg of messages) {
+		if (msg.role === "assistant" && "content" in msg && Array.isArray(msg.content)) {
+			for (const block of msg.content) {
+				if (isEmptyToolCallBlock(block)) {
+					emptyCallIds.add(block.id ?? "")
+				}
+			}
+		}
+	}
+
+	if (emptyCallIds.size === 0) return messages
+
+	let changed = false
+	const filtered: OrchestratorMessages = []
+	for (const msg of messages) {
+		if (msg.role === "assistant" && "content" in msg && Array.isArray(msg.content)) {
+			const cleaned = msg.content.filter((block) => !isEmptyToolCallBlock(block))
+			if (cleaned.length !== msg.content.length) {
+				changed = true
+				if (cleaned.length > 0) {
+					filtered.push({ ...msg, content: cleaned } as OrchestratorMessages[number])
+				}
+				continue
+			}
+		}
+		if (
+			msg.role === "toolResult" &&
+			"toolCallId" in msg &&
+			emptyCallIds.has((msg as { toolCallId: string }).toolCallId)
+		) {
+			changed = true
+			continue
+		}
+		filtered.push(msg)
+	}
+
+	return changed ? filtered : messages
+}
+
 export function deduplicateEnrichedPrompts(messages: OrchestratorMessages): OrchestratorMessages {
 	const lastIdx = messages.findLastIndex(
 		(m) =>
@@ -317,6 +394,17 @@ export default function (skillPaths: string[]) {
 			pi.on("context", async (event) => {
 				let messages = stripStaleNudges(event.messages)
 				messages = deduplicateEnrichedPrompts(messages)
+				messages = stripEmptyToolCalls(messages)
+				if (messages !== event.messages) return { messages }
+			})
+		} else {
+			// Subagents skip orchestrator-specific transforms but still benefit from
+			// stripping phantom empty-name tool calls. Some models (notably Kimi K2.x
+			// and MiniMax M2.7) emit empty tool calls after a real write/edit call,
+			// which the runtime rejects with a "Tool  not found" result that would
+			// otherwise accumulate in the subagent's context across turns.
+			pi.on("context", async (event) => {
+				const messages = stripEmptyToolCalls(event.messages)
 				if (messages !== event.messages) return { messages }
 			})
 		}
