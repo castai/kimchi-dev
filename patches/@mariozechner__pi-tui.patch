@@ -1,0 +1,41 @@
+diff --git a/dist/components/input.js b/dist/components/input.js
+index XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX..XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX 100644
+--- a/dist/components/input.js
++++ b/dist/components/input.js
+@@ -355,8 +355,7 @@
+     handlePaste(pastedText) {
+         this.lastAction = null;
+         this.pushUndo();
+-        // Clean the pasted text - remove newlines and carriage returns
+-        const cleanText = pastedText.replace(/\r\n/g, "").replace(/\r/g, "").replace(/\n/g, "").replace(/\t/g, "    ");
++        // Preserve the pasted text as-is, only convert tabs to spaces
++        const cleanText = pastedText.replace(/\t/g, "    ");
+         // Insert at cursor position
+         this.value = this.value.slice(0, this.cursor) + cleanText + this.value.slice(this.cursor);
+         this.cursor += cleanText.length;
+     }
+diff --git a/dist/keybindings.js b/dist/keybindings.js
+index XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX..XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX 100644
+--- a/dist/keybindings.js
++++ b/dist/keybindings.js
+@@ -66,8 +66,8 @@
+     "tui.editor.undo": { defaultKeys: "ctrl+-", description: "Undo" },
+-    "tui.input.newLine": { defaultKeys: "enter", description: "Insert newline" },
+-    "tui.input.submit": { defaultKeys: "shift+enter", description: "Submit input" },
++    "tui.input.newLine": { defaultKeys: "shift+enter", description: "Insert newline" },
++    "tui.input.submit": { defaultKeys: "enter", description: "Submit input" },
+     "tui.input.tab": { defaultKeys: "tab", description: "Tab / autocomplete" },
+     "tui.input.copy": { defaultKeys: "ctrl+c", description: "Copy selection" },
+     "tui.select.up": { defaultKeys: "up", description: "Move selection up" },
+     "tui.select.down": { defaultKeys: "down", description: "Move selection down" },
+     "tui.select.pageUp": { defaultKeys: "pageUp", description: "Selection page up" },
+     "tui.select.pageDown": {
+         defaultKeys: "pageDown",
+         description: "Selection page down",
+     },
+     "tui.select.confirm": { defaultKeys: "enter", description: "Confirm selection" },
+     "tui.select.cancel": {
+         defaultKeys: ["escape", "ctrl+c"],
+         description: "Cancel selection",
+     },
+ }

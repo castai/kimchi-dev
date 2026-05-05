@@ -73,8 +73,9 @@
 			"node-pty",
 			"protobufjs"
 		],
-		"patchedDependencies": {
-			"@mariozechner/pi-coding-agent": "patches/@mariozechner__pi-coding-agent.patch"
-		}
+	"patchedDependencies": {
+		"@mariozechner/pi-coding-agent": "patches/@mariozechner__pi-coding-agent.patch",
+		"@mariozechner/pi-tui": "patches/@mariozechner__pi-tui.patch"
+	}
 	}
 }
