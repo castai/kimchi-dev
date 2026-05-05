@@ -1,11 +1,11 @@
 import type { ExtensionAPI, ToolDefinition } from "@mariozechner/pi-coding-agent"
 import {
-	editToolDefinition,
-	findToolDefinition,
-	grepToolDefinition,
-	lsToolDefinition,
-	readToolDefinition,
-	writeToolDefinition,
+	createEditToolDefinition,
+	createFindToolDefinition,
+	createGrepToolDefinition,
+	createLsToolDefinition,
+	createReadToolDefinition,
+	createWriteToolDefinition,
 } from "@mariozechner/pi-coding-agent"
 import { ToolBlockView, buildToolCallHeader, getTextContent } from "../components/tool-block.js"
 import { isToolExpanded, registerToolCall } from "../expand-state.js"
@@ -61,19 +61,23 @@ function formatSummary(toolName: string, content: string, isError: boolean): str
 	}
 }
 
-const builtins = [
-	readToolDefinition,
-	editToolDefinition,
-	writeToolDefinition,
-	grepToolDefinition,
-	findToolDefinition,
-	lsToolDefinition,
-]
-
 export default function toolRendererExtension(pi: ExtensionAPI) {
-	for (const builtin of builtins) {
+	const factories = [
+		createReadToolDefinition,
+		createEditToolDefinition,
+		createWriteToolDefinition,
+		createGrepToolDefinition,
+		createFindToolDefinition,
+		createLsToolDefinition,
+	] as const
+	for (const factory of factories) {
+		const builtin = factory(process.cwd())
 		pi.registerTool({
 			...(builtin as unknown as ToolDefinition),
+
+			execute(toolCallId, params, signal, onUpdate, ctx) {
+				return (factory(ctx.cwd) as unknown as ToolDefinition).execute(toolCallId, params, signal, onUpdate, ctx)
+			},
 
 			renderCall(args, theme, ctx) {
 				const view = ctx.lastComponent instanceof ToolBlockView ? ctx.lastComponent : new ToolBlockView()
