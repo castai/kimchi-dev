@@ -13,9 +13,9 @@ Each iteration follows these phases in order. Do not skip or reorder them.
 Build a fresh binary and run all checks. From the repo root:
 
 ```bash
+pnpm install                     # install dependencies first
 pnpm run check                   # lint + typecheck — must pass before proceeding
 pnpm run test                    # unit tests — must pass before proceeding
-pnpm run install                 # install
 pnpm run build:binary            # compile the binary
 dist/bin/kimchi-code --version   # verify the binary is functional
 ```
@@ -45,7 +45,7 @@ cd benchmark/manual
 | simple | 5 min | 300k | 0–2 |
 | complex | 10 min | 700k | 1–5 |
 | complex-single | 10 min | 500k | 0 |
-| research | 2 min | 30k | 0 |
+| research | 2 min | 30k | 0–1 |
 
 **Overall timeout:** 30 minutes for all runs combined. If any run is still active after its individual timeout, kill it and record it as a timeout failure.
 

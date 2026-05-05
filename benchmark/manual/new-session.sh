@@ -125,6 +125,8 @@ for r in range(rows):
     for c in range(cols):
         i = r * cols + c
         if i < len(all_scripts):
+                # NOTE: iTerm2's `write text` sends keystrokes and returns immediately —
+            # it does NOT wait for the command to finish.
             as_lines.append(f'      tell g{c}_{r} to write text "{all_scripts[i]}"')
 as_body = "\n".join(as_lines)
 
