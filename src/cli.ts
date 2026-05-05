@@ -24,6 +24,7 @@ import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import promptEnrichmentExtension from "./extensions/orchestration/prompt-enrichment.js"
 import permissionsExtension from "./extensions/permissions/index.js"
 import { reserveShiftTabForPermissions } from "./extensions/permissions/keybindings.js"
+import postEditVerifyExtension from "./extensions/post-edit-verify.js"
 import promptSummaryExtension from "./extensions/prompt-summary.js"
 import shutdownMarkerExtension from "./extensions/shutdown-marker.js"
 // import statsExtension from "./extensions/stats/index.js"
@@ -247,6 +248,7 @@ try {
 			toolRendererExtension,
 			webFetchExtension,
 			webSearchExtension,
+			postEditVerifyExtension,
 			loginExtension,
 		]
 
