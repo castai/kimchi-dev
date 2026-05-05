@@ -72,9 +72,6 @@ export async function runDoneStep(state: WizardState): Promise<ApplyOutcome> {
 	].filter((l) => l.length > 0)
 
 	note(summaryLines.join("\n"), "Summary")
-	if (shellExport.path) {
-		log.info(`Open a new shell or run 'source ${shellExport.path}' to pick up ${KIMCHI_API_KEY_ENV}.`)
-	}
 	outro(outcome.failures.length === 0 ? "Done." : "Done with errors. Check above for details.")
 	return outcome
 }

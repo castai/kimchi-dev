@@ -4,8 +4,8 @@ import { join } from "node:path"
 import { compareSemverGte } from "../integrations/opencode.js"
 import { extractTarGz, verifyChecksum } from "./extract.js"
 import { GitHubClient, KIMCHI_REPO, type Repo } from "./github.js"
-import { atomicInstall, macosCodesignReSign, smokeTestBinary } from "./install.js"
-import { resolveExecutablePath } from "./paths.js"
+import { atomicInstall, copySupportingFiles, macosCodesignReSign, smokeTestBinary } from "./install.js"
+import { resolveDataDir, resolveExecutablePath } from "./paths.js"
 import { isStale, isUpdateCheckDisabled, loadRepoState, saveRepoState } from "./state.js"
 
 export interface CheckResult {
@@ -121,13 +121,19 @@ export async function applyUpdate(opts: UpdateOptions): Promise<UpdateResult> {
 		await client.downloadArchive(repo, opts.tag, archivePath)
 		await verifyChecksum(archivePath, expectedChecksum)
 
-		const binaryPath = join("bin", repo.binary)
-		const extractedRoot = await extractTarGz(archivePath, binaryPath)
+		const extractedRoot = await extractTarGz(archivePath)
 		try {
+			const binaryPath = join("bin", repo.binary)
 			const newBinaryPath = join(extractedRoot, binaryPath)
 			macosCodesignReSign(newBinaryPath)
 			smokeTestBinary(newBinaryPath)
 			const { backupPath } = atomicInstall(newBinaryPath, targetPath)
+
+			// Copy supporting files after binary is installed.
+			const shareSrc = join(extractedRoot, "share", "kimchi")
+			const shareDst = resolveDataDir()
+			copySupportingFiles(shareSrc, shareDst, repo.binary)
+
 			return { from: opts.tag, to: opts.tag, backupPath }
 		} finally {
 			rmSync(extractedRoot, { recursive: true, force: true })

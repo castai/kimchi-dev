@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { createReadStream, existsSync, mkdtempSync } from "node:fs"
+import { createReadStream, mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { pipeline } from "node:stream/promises"
@@ -20,15 +20,19 @@ export async function verifyChecksum(path: string, expected: Uint8Array): Promis
 }
 
 /**
- * Extract a tar.gz into a fresh temp dir and assert that `binaryName` is
- * present in the archive. Returns the temp dir path; the caller is
- * responsible for cleaning it up. Release archives are flat — a single
- * binary at the root, no `bin/` prefix.
+ * Extract a tar.gz into a fresh temp dir preserving full directory structure.
+ * Returns the root extraction directory; the caller is responsible for cleaning
+ * it up. Archive structure is expected to be:
+ *   extractedRoot/
+ *   ├── bin/
+ *   │   └── kimchi
+ *   └── share/
+ *       └── kimchi/
+ *           └── ... (supporting files)
  *
- * Throws if the binary is missing — that's our integrity check that the
- * release was packaged correctly for our platform.
+ * Path traversal is blocked (entries starting with "..") as a security measure.
  */
-export async function extractTarGz(archivePath: string, binaryName: string): Promise<string> {
+export async function extractTarGz(archivePath: string): Promise<string> {
 	const root = mkdtempSync(join(tmpdir(), "kimchi-update-"))
 	await tarExtract({
 		file: archivePath,
@@ -38,10 +42,6 @@ export async function extractTarGz(archivePath: string, binaryName: string): Pro
 		// minor format quirks. Block path traversal explicitly.
 		filter: (path) => !path.startsWith(".."),
 	})
-	const binaryPath = join(root, binaryName)
-	if (!existsSync(binaryPath)) {
-		throw new Error(`${binaryName} binary not found in archive`)
-	}
 	return root
 }
 

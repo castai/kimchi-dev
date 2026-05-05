@@ -67,12 +67,12 @@ if ! curl -fsSL "$BINARY_URL" | tar -xzf - -C "$TEMP_DIR"; then
 	exit 1
 fi
 
-# The release tarball contains a flat layout — just the binary at the root.
-if [ ! -f "$TEMP_DIR/kimchi" ]; then
-	echo -e "${RED}Archive did not contain a 'kimchi' binary.${NC}" >&2
+# The release tarball contains bin/kimchi and share/kimchi/.
+if [ ! -f "$TEMP_DIR/bin/kimchi" ]; then
+	echo -e "${RED}Archive did not contain a 'bin/kimchi' binary.${NC}" >&2
 	exit 1
 fi
-chmod +x "$TEMP_DIR/kimchi"
+chmod +x "$TEMP_DIR/bin/kimchi"
 
 # Pick install dir. Allow override; otherwise prefer /usr/local/bin if we
 # can write to it (system-wide install), else fall back to ~/.local/bin
@@ -82,15 +82,24 @@ if [ -n "${KIMCHI_INSTALL_DIR:-}" ]; then
 	NEEDS_PATH_HINT="maybe"
 elif [ -w /usr/local/bin ]; then
 	INSTALL_DIR="/usr/local/bin"
+	DATA_DIR="/usr/local/share"
 	NEEDS_PATH_HINT="no"
 else
 	INSTALL_DIR="$HOME/.local/bin"
+	DATA_DIR="$HOME/.local/share"
 	NEEDS_PATH_HINT="yes"
 fi
 
 mkdir -p "$INSTALL_DIR"
 INSTALL_PATH="$INSTALL_DIR/kimchi"
-mv "$TEMP_DIR/kimchi" "$INSTALL_PATH"
+mv "$TEMP_DIR/bin/kimchi" "$INSTALL_PATH"
+
+# Install share files (themes, export templates, etc.) if present.
+if [ -d "$TEMP_DIR/share/kimchi" ]; then
+	mkdir -p "$DATA_DIR"
+	rm -rf "$DATA_DIR/kimchi"
+	mv "$TEMP_DIR/share/kimchi" "$DATA_DIR/kimchi"
+fi
 
 echo ""
 echo -e "${GREEN}✓ Installed kimchi to ${INSTALL_PATH}${NC}"

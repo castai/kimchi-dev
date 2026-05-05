@@ -37,10 +37,11 @@ export function resolveExecutablePath(): string {
 }
 
 /**
- * Distribution root — `dirname(resolveExecutablePath())`. Used by the
- * installer to write the new binary alongside the running one before
- * the rename-into-place.
+ * Data directory for supporting files (share/kimchi contents), honoring
+ * XDG_DATA_HOME on Linux. Falls back to ~/.local/share/kimchi.
  */
-export function executableDir(): string {
-	return dirname(resolveExecutablePath())
+export function resolveDataDir(): string {
+	const xdg = process.env.XDG_DATA_HOME
+	if (xdg && xdg.length > 0) return join(xdg, APP_DIR)
+	return join(homedir(), ".local", "share", APP_DIR)
 }

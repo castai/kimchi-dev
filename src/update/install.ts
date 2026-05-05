@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { copyFileSync, mkdirSync, renameSync, unlinkSync } from "node:fs"
+import { copyFileSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { backupDir } from "./paths.js"
 
@@ -110,4 +110,54 @@ export function atomicInstall(newPath: string, currentPath: string): { backupPat
 	renameSync(newPath, currentPath)
 
 	return { backupPath }
+}
+
+/**
+ * Copy all files and directories from srcDir to dstDir, skipping entries
+ * that match skipName (typically the binary name to avoid copying it twice).
+ * Preserves directory structure and file permissions.
+ */
+export function copySupportingFiles(srcDir: string, dstDir: string, skipName?: string): void {
+	const entries = readdirSync(srcDir)
+	mkdirSync(dstDir, { recursive: true, mode: 0o755 })
+
+	for (const entry of entries) {
+		if (skipName && entry === skipName) {
+			continue
+		}
+		const src = join(srcDir, entry)
+		const dst = join(dstDir, entry)
+		const stat = statSync(src)
+		if (stat.isDirectory()) {
+			copyDir(src, dst)
+		} else {
+			copyFile(src, dst)
+		}
+	}
+}
+
+/**
+ * Recursively copy a directory from src to dst, preserving permissions.
+ */
+function copyDir(src: string, dst: string): void {
+	mkdirSync(dst, { recursive: true, mode: 0o755 })
+	const entries = readdirSync(src)
+	for (const entry of entries) {
+		const s = join(src, entry)
+		const d = join(dst, entry)
+		const stat = statSync(s)
+		if (stat.isDirectory()) {
+			copyDir(s, d)
+		} else {
+			copyFile(s, d)
+		}
+	}
+}
+
+/**
+ * Copy a single file from src to dst, preserving permissions.
+ */
+function copyFile(src: string, dst: string): void {
+	const stat = statSync(src)
+	copyFileSync(src, dst, stat.mode)
 }
