@@ -20,10 +20,10 @@ importers:
         specifier: ^1.2.0
         version: 1.2.0
       '@mariozechner/pi-coding-agent':
-        specifier: 0.73.0
+        specifier: ^0.73.0
         version: 0.73.0(patch_hash=abb877a867e699ad24e2f72cb410d78bab73ece3c24663625133b61c0fbc513f)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
       '@mariozechner/pi-tui':
-        specifier: 0.73.0
+        specifier: ^0.73.0
         version: 0.73.0
       '@modelcontextprotocol/ext-apps':
         specifier: ^1.2.2
@@ -60,7 +60,7 @@ importers:
         specifier: ^1.9.4
         version: 1.9.4
       '@mariozechner/pi-ai':
-        specifier: 0.73.0
+        specifier: ^0.73.0
         version: 0.73.0(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
       '@mixmark-io/domino':
         specifier: ^2.2.0
