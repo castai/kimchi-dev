@@ -61,6 +61,7 @@ The user message contains an "## Available Models" section. Use it to pick the r
 - Match the model's **tier** to the complexity: light for simple well-scoped work, heavy for ambiguous or multi-step work.
 - If the subtask involves images or visual content, you MUST select a model with \`Vision: yes\`.
 - Prefer cheaper models for mechanical work once the design is settled.
+- **Tool call classification** (permission checks in auto mode) automatically uses the cheapest available model. Do not override this — it is handled by the runtime and should not influence your model selection for user-facing tasks.
 
 ## Token budgets
 
