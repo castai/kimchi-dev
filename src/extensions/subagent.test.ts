@@ -533,6 +533,16 @@ describe("resolveBudgetConfig NaN/Infinity handling", () => {
 		const config = resolveBudgetConfig(100_000, Number.POSITIVE_INFINITY)
 		expect(config?.hardLimit).toBe(150_000)
 	})
+
+	it("clamps explicit hardTokenBudget below soft limit to at least soft limit", () => {
+		const config = resolveBudgetConfig(100_000, 50_000)
+		expect(config?.hardLimit).toBe(100_000)
+	})
+
+	it("allows explicit hardTokenBudget equal to soft limit", () => {
+		const config = resolveBudgetConfig(100_000, 100_000)
+		expect(config?.hardLimit).toBe(100_000)
+	})
 })
 
 describe("checkBudgetState", () => {

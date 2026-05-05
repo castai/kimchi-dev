@@ -330,10 +330,12 @@ export function resolveBudgetConfig(
 	hardTokenBudget: number | undefined,
 ): TokenBudgetConfig | null {
 	if (!Number.isFinite(tokenBudget) || tokenBudget === undefined || tokenBudget <= 0) return null
-	const hardLimit =
+	const hardLimit = Math.max(
+		tokenBudget,
 		Number.isFinite(hardTokenBudget) && hardTokenBudget !== undefined && hardTokenBudget > 0
 			? hardTokenBudget
-			: Math.round(tokenBudget * 1.5)
+			: Math.round(tokenBudget * 1.5),
+	)
 	return {
 		softLimit: tokenBudget,
 		hardLimit,
