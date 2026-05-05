@@ -621,3 +621,39 @@ describe("checkBudgetState", () => {
 		expect(result.kill).toBe(false)
 	})
 })
+
+describe("resolveBudgetConfig", () => {
+	it("returns null when tokenBudget is undefined", () => {
+		const result = resolveBudgetConfig(undefined, undefined)
+		expect(result).toBeNull()
+	})
+
+	it("returns null when tokenBudget is not finite", () => {
+		const result = resolveBudgetConfig(Number.NaN, undefined)
+		expect(result).toBeNull()
+	})
+
+	it("returns null when tokenBudget is zero", () => {
+		const result = resolveBudgetConfig(0, undefined)
+		expect(result).toBeNull()
+	})
+
+	it("computes hard limit at 150% of soft when hard is omitted", () => {
+		const result = resolveBudgetConfig(100_000, undefined)
+		expect(result).not.toBeNull()
+		expect(result?.softLimit).toBe(100_000)
+		expect(result?.hardLimit).toBe(150_000)
+		expect(result?.warningThreshold).toBe(80_000)
+	})
+
+	it("uses explicit hard limit when provided", () => {
+		const result = resolveBudgetConfig(100_000, 200_000)
+		expect(result?.softLimit).toBe(100_000)
+		expect(result?.hardLimit).toBe(200_000)
+	})
+
+	it("clamps hard limit to soft limit if lower", () => {
+		const result = resolveBudgetConfig(100_000, 50_000)
+		expect(result?.hardLimit).toBe(100_000)
+	})
+})

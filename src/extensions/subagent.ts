@@ -49,7 +49,14 @@ interface SubagentState extends SpinnerState {
 	executionStartedAt?: number
 }
 
-type SubagentFailureReason = "exit_error" | "timeout" | "token_budget_exceeded" | "aborted" | "output_stalled"
+type SubagentFailureReason =
+	| "exit_error"
+	| "timeout"
+	| "token_budget_exceeded"
+	| "aborted"
+	| "output_stalled"
+	| "max_turns_exceeded"
+	| "output_loop"
 
 interface SubagentTokenUsage {
 	input: number
@@ -382,6 +389,7 @@ function spawnSubagent(
 	cwd: string,
 	signal: AbortSignal | undefined,
 	budgetConfig: TokenBudgetConfig | null,
+	maxTurns: number,
 	inactivityTimeoutMs: number,
 	onToken: (accumulated: string) => void,
 	onToolCall: (name: string, args: Record<string, unknown>, accumulated: string) => void,
@@ -420,6 +428,12 @@ function spawnSubagent(
 		let cacheWriteTokens = 0
 		let failureReason: SubagentFailureReason | undefined
 		let closed = false
+		let turnCount = 0
+		let currentTurnText = ""
+		let currentTurnHasToolCall = false
+		let summaryCount = 0
+		let lastAssistantHadToolCall = false
+		const effectiveMaxTurns = maxTurns > 0 ? maxTurns : 40
 
 		// Budget state machine
 		const budgetState: BudgetState | null = budgetConfig ? { ...budgetConfig, state: "normal" } : null
@@ -471,17 +485,52 @@ function spawnSubagent(
 			} = parseSubagentEvent(line)
 			if (delta !== null) {
 				accumulated += delta
+				currentTurnText += delta
 				onToken(accumulated)
+			}
+			if (toolCall !== null) {
+				currentTurnHasToolCall = true
+				onToolCall(toolCall.name, toolCall.args, accumulated)
 			}
 			if (lineInput > 0 || lineOutput > 0) {
 				inputTokens += lineInput
 				outputTokens += lineOutput
+				turnCount++
+
+				// maxTurns hard limit
+				if (turnCount >= effectiveMaxTurns) {
+					accumulated += `\n[Subagent stopped: reached maximum turn limit (${turnCount}/${effectiveMaxTurns}). Return your current findings as JSON now. Do not make additional tool calls.]\n`
+					onToken(accumulated)
+					kill("max_turns_exceeded")
+					currentTurnText = ""
+					currentTurnHasToolCall = false
+					return
+				}
+
+				// Loop detection: model says "summary" 3+ times but keeps making tool calls
+				const turnHasSummary =
+					currentTurnText.includes('"summary"') || currentTurnText.toLowerCase().includes("summary")
+				if (turnHasSummary) summaryCount++
+				if (summaryCount >= 3 && lastAssistantHadToolCall) {
+					accumulated += `\n[Subagent stopped: output loop detected. The model reported completion ${summaryCount} times but keeps making tool calls. Returning current findings.]\n`
+					onToken(accumulated)
+					kill("output_loop")
+					currentTurnText = ""
+					currentTurnHasToolCall = false
+					return
+				}
+				lastAssistantHadToolCall = currentTurnHasToolCall
+				currentTurnText = ""
+				currentTurnHasToolCall = false
+
 				if (budgetState) {
 					const result = checkBudgetState(inputTokens, outputTokens, budgetState, budgetState.state)
 					budgetState.state = result.state
 					if (result.kill) {
 						kill("token_budget_exceeded")
-					} else if (result.warning !== null) {
+						return
+					}
+					if (result.warning !== null) {
 						accumulated += result.warning
 						onToken(accumulated)
 					}
@@ -489,9 +538,6 @@ function spawnSubagent(
 			}
 			cacheReadTokens += lineCacheRead
 			cacheWriteTokens += lineCacheWrite
-			if (toolCall !== null) {
-				onToolCall(toolCall.name, toolCall.args, accumulated)
-			}
 		}
 
 		proc.stdout.on("data", (data: Buffer) => {
@@ -650,6 +696,12 @@ const SubagentParams = Type.Object({
 				"Milliseconds of silence before the subagent is killed with output_stalled. Defaults to 3 minutes. Increase for planning or research steps where a thinking-heavy model may reason silently for an extended period before producing output.",
 		}),
 	),
+	maxTurns: Type.Optional(
+		Type.Union([Type.Integer({ minimum: 1, maximum: 500 }), Type.String({ pattern: "^[1-9][0-9]*$" })], {
+			description:
+				"**Maximum number of assistant turns** before the subagent is killed. Each assistant response (including tool calls) counts as one turn. Prevents infinite loops where the model keeps reporting completion but continues making tool calls. Default: 40.",
+		}),
+	),
 })
 
 export default function (pi: ExtensionAPI) {
@@ -788,12 +840,14 @@ export default function (pi: ExtensionAPI) {
 
 			const inactivityTimeoutMs =
 				params.inactivityTimeoutMs !== undefined ? Number(params.inactivityTimeoutMs) : INACTIVITY_TIMEOUT_MS
+			const maxTurnsParam = params.maxTurns !== undefined ? Number(params.maxTurns) : undefined
 			activeSubagentCount++
 			const { exitCode, accumulated, stderr, tokenUsage, failureReason, durationMs } = await spawnSubagent(
 				invocation,
 				ctx.cwd,
 				signal,
 				budgetConfig,
+				maxTurnsParam ?? 40,
 				inactivityTimeoutMs,
 				(text) => {
 					lastToolCall = undefined
