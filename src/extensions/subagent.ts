@@ -22,7 +22,7 @@ import { type SpinnerState, clearSpinner, spinnerFrame, tickSpinner } from "./sp
 const PROMPT_MAX_LENGTH = 60
 const FOOTER_STATUS_KEY = "subagent-sessions"
 export const RESULT_MAX_CHARS = 8000
-const MAX_CONCURRENT_SUBAGENTS = 50
+const MAX_CONCURRENT_SUBAGENTS = 20
 
 let activeSessionCounts: Map<string, number> | null = null
 let activeSubagentCount = 0
