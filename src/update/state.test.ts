@@ -29,20 +29,20 @@ describe("update state cache", () => {
 	})
 
 	it("returns null for a missing state file", () => {
-		expect(loadRepoState("castai", "kimchi-dev")).toBeNull()
+		expect(loadRepoState("castai", "kimchi")).toBeNull()
 	})
 
 	it("round-trips per-repo state through saveRepoState + loadRepoState", () => {
-		saveRepoState("castai", "kimchi-dev", {
+		saveRepoState("castai", "kimchi", {
 			checkedAt: 1_700_000_000_000,
 			latestVersion: "1.2.3",
-			releaseUrl: "https://github.com/castai/kimchi-dev/releases/tag/v1.2.3",
+			releaseUrl: "https://github.com/castai/kimchi/releases/tag/v1.2.3",
 		})
-		const got = loadRepoState("castai", "kimchi-dev")
+		const got = loadRepoState("castai", "kimchi")
 		expect(got).toEqual({
 			checkedAt: 1_700_000_000_000,
 			latestVersion: "1.2.3",
-			releaseUrl: "https://github.com/castai/kimchi-dev/releases/tag/v1.2.3",
+			releaseUrl: "https://github.com/castai/kimchi/releases/tag/v1.2.3",
 		})
 	})
 

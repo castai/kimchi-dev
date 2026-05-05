@@ -1,13 +1,13 @@
 # kimchi
 
-A coding agent CLI powered by [kimchi-dev](https://github.com/castai/kimchi-dev). Built on the [pi-mono](https://github.com/badlogic/pi-mono) coding agent SDK, kimchi gives you an AI-powered development assistant in your terminal that connects to kimchi-dev's LLM infrastructure.
+A coding agent CLI powered by [kimchi](https://github.com/castai/kimchi). Built on the [pi-mono](https://github.com/badlogic/pi-mono) coding agent SDK, kimchi gives you an AI-powered development assistant in your terminal that connects to kimchi's LLM infrastructure.
 
 ## Quick start
 
 Install the latest release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/castai/kimchi-dev/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/castai/kimchi/master/scripts/install.sh | bash
 ```
 
 Then configure your API key and tools, and launch:
@@ -186,8 +186,8 @@ This script will:
 ### Manual Setup
 
 ```bash
-git clone git@github.com:castai/kimchi-dev.git
-cd kimchi-dev
+git clone git@github.com:castai/kimchi.git
+cd kimchi
 corepack enable
 pnpm install
 ```

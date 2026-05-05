@@ -10,9 +10,9 @@ from pydantic import BaseModel, Field
 
 DEFAULT_CACHE_ROOT = Path.home() / ".cache" / "kimchi-bench" / "releases"
 CHECKSUMS_ASSET = "checksums.txt"
-BINARY_NAME = "kimchi-code"
+BINARY_NAME = "kimchi"
 # Release tarballs extract to a `bin/` + `share/kimchi/` layout (see release.yml: `tar -C dist bin share`).
-# The compiled binary lives at bin/kimchi-code; it reads package.json, theme/, and export-html/ from share/kimchi/.
+# The compiled binary lives at bin/kimchi; it reads package.json, theme/, and export-html/ from share/kimchi/.
 BINARY_RELPATH = Path("bin") / BINARY_NAME
 SHARE_RELPATH = Path("share") / "kimchi"
 _GITHUB_API = "https://api.github.com"
@@ -42,7 +42,7 @@ def asset_name_for_arch(arch: str) -> str:
     """
     if arch not in ("amd64", "arm64"):
         raise ValueError(f"Unsupported container arch {arch!r}; expected 'amd64' or 'arm64'")
-    return f"kimchi-code_linux_{arch}.tar.gz"
+    return f"kimchi_linux_{arch}.tar.gz"
 
 
 def _sha256(path: Path) -> str:
@@ -111,7 +111,7 @@ class GitHubClient:
         """Download + verify + extract the linux release tarball for ``arch``.
 
         Returns the path to the extracted **stage directory** — i.e. the tarball root,
-        which contains ``bin/kimchi-code`` and ``share/kimchi/{package.json, theme/, export-html/}``.
+        which contains ``bin/kimchi`` and ``share/kimchi/{package.json, theme/, export-html/}``.
         Callers upload this directory verbatim so the install layout in the container mirrors
         what the binary expects at runtime (see ``resolveAuxiliaryFilesDir`` in ``src/entry.ts``).
 

@@ -3,7 +3,7 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEFAULT_GITHUB_REPO = "castai/kimchi-dev"
+DEFAULT_GITHUB_REPO = "castai/kimchi"
 
 
 class KimchiAgentConfig(BaseSettings):
@@ -15,14 +15,14 @@ class KimchiAgentConfig(BaseSettings):
         default=None,
         validation_alias="KIMCHI_CODE_BINARY",
         description=(
-            "Host path to a prebuilt linux kimchi-code binary (e.g. dist/bin/kimchi-code). "
+            "Host path to a prebuilt linux kimchi binary (e.g. dist/bin/kimchi). "
             "The agent uploads the binary's grandparent directory so share/kimchi/ auxiliary files travel with it. "
             "If unset, the latest GitHub release is fetched."
         ),
     )
     api_key: str = Field(
         validation_alias="KIMCHI_API_KEY",
-        description="Kimchi LLM gateway API key forwarded to kimchi-code at runtime.",
+        description="Kimchi LLM gateway API key forwarded to kimchi at runtime.",
     )
     github_token: str | None = Field(
         default=None,
@@ -50,7 +50,7 @@ class KimchiAgentConfig(BaseSettings):
     def _api_key_non_empty(cls, v: str) -> str:
         if not v:
             raise ValueError(
-                "KIMCHI_API_KEY is required to run kimchi-code. "
+                "KIMCHI_API_KEY is required to run kimchi. "
                 "Export it on the host and forward it with `harbor run --ae KIMCHI_API_KEY=$KIMCHI_API_KEY`."
             )
         return v

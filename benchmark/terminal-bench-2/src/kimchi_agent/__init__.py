@@ -1,3 +1,3 @@
-from kimchi_agent.agent import KimchiCode
+from kimchi_agent.agent import Kimchi
 
-__all__ = ["KimchiCode"]
+__all__ = ["Kimchi"]

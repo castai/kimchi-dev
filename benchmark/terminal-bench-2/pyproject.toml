@@ -1,7 +1,7 @@
 [project]
 name = "kimchi-agent"
 version = "0.1.0"
-description = "Harbor terminal-bench agent that runs the kimchi-code binary inside the task container."
+description = "Harbor terminal-bench agent that runs the kimchi binary inside the task container."
 requires-python = ">=3.14"
 dependencies = [
     "harbor>=0.4.0",

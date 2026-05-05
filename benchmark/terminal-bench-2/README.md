@@ -1,15 +1,15 @@
 # terminal-bench-2
 
-Run [terminal-bench](https://www.harborframework.com/) against kimchi-code.
+Run [terminal-bench](https://www.harborframework.com/) against kimchi.
 
-The package ships a single harbor agent, `kimchi_agent:KimchiCode`, that installs the `kimchi-code` binary inside each task container and runs it non-interactively (`--print --mode json --no-session`). Token and cost counters are parsed from the JSONL output and fed back into harbor's trial context.
+The package ships a single harbor agent, `kimchi_agent:Kimchi`, that installs the `kimchi` binary inside each task container and runs it non-interactively (`--print --mode json --no-session`). Token and cost counters are parsed from the JSONL output and fed back into harbor's trial context.
 
 ## Prereqs
 
 - Docker running locally
 - `uv` (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - `pnpm` — only if you use `./scripts/run-local.sh` (it cross-builds the Linux binary from the working tree)
-- `KIMCHI_API_KEY` exported on the host — kimchi-code routes every request through `https://llm.kimchi.dev/openai/v1`; no provider-specific keys are needed
+- `KIMCHI_API_KEY` exported on the host — kimchi routes every request through `https://llm.kimchi.dev/openai/v1`; no provider-specific keys are needed
 
 ### Apple Silicon (M-series Macs) — read before iterating locally
 
@@ -34,8 +34,8 @@ You will hit one of two failure modes:
 
 | Script | Binary source |
 | --- | --- |
-| `./scripts/run-local.sh` | Cross-builds `kimchi-code` for linux-amd64 from the current working tree (`pnpm run build:binary-linux-x64`) |
-| `./scripts/run-release.sh` | Downloads the latest release from `castai/kimchi-dev` |
+| `./scripts/run-local.sh` | Cross-builds `kimchi` for linux-amd64 from the current working tree (`pnpm run build:binary-linux-x64`) |
+| `./scripts/run-release.sh` | Downloads the latest release from `castai/kimchi` |
 
 Both scripts target the `terminal-bench/terminal-bench-2` dataset. Extra arguments are forwarded to `harbor run`, so everything below works for either script.
 
@@ -77,11 +77,11 @@ Each task declares its own per-attempt timeouts in `task.toml` (typically 10-15 
 MODEL=kimchi-dev/kimi-k2.5 ./scripts/run-local.sh -i terminal-bench/fix-git
 ```
 
-`MODEL` must be `<provider>/<id>`. Available `kimchi-dev` models include `kimi-k2.5`, `glm-5-fp8`, `minimax-m2.7`, `nemotron-3-super-fp4` (run `kimchi-code --list-models` for the live list). The qualifier is required because kimchi-code's built-in catalog also registers some IDs (notably `kimi-k2.5`) under the `opencode` provider — without `kimchi-dev/` the resolver picks `opencode` and fails auth with the kimchi key.
+`MODEL` must be `<provider>/<id>`. Available `kimchi-dev` models include `kimi-k2.5`, `glm-5-fp8`, `minimax-m2.7`, `nemotron-3-super-fp4` (run `kimchi --list-models` for the live list). The qualifier is required because kimchi's built-in catalog also registers some IDs (notably `kimi-k2.5`) under the `opencode` provider — without `kimchi-dev/` the resolver picks `opencode` and fails auth with the kimchi key.
 
 ### Tagging runs for tracking
 
-kimchi-code attaches tags from `KIMCHI_TAGS` to every outgoing LLM request payload and telemetry event, which lets you slice usage/tokens/cost server-side by run, experiment, or branch.
+kimchi attaches tags from `KIMCHI_TAGS` to every outgoing LLM request payload and telemetry event, which lets you slice usage/tokens/cost server-side by run, experiment, or branch.
 
 The agent auto-injects `run:<timestamp>`, `task:<task_id>`, and `trial:<task_id>__<suffix>` derived from the trial directory layout (`jobs/<timestamp>/<task>__<trial>/`). You don't need to set these yourself — they're correct across globs (`-i 'terminal-bench/build-*'`), full-dataset runs, and parallel attempts (`-k N`, `-n N`).
 
@@ -104,13 +104,13 @@ Tag format is `key:value`, comma-separated; keys and values are alphanumeric plu
 | Var | Required | Purpose |
 | --- | --- | --- |
 | `KIMCHI_API_KEY` | yes | Bearer token for `llm.kimchi.dev`; forwarded to the agent via `--ae` |
-| `KIMCHI_CODE_BINARY` | no | Host path to a prebuilt Linux `kimchi-code` binary (produced by `pnpm run build:binary-linux-x64` at `dist/bin/kimchi-code`). The agent uploads the binary's grandparent directory (the build/tarball root containing `bin/` + `share/kimchi/`), so the auxiliary files travel with it. When set, the agent skips the GitHub release download. `./scripts/run-local.sh` sets this for you. |
+| `KIMCHI_CODE_BINARY` | no | Host path to a prebuilt Linux `kimchi` binary (produced by `pnpm run build:binary-linux-x64` at `dist/bin/kimchi`). The agent uploads the binary's grandparent directory (the build/tarball root containing `bin/` + `share/kimchi/`), so the auxiliary files travel with it. When set, the agent skips the GitHub release download. `./scripts/run-local.sh` sets this for you. |
 | `GITHUB_TOKEN` | no | Raises GitHub API rate limits when fetching the latest release. Not required for public repos |
 | `MODEL` | no | Default `kimchi-dev/kimi-k2.5`. See "Picking a model" for the `<provider>/<id>` requirement |
 
 ## Results
 
-`benchmark/terminal-bench-2/jobs/<timestamp>/<task>__<trial_id>/` — each trial directory contains `trial.log`, `result.json` (with `reward`), and `config.json`. The raw kimchi JSONL stream is in `agent/kimchi.txt`. Resumable session files (parent + each subagent, linked via `parentSession`) are in `agent/sessions/*.jsonl`; replay any of them with `kimchi-code --session <path>`.
+`benchmark/terminal-bench-2/jobs/<timestamp>/<task>__<trial_id>/` — each trial directory contains `trial.log`, `result.json` (with `reward`), and `config.json`. The raw kimchi JSONL stream is in `agent/kimchi.txt`. Resumable session files (parent + each subagent, linked via `parentSession`) are in `agent/sessions/*.jsonl`; replay any of them with `kimchi --session <path>`.
 
 ## Troubleshooting
 
@@ -120,7 +120,7 @@ Tag format is `key:value`, comma-separated; keys and values are alphanumeric plu
 
 **`Unsupported container arch (ELF e_machine=...)`** — the task container's userland is neither amd64 nor arm64. Only those two are released; nothing to do at the bench layer.
 
-**`sha256 mismatch for kimchi-code_linux_*.tar.gz`** — cached tarball at `~/.cache/kimchi-bench/releases/<tag>/` is corrupt or the release was replaced. `rm -rf` that tag's directory and retry.
+**`sha256 mismatch for kimchi_linux_*.tar.gz`** — cached tarball at `~/.cache/kimchi-bench/releases/<tag>/` is corrupt or the release was replaced. `rm -rf` that tag's directory and retry.
 
 **`KIMCHI_API_KEY is required`** — env var didn't reach the container. Set it on the host before invoking the script; both scripts forward it via `--ae`.
 

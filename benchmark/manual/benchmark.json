@@ -1,5 +1,5 @@
 {
-  "binary": "kimchi-code",
+  "binary": "kimchi",
   "models": [
     "kimi-k2.5",
     "minimax-m2.7"
