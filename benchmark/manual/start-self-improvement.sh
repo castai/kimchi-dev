@@ -1,5 +1,12 @@
-#!/bin/zsh
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
+
+BINARY="dist/bin/kimchi-code"
+if [[ ! -x "$BINARY" ]]; then
+  echo "Error: $BINARY not found or not executable." >&2
+  echo "Run 'pnpm run build:binary' first." >&2
+  exit 1
+fi
 
 PROMPT="$(cat benchmark/manual/self-improvement.md)"
 
@@ -13,4 +20,4 @@ $(cat "$GOALS_FILE")"
   echo "Custom improvement goals loaded from $GOALS_FILE"
 fi
 
-dist/bin/kimchi-code "$PROMPT" --yolo
+"$BINARY" "$PROMPT" --yolo
