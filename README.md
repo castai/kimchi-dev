@@ -7,7 +7,7 @@ A coding agent CLI powered by [kimchi](https://github.com/castai/kimchi). Built 
 Install the latest release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/castai/kimchi/master/scripts/install.sh | bash
+curl -fsSL https://github.com/castai/kimchi/releases/latest/download/install.sh | bash
 ```
 
 Then configure your API key and tools, and launch:

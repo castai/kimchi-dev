@@ -103,6 +103,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -120,4 +122,5 @@ jobs:
           files: |
             artifacts/kimchi_*.tar.gz
             artifacts/checksums.txt
+            scripts/install.sh
           generate_release_notes: true

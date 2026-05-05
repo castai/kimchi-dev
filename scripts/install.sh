@@ -3,7 +3,7 @@
 # Install the kimchi coding-harness CLI from the latest GitHub release.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/castai/kimchi/master/scripts/install.sh | bash
+#   curl -fsSL https://github.com/castai/kimchi/releases/latest/download/install.sh | bash
 #
 # Optional env:
 #   KIMCHI_INSTALL_DIR  Override install dir. Defaults to /usr/local/bin if
