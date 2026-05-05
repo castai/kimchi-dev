@@ -461,21 +461,6 @@ function spawnSubagent(
 			}, 5000)
 		}
 
-		// Check and enforce token budget with soft warnings and hard kill
-		const checkBudget = (input: number, output: number): void => {
-			if (!budgetState) return
-			const result = checkBudgetState(input, output, budgetState, budgetState.state)
-			budgetState.state = result.state
-			if (result.kill) {
-				kill("token_budget_exceeded")
-				return
-			}
-			if (result.warning !== null) {
-				accumulated += result.warning
-				onToken(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated))
-			}
-		}
-
 		const processLine = (line: string) => {
 			const {
 				delta,
@@ -492,7 +477,16 @@ function spawnSubagent(
 			if (lineInput > 0 || lineOutput > 0) {
 				inputTokens += lineInput
 				outputTokens += lineOutput
-				checkBudget(inputTokens, outputTokens)
+				if (budgetState) {
+					const result = checkBudgetState(inputTokens, outputTokens, budgetState, budgetState.state)
+					budgetState.state = result.state
+					if (result.kill) {
+						kill("token_budget_exceeded")
+					} else if (result.warning !== null) {
+						accumulated += result.warning
+						onToken(hideThinkingBlock ? filterOutputTags(accumulated) : stripOutputTagWrappers(accumulated))
+					}
+				}
 			}
 			cacheReadTokens += lineCacheRead
 			cacheWriteTokens += lineCacheWrite
