@@ -3,17 +3,27 @@ import { join } from "node:path"
 import { intro, note } from "@clack/prompts"
 
 /**
- * Welcome step — print the kimchi banner + version. Quick splash, no
- * input. Mirrors internal/tui/steps/welcome.go.
+ * Welcome step — print the kimchi banner, version, and a one-shot
+ * controls listing the user can refer back to throughout the wizard
+ * (the per-prompt UI is plain clack, so there's no live footer; this
+ * note is the wizard's single source of truth for keyboard shortcuts).
  */
 export function runWelcomeStep(): void {
 	intro("kimchi setup")
 	note(
 		[
 			"This wizard will:",
-			"  · prompt for your kimchi API key (validated online)",
-			"  · pick which tools (Claude Code, OpenCode, Cursor, OpenClaw, GSD2) to configure",
-			"  · write tool configs so they talk to the kimchi proxy",
+			"  · setup your Kimchi API key",
+			"  · help you configure tools (Claude Code, OpenCode, Cursor, OpenClaw, GSD2)",
+			"  · setup tool configs so they talk to the Kimchi proxy",
+			"",
+			"Controls:",
+			"  ↑/↓     navigate options",
+			"  space   toggle option (multi-select)",
+			"  y / n   answer yes/no prompts",
+			"  ↵       confirm and continue",
+			"  esc     go back one step",
+			"  ctrl+c  cancel and exit",
 			"",
 			`kimchi v${readKimchiVersion()}`,
 		].join("\n"),

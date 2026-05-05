@@ -7,47 +7,109 @@ import "../integrations/gsd2.js"
 import "../integrations/openclaw.js"
 import "../integrations/opencode.js"
 
+import { cancel as clackCancel } from "@clack/prompts"
 import type { WizardResult, WizardState } from "./state.js"
 import { runAuthStep } from "./steps/auth.js"
 import { runDoneStep } from "./steps/done.js"
+import { runModeStep } from "./steps/mode.js"
 import { runScopeStep } from "./steps/scope.js"
+import { runTelemetryStep } from "./steps/telemetry.js"
 import { runToolsStep } from "./steps/tools.js"
 import { runWelcomeStep } from "./steps/welcome.js"
 
+interface Step {
+	name: string
+	skip?: (state: WizardState) => boolean
+	run: (state: WizardState, opts: { backable: boolean }) => Promise<void>
+}
+
+const STEPS: Step[] = [
+	{ name: "auth", run: runAuthStep },
+	{ name: "tools", run: runToolsStep },
+	{ name: "mode", run: runModeStep },
+	{ name: "scope", skip: (s) => s.mode === "inject", run: runScopeStep },
+	{ name: "telemetry", skip: (s) => !s.selectedTools.includes("claudecode"), run: runTelemetryStep },
+]
+
 /**
- * Drive the full setup wizard end-to-end. Each step mutates a shared
- * WizardState and may flip `cancelled = true` on Ctrl-C; the runner
- * stops at the first cancel without writing anything.
+ * Drive the full setup wizard end-to-end. The runner walks {@link STEPS}
+ * forward, calling each step and respecting `state.back` (rewind to the
+ * previous non-skipped step) and `state.cancelled` (abort).
  *
- * The MVP wizard covers welcome / auth / scope / tools / done — the
- * richer Go-side steps (mode toggle, GSD installer, install offers,
- * telemetry opt-in) ship in a follow-up.
+ * Step order mirrors the kimchi-cli Go wizard
+ * (`internal/tui/wizard.go` newWizard):
+ *   welcome → auth → tools → mode → scope → telemetry → done
+ *
+ * Scope is skipped in inject mode because there's no disk write to scope —
+ * the launcher subcommands set env vars per-process regardless of where
+ * any global/project config might live.
+ *
+ * Telemetry is only asked when Claude Code is among the selected tools,
+ * matching the Go behavior — for the other integrations it's already on
+ * by their own config and the prompt would be noise.
  */
 export async function runWizard(): Promise<WizardResult> {
 	const state: WizardState = {
 		apiKey: "",
+		mode: "override",
 		scope: "global",
 		selectedTools: [],
+		telemetryEnabled: true,
 		cancelled: false,
+		back: false,
 	}
 
+	const partial = (): WizardResult => ({
+		cancelled: true,
+		apiKey: state.apiKey || undefined,
+		mode: state.mode,
+		scope: state.scope,
+		telemetryEnabled: state.telemetryEnabled,
+		configuredTools: [],
+	})
+
 	runWelcomeStep()
-	await runAuthStep(state)
-	if (state.cancelled) return { cancelled: true, configuredTools: [] }
 
-	await runScopeStep(state)
-	if (state.cancelled) return { cancelled: true, configuredTools: [], apiKey: state.apiKey }
+	let i = 0
+	while (i < STEPS.length) {
+		const step = STEPS[i]
+		if (step.skip?.(state)) {
+			i += 1
+			continue
+		}
 
-	await runToolsStep(state)
-	if (state.cancelled) {
-		return { cancelled: true, configuredTools: [], apiKey: state.apiKey, scope: state.scope }
+		state.back = false
+		const backable = previousActiveStep(state, i) >= 0
+		await step.run(state, { backable })
+
+		if (state.cancelled) {
+			clackCancel("Cancelled.")
+			return partial()
+		}
+		if (state.back) {
+			const prev = previousActiveStep(state, i)
+			i = prev >= 0 ? prev : i
+			continue
+		}
+		i += 1
 	}
 
 	const outcome = await runDoneStep(state)
 	return {
 		cancelled: false,
 		apiKey: state.apiKey,
+		mode: state.mode,
 		scope: state.scope,
-		configuredTools: outcome.successes.map((name) => name as never),
+		telemetryEnabled: state.telemetryEnabled,
+		configuredTools: state.selectedTools.filter((id) =>
+			outcome.successes.some((name) => name.toLowerCase().includes(id)),
+		),
 	}
+}
+
+function previousActiveStep(state: WizardState, from: number): number {
+	for (let j = from - 1; j >= 0; j -= 1) {
+		if (!STEPS[j].skip?.(state)) return j
+	}
+	return -1
 }

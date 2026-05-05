@@ -1,4 +1,4 @@
-import { cancel, isCancel, select } from "@clack/prompts"
+import { select } from "../prompt.js"
 import type { WizardState } from "../state.js"
 
 /**
@@ -7,19 +7,23 @@ import type { WizardState } from "../state.js"
  * a per-repo override under <cwd>/.claude/<basename>. Mirrors
  * internal/tui/steps/scope.go.
  */
-export async function runScopeStep(state: WizardState): Promise<void> {
-	const choice = await select({
+export async function runScopeStep(state: WizardState, opts: { backable: boolean }): Promise<void> {
+	const r = await select<"global" | "project">({
 		message: "Where should tool configs be written?",
 		options: [
 			{ value: "global", label: "Global", hint: "user-level config (most users)" },
 			{ value: "project", label: "Project", hint: "per-repo override under <cwd>/.claude/" },
 		],
 		initialValue: "global",
+		backable: opts.backable,
 	})
-	if (isCancel(choice)) {
-		cancel("Cancelled.")
+	if (r.kind === "back") {
+		state.back = true
+		return
+	}
+	if (r.kind === "cancel") {
 		state.cancelled = true
 		return
 	}
-	state.scope = choice as "global" | "project"
+	state.scope = r.value
 }

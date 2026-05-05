@@ -1,6 +1,7 @@
-import { cancel, isCancel, multiselect, note } from "@clack/prompts"
+import { note } from "@clack/prompts"
 import { all as allTools } from "../../integrations/registry.js"
 import type { ToolId } from "../../integrations/types.js"
+import { multiselect } from "../prompt.js"
 import type { WizardState } from "../state.js"
 
 /**
@@ -13,7 +14,7 @@ import type { WizardState } from "../state.js"
  * false are still selectable — useful when the user is about to install
  * the binary alongside.
  */
-export async function runToolsStep(state: WizardState): Promise<void> {
+export async function runToolsStep(state: WizardState, opts: { backable: boolean }): Promise<void> {
 	const tools = allTools()
 	if (tools.length === 0) {
 		// Defensive: only reachable if no integration modules were imported,
@@ -27,7 +28,7 @@ export async function runToolsStep(state: WizardState): Promise<void> {
 	const installed = new Set(tools.filter((t) => t.isInstalled()).map((t) => t.id))
 	const initial = tools.filter((t) => installed.has(t.id)).map((t) => t.id)
 
-	const selection = await multiselect({
+	const r = await multiselect<ToolId>({
 		message: "Which tools should be configured?",
 		options: tools.map((t) => ({
 			value: t.id,
@@ -36,12 +37,16 @@ export async function runToolsStep(state: WizardState): Promise<void> {
 		})),
 		initialValues: initial,
 		required: false,
+		backable: opts.backable,
 	})
 
-	if (isCancel(selection)) {
-		cancel("Cancelled.")
+	if (r.kind === "back") {
+		state.back = true
+		return
+	}
+	if (r.kind === "cancel") {
 		state.cancelled = true
 		return
 	}
-	state.selectedTools = selection as ToolId[]
+	state.selectedTools = r.value
 }

@@ -4,8 +4,17 @@ A coding agent CLI powered by [kimchi-dev](https://github.com/castai/kimchi-dev)
 
 ## Quick start
 
+Install the latest release:
+
 ```bash
-kimchi
+curl -fsSL https://raw.githubusercontent.com/castai/kimchi-dev/master/scripts/install.sh | bash
+```
+
+Then configure your API key and tools, and launch:
+
+```bash
+kimchi setup   # one-time interactive setup
+kimchi         # launch the coding harness
 ```
 
 Run `kimchi --help` to see all available subcommands and flags.

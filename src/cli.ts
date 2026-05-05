@@ -103,10 +103,10 @@ function isAcpMode(args: string[]): boolean {
 }
 
 try {
-	// Top-level kimchi subcommands (setup, claude, opencode, …) and the merged
-	// --help take ownership before any harness setup runs. `--version` falls
-	// through to pi-coding-agent's main below so it prints the version using
-	// piConfig.name = "kimchi".
+	// Top-level kimchi subcommands (setup, claude, opencode, …) and the
+	// top-level --help take ownership before any harness setup runs.
+	// `--version` falls through to pi-coding-agent's main below so it prints
+	// the version using piConfig.name = "kimchi".
 	const dispatch = await dispatchSubcommand(process.argv.slice(2))
 	if (dispatch.kind === "handled") {
 		process.exit(dispatch.exitCode)
