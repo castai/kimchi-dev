@@ -30,6 +30,23 @@ export class PromptEditor extends CustomEditor {
 	private _splashMode = false
 	private _pendingImageIndicator: string | null = null
 
+	/**
+	 * Computes the width available for the editor's content text when a
+	 * right-aligned indicator is shown. Ensures at least 1 cell remains so
+	 * super.render() doesn't receive a zero/negative width.
+	 *
+	 * Layout invariant: contentWidth = contentRenderWidth + indicatorVisibleWidth + indicatorGutter
+	 * where indicatorGutter is 1 space between text and indicator when indicator is present, 0 otherwise.
+	 */
+	private computeContentWidth(contentWidth: number, indicatorRaw: string | null): number {
+		const indicatorVisibleWidth = indicatorRaw ? visibleWidth(indicatorRaw) : 0
+		const indicatorGutter = indicatorVisibleWidth > 0 ? 1 : 0
+		return Math.max(
+			1,
+			indicatorVisibleWidth > 0 ? contentWidth - indicatorVisibleWidth - indicatorGutter : contentWidth,
+		)
+	}
+
 	constructor(tui: TUI, editorTheme: EditorTheme, keybindings: KeybindingsManager, appTheme: Theme) {
 		super(tui, editorTheme, keybindings)
 		this.appTheme = appTheme
@@ -79,13 +96,11 @@ export class PromptEditor extends CustomEditor {
 		// the first row's right edge) never collides with typed text. Computed
 		// before super.render() because we need the *narrower* layout up front.
 		const indicatorRaw = this._pendingImageIndicator
+		const contentRenderWidth = this.computeContentWidth(contentWidth, indicatorRaw)
+		const lines = super.render(contentRenderWidth)
+
 		const indicatorVisibleWidth = indicatorRaw ? visibleWidth(indicatorRaw) : 0
 		const indicatorGutter = indicatorVisibleWidth > 0 ? 1 : 0
-		const contentRenderWidth = Math.max(
-			1,
-			indicatorVisibleWidth > 0 ? contentWidth - indicatorVisibleWidth - indicatorGutter : contentWidth,
-		)
-		const lines = super.render(contentRenderWidth)
 
 		const leftPad = this._splashMode ? Math.max(0, Math.floor((width - innerWidth) / 2)) : 0
 		const pad = leftPad > 0 ? " ".repeat(leftPad) : ""

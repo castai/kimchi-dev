@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { readFileSync, statSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { extname } from "node:path"
 import type { ImageContent } from "@mariozechner/pi-ai"
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent"
@@ -63,182 +63,178 @@ const IMAGE_EXT_TO_MIME: Record<string, string> = {
 // bundler can statically resolve and embed.
 declare const require: NodeJS.Require
 
-let _clipboard: NativeClipboard | null | undefined
-let _clipboardLoadError: string | null = null
-
-function loadPlatformBinding(): NativeClipboard | null {
-	if (process.platform === "darwin") {
-		if (process.arch === "arm64")
-			return require("@mariozechner/clipboard-darwin-arm64/clipboard.darwin-arm64.node") as NativeClipboard
-		if (process.arch === "x64")
-			return require("@mariozechner/clipboard-darwin-x64/clipboard.darwin-x64.node") as NativeClipboard
-		throw new Error(`Unsupported macOS architecture: ${process.arch}`)
-	}
-	if (process.platform === "linux") {
-		// Try glibc first, fall back to musl. Both branches survive bundling because
-		// process.platform/arch substitution narrows the platform but not the libc.
-		if (process.arch === "arm64") {
-			try {
-				return require("@mariozechner/clipboard-linux-arm64-gnu/clipboard.linux-arm64-gnu.node") as NativeClipboard
-			} catch {
-				return require("@mariozechner/clipboard-linux-arm64-musl/clipboard.linux-arm64-musl.node") as NativeClipboard
-			}
-		}
-		if (process.arch === "x64") {
-			try {
-				return require("@mariozechner/clipboard-linux-x64-gnu/clipboard.linux-x64-gnu.node") as NativeClipboard
-			} catch {
-				return require("@mariozechner/clipboard-linux-x64-musl/clipboard.linux-x64-musl.node") as NativeClipboard
-			}
-		}
-		throw new Error(`Unsupported Linux architecture: ${process.arch}`)
-	}
-	if (process.platform === "win32") {
-		if (process.arch === "arm64")
-			return require("@mariozechner/clipboard-win32-arm64-msvc/clipboard.win32-arm64-msvc.node") as NativeClipboard
-		if (process.arch === "x64")
-			return require("@mariozechner/clipboard-win32-x64-msvc/clipboard.win32-x64-msvc.node") as NativeClipboard
-		throw new Error(`Unsupported Windows architecture: ${process.arch}`)
-	}
-	throw new Error(`Unsupported platform: ${process.platform}`)
-}
-
-function loadClipboard(): NativeClipboard | null {
-	if (_clipboard !== undefined) return _clipboard
-	const hasDisplay = process.platform !== "linux" || Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY)
-	if (process.env.TERMUX_VERSION || !hasDisplay) {
-		_clipboardLoadError = process.env.TERMUX_VERSION ? "Termux is not supported" : "no display server detected"
-		_clipboard = null
-		return null
-	}
-	try {
-		_clipboard = loadPlatformBinding()
-	} catch (err) {
-		// The matching platform package isn't installed. This usually means the
-		// user installed on a different OS/arch than they're running on (e.g.
-		// installed in a linux-x64 Docker but exec'd via Rosetta). Surface the
-		// underlying error so it's actionable.
-		_clipboardLoadError = err instanceof Error ? err.message : String(err)
-		_clipboard = null
-	}
-	return _clipboard
-}
-
-// Read a single file URL off the macOS pasteboard, if one is present and points
-// at a regular file with a recognized image extension. Returns null in every
-// other case (no file URL, multiple files, non-image extension, file unreadable,
-// file too large). Errors here are intentionally swallowed: this is a *fallback*
-// path that runs alongside the native addon, and any failure should fall
-// through to the addon rather than break the paste.
-//
-// Why not consult the addon? Its `availableFormats()` confirms a `public.file-url`
-// is present, but the addon exposes no API to retrieve the URL's *value* — text
-// accessors panic on file-URL-only pasteboards. AppleScript is the cheapest
-// reliable way to read the URL string itself. The `availableFormats()` gate
-// prevents AppleScript from coercing arbitrary text into a fake `/hello`-style
-// path on a text-only pasteboard.
-function readPastedFilePathDarwin(formats: string[]): string | null {
-	if (process.platform !== "darwin") return null
-	if (!formats.includes("public.file-url")) return null
-	try {
-		const raw = execFileSync("/usr/bin/osascript", ["-e", "POSIX path of (the clipboard as «class furl»)"], {
-			encoding: "utf8",
-			timeout: 1000,
-			stdio: ["ignore", "pipe", "ignore"],
-		})
-		const path = raw.trim()
-		if (!path) return null
-		return path
-	} catch {
-		return null
-	}
-}
-
-function readImageFileFromDisk(path: string): { bytes: Uint8Array; mimeType: string } | null {
-	const mimeType = IMAGE_EXT_TO_MIME[extname(path).toLowerCase()]
-	if (!mimeType) return null
-	let stat: ReturnType<typeof statSync>
-	try {
-		stat = statSync(path)
-	} catch {
-		return null
-	}
-	if (!stat.isFile()) return null
-	if (stat.size === 0 || stat.size > MAX_PASTED_FILE_BYTES) return null
-	try {
-		const buf = readFileSync(path)
-		return { bytes: new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength), mimeType }
-	} catch {
-		return null
-	}
-}
-
-async function readClipboardImage(): Promise<{ bytes: Uint8Array; mimeType: string } | null> {
-	const clipboard = loadClipboard()
-	if (!clipboard) return null
-
-	// Step 1: prefer reading the pasted file from disk when available.
-	//
-	// Background: if the user copied an image *file* in Finder (Cmd+C on the
-	// file itself), the macOS pasteboard contains only `public.file-url` and
-	// the addon's hasImage() returns false — historically we'd say "No image
-	// found" even though the user clearly pasted an image. Worse, if the user
-	// copied the file's *icon* (Get Info → click icon → Cmd+C, or via a clipboard
-	// manager that re-rendered the URL), the pasteboard ends up with both a
-	// file URL *and* a 1024×1024 generic NSImage rendition of the system file
-	// icon. hasImage() returns true, getImageBinary() yields the icon, and the
-	// model receives a featureless document glyph instead of the user's actual
-	// photo.
-	//
-	// Both failure modes share a cure: if the pasteboard advertises a file URL
-	// pointing at an image-typed file we can read, that file's bytes are what
-	// the user meant to paste. Read them directly and skip the addon's image
-	// rep entirely.
-	let formats: string[] = []
-	try {
-		formats = clipboard.availableFormats()
-	} catch {
-		// Older addon versions may lack availableFormats(). Treat as empty.
-	}
-	const path = readPastedFilePathDarwin(formats)
-	if (path) {
-		const fromDisk = readImageFileFromDisk(path)
-		if (fromDisk) return fromDisk
-		// File URL exists but isn't a usable image (wrong extension, too big,
-		// unreadable). Fall through to the addon — it may still have a screenshot
-		// rep alongside the URL.
-	}
-
-	// Step 2: fall back to whatever image rep the addon found on the pasteboard.
-	if (!clipboard.hasImage()) return null
-	const imageData = await clipboard.getImageBinary()
-	if (!imageData || imageData.length === 0) return null
-	const bytes = imageData instanceof Uint8Array ? imageData : Uint8Array.from(imageData)
-	// The native addon always returns PNG on macOS/Windows; on Linux (X11/Wayland)
-	// the wl-paste/xclip fallback in pi-mono negotiates the type, but the native
-	// binding itself only yields PNG.
-	return { bytes, mimeType: "image/png" }
-}
-
-function modelSupportsImages(modelId: string | undefined): boolean {
-	if (!modelId) return false
-	const models = getAvailableModels()
-	const meta = models.find((m) => m.slug === modelId)
-	return meta?.input_modalities.includes("image") ?? false
-}
-
-// Build the prefix of `[Image #N]` markers we splice into the user's text on
-// submit. Mirrors Claude's UX: every image attached to a turn gets a stable
-// numeric reference the user can name in their prompt, and the counter runs
-// continuously across all turns in a session.
-function buildImageMarkerPrefix(startIndex: number, count: number): string {
-	if (count <= 0) return ""
-	const markers: string[] = []
-	for (let i = 0; i < count; i++) markers.push(`[Image #${startIndex + i}]`)
-	return markers.join(" ")
-}
-
 export default function clipboardImageExtension(pi: ExtensionAPI) {
+	// Mutable clipboard state — closed over by the helper functions below.
+	let _clipboard: NativeClipboard | null | undefined
+	let _clipboardLoadError: string | null = null
+
+	function loadPlatformBinding(): NativeClipboard | null {
+		if (process.platform === "darwin") {
+			if (process.arch === "arm64")
+				return require("@mariozechner/clipboard-darwin-arm64/clipboard.darwin-arm64.node") as NativeClipboard
+			if (process.arch === "x64")
+				return require("@mariozechner/clipboard-darwin-x64/clipboard.darwin-x64.node") as NativeClipboard
+			throw new Error(`Unsupported macOS architecture: ${process.arch}`)
+		}
+		if (process.platform === "linux") {
+			// Try glibc first, fall back to musl. Both branches survive bundling because
+			// process.platform/arch substitution narrows the platform but not the libc.
+			if (process.arch === "arm64") {
+				try {
+					return require("@mariozechner/clipboard-linux-arm64-gnu/clipboard.linux-arm64-gnu.node") as NativeClipboard
+				} catch {
+					return require("@mariozechner/clipboard-linux-arm64-musl/clipboard.linux-arm64-musl.node") as NativeClipboard
+				}
+			}
+			if (process.arch === "x64") {
+				try {
+					return require("@mariozechner/clipboard-linux-x64-gnu/clipboard.linux-x64-gnu.node") as NativeClipboard
+				} catch {
+					return require("@mariozechner/clipboard-linux-x64-musl/clipboard.linux-x64-musl.node") as NativeClipboard
+				}
+			}
+			throw new Error(`Unsupported Linux architecture: ${process.arch}`)
+		}
+		if (process.platform === "win32") {
+			if (process.arch === "arm64")
+				return require("@mariozechner/clipboard-win32-arm64-msvc/clipboard.win32-arm64-msvc.node") as NativeClipboard
+			if (process.arch === "x64")
+				return require("@mariozechner/clipboard-win32-x64-msvc/clipboard.win32-x64-msvc.node") as NativeClipboard
+			throw new Error(`Unsupported Windows architecture: ${process.arch}`)
+		}
+		throw new Error(`Unsupported platform: ${process.platform}`)
+	}
+
+	function loadClipboard(): NativeClipboard | null {
+		if (_clipboard !== undefined) return _clipboard
+		const hasDisplay = process.platform !== "linux" || Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY)
+		if (process.env.TERMUX_VERSION || !hasDisplay) {
+			_clipboardLoadError = process.env.TERMUX_VERSION ? "Termux is not supported" : "no display server detected"
+			_clipboard = null
+			return null
+		}
+		try {
+			_clipboard = loadPlatformBinding()
+		} catch (err) {
+			// The matching platform package isn't installed. This usually means the
+			// user installed on a different OS/arch than they're running on (e.g.
+			// installed in a linux-x64 Docker but exec'd via Rosetta). Surface the
+			// underlying error so it's actionable.
+			_clipboardLoadError = err instanceof Error ? err.message : String(err)
+			_clipboard = null
+		}
+		return _clipboard
+	}
+
+	// Read a single file URL off the macOS pasteboard, if one is present and points
+	// at a regular file with a recognized image extension. Returns null in every
+	// other case (no file URL, multiple files, non-image extension, file unreadable,
+	// file too large). Errors here are intentionally swallowed: this is a *fallback*
+	// path that runs alongside the native addon, and any failure should fall
+	// through to the addon rather than break the paste.
+	//
+	// Why not consult the addon? Its `availableFormats()` confirms a `public.file-url`
+	// is present, but the addon exposes no API to retrieve the URL's *value* — text
+	// accessors panic on file-URL-only pasteboards. AppleScript is the cheapest
+	// reliable way to read the URL string itself. The `availableFormats()` gate
+	// prevents AppleScript from coercing arbitrary text into a fake `/hello`-style
+	// path on a text-only pasteboard.
+	function readPastedFilePathDarwin(formats: string[]): string | null {
+		if (process.platform !== "darwin") return null
+		if (!formats.includes("public.file-url")) return null
+		try {
+			const raw = execFileSync("/usr/bin/osascript", ["-e", "POSIX path of (the clipboard as «class furl»)"], {
+				encoding: "utf8",
+				timeout: 1000,
+				stdio: ["ignore", "pipe", "ignore"],
+			})
+			const path = raw.trim()
+			if (!path) return null
+			return path
+		} catch {
+			return null
+		}
+	}
+
+	function readImageFileFromDisk(path: string): { bytes: Uint8Array; mimeType: string } | null {
+		const mimeType = IMAGE_EXT_TO_MIME[extname(path).toLowerCase()]
+		if (!mimeType) return null
+
+		let buf: Buffer
+		try {
+			buf = readFileSync(path)
+		} catch {
+			return null
+		}
+		if (buf.length === 0 || buf.length > MAX_PASTED_FILE_BYTES) return null
+		return { bytes: new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength), mimeType }
+	}
+
+	async function readClipboardImage(): Promise<{ bytes: Uint8Array; mimeType: string } | null> {
+		const clipboard = loadClipboard()
+		if (!clipboard) return null
+
+		// Step 1: prefer reading the pasted file from disk when available.
+		//
+		// Background: if the user copied an image *file* in Finder (Cmd+C on the
+		// file itself), the macOS pasteboard contains only `public.file-url` and
+		// the addon's hasImage() returns false — historically we'd say "No image
+		// found" even though the user clearly pasted an image. Worse, if the user
+		// copied the file's *icon* (Get Info → click icon → Cmd+C, or via a clipboard
+		// manager that re-rendered the URL), the pasteboard ends up with both a
+		// file URL *and* a 1024×1024 generic NSImage rendition of the system file
+		// icon. hasImage() returns true, getImageBinary() yields the icon, and the
+		// model receives a featureless document glyph instead of the user's actual
+		// photo.
+		//
+		// Both failure modes share a cure: if the pasteboard advertises a file URL
+		// pointing at an image-typed file we can read, that file's bytes are what
+		// the user meant to paste. Read them directly and skip the addon's image
+		// rep entirely.
+		let formats: string[] = []
+		try {
+			formats = clipboard.availableFormats()
+		} catch {
+			// Older addon versions may lack availableFormats(). Treat as empty.
+		}
+		const path = readPastedFilePathDarwin(formats)
+		if (path) {
+			const fromDisk = readImageFileFromDisk(path)
+			if (fromDisk) return fromDisk
+			// File URL exists but isn't a usable image (wrong extension, too big,
+			// unreadable). Fall through to the addon — it may still have a screenshot
+			// rep alongside the URL.
+		}
+
+		// Step 2: fall back to whatever image rep the addon found on the pasteboard.
+		if (!clipboard.hasImage()) return null
+		const imageData = await clipboard.getImageBinary()
+		if (!imageData || imageData.length === 0) return null
+		const bytes = imageData instanceof Uint8Array ? imageData : Uint8Array.from(imageData)
+		// The native addon always returns PNG on macOS/Windows; on Linux (X11/Wayland)
+		// the wl-paste/xclip fallback in pi-mono negotiates the type, but the native
+		// binding itself only yields PNG.
+		return { bytes, mimeType: "image/png" }
+	}
+
+	function modelSupportsImages(modelId: string | undefined): boolean {
+		if (!modelId) return false
+		const models = getAvailableModels()
+		const meta = models.find((m) => m.slug === modelId)
+		return meta?.input_modalities.includes("image") ?? false
+	}
+
+	// Build the prefix of `[Image #N]` markers we splice into the user's text on
+	// submit. Mirrors Claude's UX: every image attached to a turn gets a stable
+	// numeric reference the user can name in their prompt, and the counter runs
+	// continuously across all turns in a session.
+	function buildImageMarkerPrefix(startIndex: number, count: number): string {
+		if (count <= 0) return ""
+		const markers: string[] = []
+		for (let i = 0; i < count; i++) markers.push(`[Image #${startIndex + i}]`)
+		return markers.join(" ")
+	}
+
 	let pendingImages: ImageContent[] = []
 	let currentCtx: ExtensionContext | null = null
 	// Per-session running counter of images attached to user turns. Resets on
@@ -249,7 +245,9 @@ export default function clipboardImageExtension(pi: ExtensionAPI) {
 	setPasteImageHandler(() => {
 		// onPasteImage is synchronous (void), but clipboard read is async.
 		// Fire-and-forget with .catch() to surface errors as notifications.
-		handlePaste().catch(() => {})
+		handlePaste().catch((err) => {
+			console.error("Clipboard paste handler error:", err)
+		})
 	})
 
 	async function handlePaste(): Promise<void> {
