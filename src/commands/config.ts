@@ -5,8 +5,7 @@ const TELEMETRY_ENV = "KIMCHI_TELEMETRY_ENABLED"
 /**
  * `kimchi config telemetry [on|off]` — show or set telemetry.enabled in
  * config.json. With no value, prints the current state (and notes when
- * an env-var override is in effect). Mirrors `kimchi config telemetry`
- * in the Go CLI.
+ * an env-var override is in effect).
  *
  * Anything else under `kimchi config <subcommand>` is unrecognised; we
  * print a usage line and return 2 (POSIX "incorrect invocation").
@@ -55,9 +54,8 @@ function handleTelemetry(args: string[]): number {
 }
 
 /**
- * Match Go's config.ParseSwitch — accept the common on/off, true/false,
- * yes/no, 1/0 spellings so users don't have to remember which CLI takes
- * which.
+ * Accept the common on/off, true/false, yes/no, 1/0 spellings so users
+ * don't have to remember which CLI takes which.
  */
 function parseSwitch(s: string): boolean | null {
 	switch (s) {

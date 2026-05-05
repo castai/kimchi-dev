@@ -1,10 +1,9 @@
 /**
- * Static model catalogue used when writing tool config files. Mirrors
- * kimchi-cli internal/tools/model.go — keep in sync. The runtime model list
- * served to the harness is fetched from the metadata API at startup
- * (src/models.ts); this static list is only used by tool config writers,
- * which configure tools to talk to a known set of model IDs without an
- * online round-trip.
+ * Static model catalogue used when writing tool config files. The runtime
+ * model list served to the harness is fetched from the metadata API at
+ * startup (src/models.ts); this static list is only used by tool config
+ * writers, which configure tools to talk to a known set of model IDs
+ * without an online round-trip.
  */
 export interface ModelLimits {
 	contextWindow: number

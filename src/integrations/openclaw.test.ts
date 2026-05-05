@@ -69,9 +69,9 @@ describe("isBatchJsonSupported", () => {
 		expect(isBatchJsonSupported("2025.12.31")).toBe(false)
 	})
 	it("returns true when version cannot be detected (assume newest)", () => {
-		// Mirrors the Go side: unknown → optimistically newest. Users who
-		// just installed via curl tend to have the newest version, so this
-		// avoids false-negativing into the slow sequential path.
+		// Unknown → optimistically newest. Users who just installed via curl
+		// tend to have the newest version, so this avoids false-negativing
+		// into the slow sequential path.
 		expect(isBatchJsonSupported(null)).toBe(true)
 	})
 })

@@ -25,9 +25,7 @@ function parseFlags(args: string[]): UpdateFlags | string {
 
 /**
  * `kimchi update` — explicit self-update entry point. Always skips the
- * 24h cache so users get fresh results when they ask. Mirrors
- * cmd/update.go runCLIUpdate without the harness branch (post-merge
- * there's only one binary).
+ * 24h cache so users get fresh results when they ask.
  *
  * On Linux/macOS the swap is atomic via POSIX rename(2); on Windows we
  * rotate kimchi.exe → kimchi.exe.old and the user is told to restart
@@ -66,9 +64,9 @@ export async function runUpdate(args: string[]): Promise<number> {
 
 	if (!flags.force) {
 		// Bare confirmation — read a single line from stdin. Default is "yes"
-		// on bare Enter, matching the Go side. We deliberately don't pull in
-		// @clack/prompts here because the harness's normal flow may be
-		// non-interactive (CI pipelines run `kimchi update --force`).
+		// on bare Enter. We deliberately don't pull in @clack/prompts here
+		// because the harness's normal flow may be non-interactive (CI
+		// pipelines run `kimchi update --force`).
 		const ok = await confirm(`Kimchi update available: ${current} → ${check.latestVersion}\nUpdate? [Y/n]: `)
 		if (!ok) {
 			console.log("Update skipped.")

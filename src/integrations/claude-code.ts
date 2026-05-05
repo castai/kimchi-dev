@@ -14,8 +14,7 @@ const CLAUDE_CONFIG_PATH = "~/.claude/settings.json"
  * Build the env-var map Claude Code reads from `~/.claude/settings.json`'s
  * `env` block. Setting ANTHROPIC_API_KEY to "" is important — Claude Code
  * picks the first non-empty of (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN)
- * and we want it to use AUTH_TOKEN with our key. Mirrors
- * kimchi-cli internal/provider/claudecode/claudecode.go.
+ * and we want it to use AUTH_TOKEN with our key.
  */
 export function claudeCodeEnv(apiKey: string, baseUrl: string = ANTHROPIC_BASE_URL): Record<string, string> {
 	return {

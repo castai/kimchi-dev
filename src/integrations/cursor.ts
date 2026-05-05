@@ -61,11 +61,10 @@ function removeAll(slice: string[], remove: readonly string[]): string[] {
  * proxy. Pure — no fs, no SQLite — so the per-row JSON shape is testable
  * without bringing up a real Cursor database.
  *
- * Mirrors `mergeCursorConfig` in kimchi-cli internal/tools/cursor.go. Cursor
- * routes different surfaces (composer / cmd-k / quick-agent / ...) at
- * different models; we map those onto Main/Coding/Sub the same way the Go
- * side does. The user's pre-existing model lists are preserved (kimchi
- * models are added uniquely, no clobber).
+ * Cursor routes different surfaces (composer / cmd-k / quick-agent / ...)
+ * at different models; we map those onto Main/Coding/Sub. The user's
+ * pre-existing model lists are preserved (kimchi models are added
+ * uniquely, no clobber).
  */
 export function mergeCursorConfig(storage: Record<string, unknown>): Record<string, unknown> {
 	storage.openAIBaseUrl = BASE_URL

@@ -2,9 +2,9 @@ import { BASE_URL } from "../constants.js"
 import { CODING_MODEL, type KimchiModel, MAIN_MODEL, SUB_MODEL } from "../models.js"
 
 /**
- * Build the OpenCode provider config block for the kimchi provider. Mirrors
- * `OpenCodeProviderConfig` in kimchi-cli internal/tools/opencode.go — keep
- * the schema in sync, OpenCode pickers fail silently on unknown keys.
+ * Build the OpenCode provider config block for the kimchi provider.
+ * OpenCode pickers fail silently on unknown keys, so keep the schema
+ * exact.
  *
  * The shape is `existing.provider.kimchi = …` in opencode.json. Each model
  * entry only lists the three models the writer cares about (Main/Coding/Sub);

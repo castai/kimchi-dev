@@ -24,11 +24,6 @@ export interface GitHubClientOptions {
 	fetch?: typeof globalThis.fetch
 }
 
-/**
- * The kimchi-dev GitHub repo is the source of truth for the merged binary's
- * releases. Pre-merge, the Go CLI fetched from castai/kimchi; once we ship
- * post-merge releases this repo's releases page becomes canonical.
- */
 export const KIMCHI_REPO: Repo = { owner: "castai", name: "kimchi-dev", binary: "kimchi" }
 
 /** Map node `process.platform` → the goreleaser-style OS slug used in asset names. */

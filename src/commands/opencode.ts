@@ -5,10 +5,8 @@ import { popScope, prepareTool } from "./_helpers.js"
 
 /**
  * `kimchi opencode [args]` — write the kimchi provider into the user's
- * opencode.json (override mode), then launch opencode. The Go CLI version
- * uses an inject-style XDG_CONFIG_HOME redirect into a managed config dir;
- * we take the simpler override path for PR2 — the user's opencode.json gets
- * the kimchi provider added, future runs see it without going through us.
+ * opencode.json (override mode), then launch opencode. Future runs see
+ * the kimchi provider without going through us.
  *
  * Accepts an optional `--scope global|project` flag; everything else is
  * forwarded to the opencode binary.

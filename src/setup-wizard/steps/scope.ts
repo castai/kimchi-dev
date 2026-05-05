@@ -4,8 +4,7 @@ import type { WizardState } from "../state.js"
 /**
  * Scope step — choose where tool configs land. Global = the tool's own
  * user-level config dir (~/.claude/, ~/.config/opencode/, …). Project =
- * a per-repo override under <cwd>/.claude/<basename>. Mirrors
- * internal/tui/steps/scope.go.
+ * a per-repo override under <cwd>/.claude/<basename>.
  */
 export async function runScopeStep(state: WizardState, opts: { backable: boolean }): Promise<void> {
 	const r = await select<"global" | "project">({

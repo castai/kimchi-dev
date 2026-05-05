@@ -5,10 +5,9 @@ import { prepareTool } from "./_helpers.js"
 
 /**
  * `kimchi claude [args]` — launch Claude Code with kimchi env vars injected
- * for this run only (no disk write). Mirrors Go-side `kimchi claude` which
- * uses claudecode.Env(apiKey) + tools.ExecTool. The user's
- * ~/.claude/settings.json is left untouched; persistent install lives behind
- * `kimchi setup` (or a future `kimchi claude --persist`).
+ * for this run only (no disk write). The user's ~/.claude/settings.json is
+ * left untouched; persistent install lives behind `kimchi setup` (or a
+ * future `kimchi claude --persist`).
  *
  * All args after `claude` are forwarded to the binary verbatim — that's how
  * `kimchi claude --help`, `kimchi claude /resume`, etc. work without us

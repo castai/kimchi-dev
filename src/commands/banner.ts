@@ -3,12 +3,10 @@ import { CODING_MODEL, MAIN_MODEL } from "../integrations/models.js"
 import type { ToolId } from "../integrations/types.js"
 
 /**
- * Print the small kimchi banner that the Go CLI shows before launching a
- * tool subcommand (`kimchi claude`, `kimchi opencode`, …). It states which
- * tool we're configuring, the model pair, GSD status, and config mode so
- * the user has a quick at-a-glance summary before the tool boots.
- *
- * Mirrors kimchi-cli cmd/banner.go.
+ * Print the small kimchi banner before launching a tool subcommand
+ * (`kimchi claude`, `kimchi opencode`, …). It states which tool we're
+ * configuring, the model pair, GSD status, and config mode so the user
+ * has a quick at-a-glance summary before the tool boots.
  */
 export interface BannerSummary {
 	toolId: ToolId
@@ -18,9 +16,9 @@ export interface BannerSummary {
 
 const BOLD = "\x1b[1m"
 const DIM = "\x1b[2m"
-// Match the Go side's exact 256-color red used when truecolor isn't available.
+// 256-color red used when truecolor isn't available.
 const RED_256 = "38;5;196"
-// Pure red for truecolor terminals — closest hex to the Go side's intent.
+// Pure red for truecolor terminals.
 const RED_TRUE = "38;2;255;0;0"
 const RED_OPEN = TRUECOLOR ? `\x1b[${RED_TRUE}m` : `\x1b[${RED_256}m`
 

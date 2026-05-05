@@ -1,3 +1,6 @@
+import { mkdtempSync, realpathSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import "../../integrations/claude-code.js"
 import { byId } from "../../integrations/registry.js"
@@ -5,7 +8,21 @@ import type { WizardState } from "../state.js"
 import { runDoneStep } from "./done.js"
 
 describe("runDoneStep", () => {
+	let tmpHome: string
+	let prevHome: string | undefined
+	let prevShell: string | undefined
+
 	beforeEach(() => {
+		// runDoneStep calls exportEnvToShellProfile, which writes to $HOME's
+		// shell profile. Redirect HOME to a scratch dir so we don't append
+		// to the test runner's real .zshrc / .bashrc.
+		tmpHome = realpathSync(mkdtempSync(join(tmpdir(), "done-step-test-")))
+		prevHome = process.env.HOME
+		prevShell = process.env.SHELL
+		process.env.HOME = tmpHome
+		// Pin shell so detection is deterministic across CI environments.
+		process.env.SHELL = "/bin/zsh"
+
 		// @clack/prompts writes its UI to stdout; silence it so the test
 		// runner output stays focused on assertions.
 		vi.spyOn(process.stdout, "write").mockImplementation(() => true)
@@ -13,6 +30,13 @@ describe("runDoneStep", () => {
 	})
 
 	afterEach(() => {
+		// biome-ignore lint/performance/noDelete: env-var cleanup needs a real delete; assigning undefined would coerce to the literal string "undefined".
+		if (prevHome === undefined) delete process.env.HOME
+		else process.env.HOME = prevHome
+		// biome-ignore lint/performance/noDelete: same reason as HOME above.
+		if (prevShell === undefined) delete process.env.SHELL
+		else process.env.SHELL = prevShell
+		rmSync(tmpHome, { recursive: true, force: true })
 		vi.restoreAllMocks()
 	})
 
@@ -83,5 +107,17 @@ describe("runDoneStep", () => {
 		const outcome = await runDoneStep(state)
 		expect(outcome.successes).toEqual([])
 		expect(outcome.failures[0]?.id).toBe("never-registered")
+	})
+
+	it("exports KIMCHI_API_KEY to the user's shell profile", async () => {
+		const tool = getClaudeCodeTool()
+		const writeSpy = vi.spyOn(tool, "write").mockResolvedValue()
+
+		await runDoneStep(baseState())
+		const { readFileSync } = await import("node:fs")
+		const zshrc = readFileSync(join(tmpHome, ".zshrc"), "utf-8")
+		expect(zshrc).toContain("export KIMCHI_API_KEY=test-key")
+
+		writeSpy.mockRestore()
 	})
 })

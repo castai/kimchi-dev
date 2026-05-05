@@ -5,8 +5,8 @@ import { dirname, join } from "node:path"
 const APP_DIR = "kimchi"
 
 /**
- * Cache base, honoring XDG_CACHE_HOME on Linux. Mirrors paths.go cacheDir().
- * Used as the parent of state.json and any backup files.
+ * Cache base, honoring XDG_CACHE_HOME on Linux. Used as the parent of
+ * state.json and any backup files.
  */
 export function cacheDir(): string {
 	const xdg = process.env.XDG_CACHE_HOME
@@ -28,8 +28,6 @@ export function backupDir(): string {
  * The real path of the running kimchi binary, with symlinks resolved. We
  * follow symlinks so writing to the result lands on the actual file
  * (Homebrew, manual installs, etc. all symlink kimchi from /usr/local/bin).
- *
- * Mirrors update/paths.go ResolveExecutablePath.
  */
 export function resolveExecutablePath(): string {
 	// process.execPath is the running binary in a Bun-compiled `kimchi` —

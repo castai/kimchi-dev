@@ -9,8 +9,6 @@ import type { ToolId } from "../integrations/types.js"
  *   …). The tool keeps working standalone afterwards.
  * - `inject`: launch via `kimchi <tool>` only — env vars are set per-process,
  *   the user's tool configs are never modified.
- *
- * Mirrors `config.ConfigMode` in the kimchi-cli Go source.
  */
 export type ConfigMode = "override" | "inject"
 
@@ -19,10 +17,6 @@ export type ConfigMode = "override" | "inject"
  * exactly the fields it owns. `cancelled` is flipped on Ctrl-C; the
  * runner stops at the first cancel without writing anything. `back` is
  * flipped on Esc; the runner rewinds to the previous non-skipped step.
- *
- * Keeping this as a single mutable object instead of immutable updates
- * mirrors the Go-side TUI state machine; no point copying a 7-field object
- * between steps.
  */
 export interface WizardState {
 	apiKey: string

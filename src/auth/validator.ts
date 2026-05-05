@@ -14,16 +14,15 @@ interface ValidatorOptions {
 }
 
 /**
- * Probe the Cast AI / Kimchi API with the given key. Mirrors the Go side's
- * internal/auth/validator.go: 200 = valid, 401 = bad key, 403 = scope problem,
- * other status = transient. Returns a ValidateResult with user-actionable
- * suggestions instead of throwing — the caller usually wants to re-prompt or
- * log, not crash.
+ * Probe the Cast AI / Kimchi API with the given key. 200 = valid, 401 =
+ * bad key, 403 = scope problem, other status = transient. Returns a
+ * ValidateResult with user-actionable suggestions instead of throwing —
+ * the caller usually wants to re-prompt or log, not crash.
  *
  * Network failures (DNS, timeout, connection refused) come back as
- * `valid: false` with a "Network error" message rather than throwing, again
- * mirroring the Go side. The caller can distinguish from a permission failure
- * by inspecting the message.
+ * `valid: false` with a "Network error" message rather than throwing.
+ * The caller can distinguish from a permission failure by inspecting
+ * the message.
  */
 export async function validateApiKey(apiKey: string, options: ValidatorOptions = {}): Promise<ValidateResult> {
 	if (apiKey === "") {

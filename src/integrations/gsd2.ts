@@ -36,11 +36,9 @@ const CATALOG: CatalogEntry[] = [
 
 /**
  * Build the JSON dropped at ~/.gsd/agent/models.json. GSD2 reads this to
- * populate the kimchi provider in its UI; cost numbers mirror what the Go
- * side wrote (Opus/Sonnet at sticker price, the free kimchi-internal models
- * at zero so GSD's budget tracker doesn't double-charge).
- *
- * Mirrors `modelsContent` in kimchi-cli internal/tools/gsd2.go — keep in sync.
+ * populate the kimchi provider in its UI. Cost numbers: Opus/Sonnet at
+ * sticker price, the free kimchi-internal models at zero so GSD's budget
+ * tracker doesn't double-charge.
  */
 export function buildGsd2ModelsConfig(apiKey: string): Record<string, unknown> {
 	return {
@@ -67,9 +65,7 @@ export function buildGsd2ModelsConfig(apiKey: string): Record<string, unknown> {
 
 /**
  * Build the YAML-frontmatter Markdown that lives at ~/.gsd/preferences.md.
- * Each task type is mapped to a kimchi-prefixed model slug. Mirrors the
- * exact format kimchi-cli writes; preserved verbatim so installs stay
- * comparable to existing Go-side configs.
+ * Each task type is mapped to a kimchi-prefixed model slug.
  */
 export function buildGsd2Preferences(): string {
 	const slug = (m: typeof MAIN_MODEL): string => `${PROVIDER_NAME}/${m.slug}`

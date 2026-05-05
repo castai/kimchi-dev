@@ -6,11 +6,8 @@ import { delimiter, join } from "node:path"
  * Locate a binary by name. PATH first, then a few well-known fallback dirs
  * so tools installed outside the user's PATH (npm global, nvm, ~/.local,
  * ~/.{name}/bin) are still discovered. Returns undefined if nothing
- * resolves.
- *
- * Mirrors kimchi-cli internal/tools/env.go:FindBinary, but doesn't throw —
- * callers that need a binary (the launchers) translate undefined into a
- * user-friendly "not installed" message themselves.
+ * resolves — callers that need a binary (the launchers) translate
+ * undefined into a user-friendly "not installed" message themselves.
  */
 export function findBinary(name: string): string | undefined {
 	const fromPath = lookPath(name)

@@ -15,10 +15,10 @@ export interface ShellProfile {
  * (typically the Kimchi API key) is available in fresh terminals. Returns
  * the path written to, or null when no profile could be detected.
  *
- * Mirrors kimchi-cli internal/config/shellprofile.go: detect the shell from
- * $SHELL with filesystem fallbacks, resolve symlinks before writing so we
- * don't replace a symlink with a regular file, and replace any existing
- * line for the same key in place to keep the profile tidy.
+ * Detects the shell from $SHELL with filesystem fallbacks, resolves
+ * symlinks before writing so we don't replace a symlink with a regular
+ * file, and replaces any existing line for the same key in place to keep
+ * the profile tidy.
  */
 export function exportEnvToShellProfile(key: string, value: string): string | null {
 	const detected = detectShellProfile()
@@ -54,7 +54,7 @@ export function exportEnvToShellProfile(key: string, value: string): string | nu
 		// Node's "utf-8" decoder is lossy (replaces invalid bytes with U+FFFD),
 		// which would let us silently corrupt a profile that contains, say, a
 		// Latin-1 prompt character. Use TextDecoder with fatal=true so we abort
-		// instead. Mirrors `utf8.Valid()` in shellprofile.go.
+		// instead.
 		try {
 			content = new TextDecoder("utf-8", { fatal: true }).decode(raw)
 		} catch {

@@ -1,7 +1,10 @@
 import { log, note, outro } from "@clack/prompts"
 import { byId } from "../../integrations/registry.js"
 import type { ToolId } from "../../integrations/types.js"
+import { exportEnvToShellProfile } from "../shell-profile.js"
 import type { WizardState } from "../state.js"
+
+const KIMCHI_API_KEY_ENV = "KIMCHI_API_KEY"
 
 interface ApplyOutcome {
 	successes: string[]
@@ -11,13 +14,16 @@ interface ApplyOutcome {
 /**
  * Apply each selected tool's writer with the resolved scope + API key.
  * Failures are collected rather than thrown so a single broken tool
- * doesn't abort the rest of the install. Mirrors the parallel-with-recap
- * behavior of internal/tui/steps/done.go.
+ * doesn't abort the rest of the install.
  *
  * In `inject` mode we deliberately skip the per-tool writers — the
  * tools work via env vars that the launcher subcommands set per-process.
  * The summary still lists which tools the user chose so they know what
  * `kimchi <tool>` will be wired to launch.
+ *
+ * Once writes finish, we also append `export KIMCHI_API_KEY=…` to the
+ * user's shell profile so the key is available to future shells without
+ * having to run `kimchi setup` again.
  */
 export async function runDoneStep(state: WizardState): Promise<ApplyOutcome> {
 	const outcome: ApplyOutcome = { successes: [], failures: [] }
@@ -45,15 +51,30 @@ export async function runDoneStep(state: WizardState): Promise<ApplyOutcome> {
 		}
 	}
 
+	// Best-effort: persist KIMCHI_API_KEY to the user's shell profile so
+	// it's available in future shells. We never fail the wizard on this —
+	// the API key already lives in ~/.config/kimchi/config.json, the env
+	// var is just a convenience.
+	const shellExport = state.apiKey ? exportEnvToShellProfile(KIMCHI_API_KEY_ENV, state.apiKey) : { path: null }
+	if (shellExport.path) {
+		log.info(`${KIMCHI_API_KEY_ENV} exported to ${shellExport.path}`)
+	} else if (shellExport.error) {
+		log.warn(`Could not export ${KIMCHI_API_KEY_ENV} to shell profile: ${shellExport.error}`)
+	}
+
 	const summaryLines = [
 		`Mode: ${state.mode}${state.mode === "override" ? " (configs written)" : " (runtime wrapper)"}`,
 		`Scope: ${state.scope}`,
 		`Telemetry: ${state.telemetryEnabled ? "enabled" : "disabled"}`,
 		outcome.successes.length > 0 ? `Configured: ${outcome.successes.join(", ")}` : "",
 		outcome.failures.length > 0 ? `Failed: ${outcome.failures.map((f) => f.id).join(", ")}` : "",
+		shellExport.path ? `${KIMCHI_API_KEY_ENV}: exported to ${shellExport.path}` : "",
 	].filter((l) => l.length > 0)
 
 	note(summaryLines.join("\n"), "Summary")
+	if (shellExport.path) {
+		log.info(`Open a new shell or run 'source ${shellExport.path}' to pick up ${KIMCHI_API_KEY_ENV}.`)
+	}
 	outro(outcome.failures.length === 0 ? "Done." : "Done with errors. Check above for details.")
 	return outcome
 }

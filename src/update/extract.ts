@@ -22,9 +22,8 @@ export async function verifyChecksum(path: string, expected: Uint8Array): Promis
 /**
  * Extract a tar.gz into a fresh temp dir and assert that `binaryName` is
  * present in the archive. Returns the temp dir path; the caller is
- * responsible for cleaning it up. Mirrors the Go side's extractArchive
- * (flat archives — the merged kimchi ships a single binary at the root,
- * no `bin/` prefix).
+ * responsible for cleaning it up. Release archives are flat — a single
+ * binary at the root, no `bin/` prefix.
  *
  * Throws if the binary is missing — that's our integrity check that the
  * release was packaged correctly for our platform.

@@ -10,9 +10,8 @@ import type { WizardState } from "../state.js"
  * detection state (installed / not detected). Pre-selects the tools we
  * detect as installed; users can flip individual toggles.
  *
- * Mirrors internal/tui/steps/tools.go. Tools whose `isInstalled()` returns
- * false are still selectable — useful when the user is about to install
- * the binary alongside.
+ * Tools whose `isInstalled()` returns false are still selectable — useful
+ * when the user is about to install the binary alongside.
  */
 export async function runToolsStep(state: WizardState, opts: { backable: boolean }): Promise<void> {
 	const tools = allTools()

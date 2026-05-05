@@ -5,9 +5,7 @@ import type { WizardState } from "../state.js"
 
 /**
  * Telemetry step — explain exactly what we collect and offer opt-in /
- * opt-out. Copy mirrors internal/tui/steps/telemetry.go verbatim because
- * privacy disclosure language is load-bearing — we shouldn't paraphrase
- * what's promised on the Go side.
+ * opt-out. The disclosure copy is load-bearing — be careful when editing.
  *
  * The choice is persisted to ~/.config/kimchi/config.json's
  * telemetry.enabled. $KIMCHI_TELEMETRY_ENABLED still wins over the

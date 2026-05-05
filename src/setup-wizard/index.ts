@@ -36,17 +36,15 @@ const STEPS: Step[] = [
  * forward, calling each step and respecting `state.back` (rewind to the
  * previous non-skipped step) and `state.cancelled` (abort).
  *
- * Step order mirrors the kimchi-cli Go wizard
- * (`internal/tui/wizard.go` newWizard):
- *   welcome → auth → tools → mode → scope → telemetry → done
+ * Step order: welcome → auth → tools → mode → scope → telemetry → done.
  *
  * Scope is skipped in inject mode because there's no disk write to scope —
  * the launcher subcommands set env vars per-process regardless of where
  * any global/project config might live.
  *
- * Telemetry is only asked when Claude Code is among the selected tools,
- * matching the Go behavior — for the other integrations it's already on
- * by their own config and the prompt would be noise.
+ * Telemetry is only asked when Claude Code is among the selected tools —
+ * the other integrations already enable it via their own config and the
+ * prompt would be noise.
  */
 export async function runWizard(): Promise<WizardResult> {
 	const state: WizardState = {

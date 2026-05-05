@@ -6,9 +6,8 @@ import { printBanner } from "./banner.js"
 
 /**
  * Resolve the kimchi API key from $KIMCHI_API_KEY first, then the config
- * file. Mirrors `config.ResolveAPIKey` in the Go CLI. Returns null when
- * neither is set; callers print a friendly "run kimchi setup" message
- * rather than throwing.
+ * file. Returns null when neither is set; callers print a friendly "run
+ * kimchi setup" message rather than throwing.
  */
 export function resolveApiKey(): string | null {
 	const env = process.env.KIMCHI_API_KEY

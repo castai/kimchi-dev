@@ -6,9 +6,8 @@ import { findBinary } from "./detect.js"
  * current terminal attached. Inherits stdio so the child owns the TTY,
  * forwards SIGINT/SIGTERM/SIGHUP, and resolves with the child's exit code.
  *
- * On Unix the kimchi-cli Go side uses syscall.Exec to replace the process,
- * which the runtime can't do from Node. The functional difference is that
- * kimchi stays alive while the child runs — fine for a launcher subcommand
+ * Node can't replace the current process the way a Unix `exec` would, so
+ * kimchi stays alive while the child runs. Fine for a launcher subcommand
  * since we exit immediately after the child exits anyway.
  */
 export async function runForeground(

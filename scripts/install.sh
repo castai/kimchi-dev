@@ -11,11 +11,6 @@
 #   KIMCHI_VERSION      Pin a specific version tag (e.g. v0.2.0). Defaults
 #                      to "latest", which resolves to the GitHub "Latest
 #                      release" pointer.
-#
-# Mirrors kimchi-cli scripts/install.sh, redirected at the kimchi-dev repo
-# (which now ships the merged binary with all subcommands — claude /
-# opencode / cursor / openclaw / gsd2 / setup / update / config) instead
-# of the retired Go CLI repo.
 
 set -euo pipefail
 

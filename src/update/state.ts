@@ -50,10 +50,9 @@ export function loadRepoState(owner: string, name: string): RepoState | null {
 
 /**
  * Read-modify-write the per-repo state. Best-effort: errors are swallowed
- * so a corrupt state file can't block an actual update. Mirrors the Go
- * side's mutex-guarded saveRepoState; we don't bother with a mutex because
- * the kimchi process is single-threaded and there's no second consumer of
- * this file (no harness any more).
+ * so a corrupt state file can't block an actual update. No mutex — the
+ * kimchi process is single-threaded and there's no second consumer of
+ * this file.
  */
 export function saveRepoState(owner: string, name: string, rs: RepoState): void {
 	try {

@@ -5,8 +5,7 @@ import { confirm, password } from "../prompt.js"
 import type { WizardState } from "../state.js"
 
 /**
- * Auth step — secure an API key for the rest of the wizard. Mirrors
- * internal/tui/steps/auth.go's two-frame design:
+ * Auth step — secure an API key for the rest of the wizard. Two frames:
  *
  *   1. **Saved-key frame** — when a key is already available (env var or
  *      ~/.config/kimchi/config.json), offer "use saved / enter new" (Y/n).

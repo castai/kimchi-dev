@@ -5,9 +5,8 @@ import { backupDir } from "./paths.js"
 
 /**
  * Run `<newPath> --version` and assert it exits 0. Catches a corrupt
- * release before the rename swaps it into place. Mirrors the Go side's
- * verifyBinary; we swallow stdout but surface the exit code so any
- * post-mortem can see what went wrong.
+ * release before the rename swaps it into place. We swallow stdout but
+ * surface the exit code so any post-mortem can see what went wrong.
  */
 export function smokeTestBinary(newPath: string): void {
 	const result = spawnSync(newPath, ["--version"], { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] })

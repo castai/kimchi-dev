@@ -1,10 +1,10 @@
 import type { ToolDefinition, ToolId } from "./types.js"
 
 /**
- * Central registry of tool integrations. Unlike the Go side (which uses
- * `init()` self-registration), TypeScript modules don't have implicit init
- * hooks, so the registry is populated by an explicit `register()` call from
- * each integration module's top level. Import side-effects do the work.
+ * Central registry of tool integrations. TypeScript modules don't have
+ * implicit init hooks, so the registry is populated by an explicit
+ * `register()` call from each integration module's top level. Import
+ * side-effects do the work.
  *
  * Loading the registry doesn't load the integration modules themselves —
  * call `loadAllIntegrations()` from your entry point (typically the setup

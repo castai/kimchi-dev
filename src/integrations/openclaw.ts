@@ -24,7 +24,7 @@ const OPENCLAW_VERSION_REGEX = /OpenClaw\s+(\d{4}\.\d+\.\d+)/
  * `apiKey` deliberately points at `${KIMCHI_API_KEY}` rather than the raw
  * key so the JSON can be checked into version control without leaking
  * credentials; the daemon resolves the env var from ~/.openclaw/.env at
- * launch time. Mirrors writeOpenClaw* in kimchi-cli internal/tools/openclaw.go.
+ * launch time.
  */
 export function buildOpenClawProviderBlock(): Record<string, unknown> {
 	return {
@@ -64,8 +64,7 @@ export function getOpenClawVersion(execFile: typeof execFileSync = execFileSync)
 
 /**
  * Whether OpenClaw supports the `config set --batch-json` flag (>= 2026.3.17).
- * Crucially, the Go side returns `true` when the version can't be detected —
- * an unknown version is treated as "probably newest", which is the right
+ * An unknown version is treated as "probably newest", which is the right
  * call when users have just installed via curl. Older versions flip back
  * to sequential `config set` calls.
  */
@@ -83,9 +82,8 @@ function detectOpenClaw(): boolean {
 
 /**
  * Write `KIMCHI_API_KEY=<key>` into ~/.openclaw/.env, replacing any prior
- * line for the same key. Mirrors writeOpenClawEnv in openclaw.go. The .env
- * file feeds the OpenClaw daemon, which interpolates `${KIMCHI_API_KEY}`
- * from openclaw.json at runtime.
+ * line for the same key. The .env file feeds the OpenClaw daemon, which
+ * interpolates `${KIMCHI_API_KEY}` from openclaw.json at runtime.
  */
 export function writeOpenClawEnv(apiKey: string): void {
 	const envPath = join(homedir(), ".openclaw", ".env")
@@ -99,7 +97,7 @@ export function writeOpenClawEnv(apiKey: string): void {
 	const newLine = `${API_KEY_ENV}=${apiKey}`
 	const lines = content === "" ? [] : content.split("\n")
 	// Drop a trailing empty line so we don't double up on the newline when
-	// we re-join below (Go's joinEnvLines re-adds it).
+	// we re-join below.
 	if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop()
 
 	let found = false

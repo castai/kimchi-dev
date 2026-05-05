@@ -2,8 +2,7 @@ import { select } from "../prompt.js"
 import type { WizardState } from "../state.js"
 
 /**
- * Mode step — pick how kimchi configures the user's tools. Mirrors
- * internal/tui/steps/mode.go.
+ * Mode step — pick how kimchi configures the user's tools.
  *
  *   - **override** (default): write kimchi settings into each tool's own
  *     config file (~/.config/opencode/opencode.json,

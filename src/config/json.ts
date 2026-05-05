@@ -39,9 +39,8 @@ export function readJson(path: string): Record<string, unknown> {
 }
 
 /**
- * Atomically write a JSON file. Creates parent directories. Uses 2-space
- * indentation to match the Go side's encoding/json output so configs we
- * round-trip with the Go CLI stay byte-comparable.
+ * Atomically write a JSON file with 2-space indentation. Creates parent
+ * directories.
  */
 export function writeJson(path: string, data: unknown): void {
 	mkdirSync(dirname(path), { recursive: true })
@@ -63,9 +62,6 @@ export function writeFileAtomic(path: string, data: string | Uint8Array): void {
  * Strip `//` line comments and `/* … *\/` block comments from JSON-with-comments
  * input. String literals (and their escape sequences) are left untouched, so a
  * URL inside `"https://..."` doesn't get truncated by the line-comment scanner.
- *
- * Mirrors `kimchi-cli internal/config/writer.go:stripJSONCComments` so configs
- * we read remain compatible with what the Go CLI produced before the merge.
  */
 function stripJsoncComments(input: string): string {
 	const out: string[] = []

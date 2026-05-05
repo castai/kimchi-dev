@@ -7,7 +7,7 @@ export type DispatchResult = { kind: "handled"; exitCode: number } | { kind: "fa
  * Decide whether a top-level kimchi subcommand handles this argv.
  *
  * Returns "handled" with an exit code when the dispatcher took ownership
- * (subcommand or merged --help). Returns "fallthrough" when the existing
+ * (subcommand or top-level --help). Returns "fallthrough" when the
  * harness/help/ACP paths in cli.ts should run instead.
  *
  * Recognised subcommands live in {@link findCommand} — keep that registry
@@ -26,7 +26,7 @@ export async function dispatchSubcommand(args: string[]): Promise<DispatchResult
 		return { kind: "handled", exitCode: code }
 	}
 
-	// Merged --help: only when there is NO subcommand context.
+	// Top-level --help: only when there is NO subcommand context.
 	// `kimchi claude --help` is a subcommand call — the handler decides what to do.
 	// `kimchi --help` (or `kimchi -h`) falls here and prints the union view.
 	if (first === undefined || first.startsWith("-")) {

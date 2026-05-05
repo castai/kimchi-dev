@@ -34,9 +34,9 @@ export interface CheckOptions {
  * when fresh and falling back to the GitHub API otherwise. Honors
  * $KIMCHI_NO_UPDATE_CHECK by short-circuiting to a "no update" result.
  *
- * Mirrors workflow.go checkForUpdate. The CheckOptions.currentVersion is
- * mandatory because we read it from package.json (already in scope at
- * the caller) rather than re-resolving here — keeps this module IO-light.
+ * The CheckOptions.currentVersion is mandatory because we read it from
+ * package.json (already in scope at the caller) rather than re-resolving
+ * here — keeps this module IO-light.
  */
 export async function checkForUpdate(opts: CheckOptions): Promise<CheckResult> {
 	const repo = opts.repo ?? KIMCHI_REPO
