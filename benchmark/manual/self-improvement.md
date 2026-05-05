@@ -17,7 +17,7 @@ pnpm install                     # install dependencies first
 pnpm run check                   # lint + typecheck — must pass before proceeding
 pnpm run test                    # unit tests — must pass before proceeding
 pnpm run build:binary            # compile the binary
-dist/bin/kimchi-code --version   # verify the binary is functional
+dist/bin/kimchi --version   # verify the binary is functional
 ```
 
 **Timeout:** 10 minutes total for this phase.

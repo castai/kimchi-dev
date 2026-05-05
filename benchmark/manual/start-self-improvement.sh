@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-BINARY="$REPO_ROOT/dist/bin/kimchi-code"
+BINARY="$REPO_ROOT/dist/bin/kimchi"
 if [[ ! -x "$BINARY" ]]; then
   echo "Error: $BINARY not found or not executable." >&2
   echo "Run 'pnpm run build:binary' first." >&2

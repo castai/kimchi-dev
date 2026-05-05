@@ -8,12 +8,12 @@ Edit `benchmark.json` to match your environment:
 
 ```json
 {
-  "binary": "/path/to/your/kimchi-code",
+  "binary": "/path/to/your/kimchi",
   "models": ["kimi-k2.5", "minimax-m2.7"]
 }
 ```
 
-- `binary` — path to the kimchi-code binary (`~` is expanded)
+- `binary` — path to the kimchi binary (`~` is expanded)
 - `models` — list of model IDs to benchmark; scripts are generated for every model × task combination
 
 ## Workflow
@@ -136,7 +136,7 @@ From the repo root:
 ./benchmark/manual/start-self-improvement.sh
 ```
 
-This launches `kimchi-code` in `--yolo` mode with the self-improvement prompt. The agent will cycle through build → benchmark → analyse → code change phases automatically, stopping when a stopping condition is met (see `self-improvement.md` for details).
+This launches `kimchi` in `--yolo` mode with the self-improvement prompt. The agent will cycle through build → benchmark → analyse → code change phases automatically, stopping when a stopping condition is met (see `self-improvement.md` for details).
 
 ### Custom improvement goals
 

@@ -14,7 +14,7 @@ else
   exit 1
 fi
 
-BINARY=$(python3 -c "import json,os; cfg=json.load(open('$BENCHMARK_JSON')); print(os.path.expanduser(cfg.get('binary','~/_dev/kimchi-dev/dist/bin/kimchi-code')))")
+BINARY=$(python3 -c "import json,os; cfg=json.load(open('$BENCHMARK_JSON')); print(os.path.expanduser(cfg.get('binary','~/_dev/kimchi-dev/dist/bin/kimchi')))")
 
 if [[ ! -f "$BINARY" ]]; then
   echo "Binary not found: $BINARY"
