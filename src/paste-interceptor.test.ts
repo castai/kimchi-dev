@@ -36,12 +36,12 @@ describe("looksLikeRawPaste", () => {
 describe("wrapAsBracketedPaste", () => {
 	it("wraps with ESC[200~ … ESC[201~ and normalizes \\r to \\n", () => {
 		const out = wrapAsBracketedPaste("one\rtwo\rthree")
-		expect(out).toBe(`${ESC}[200~one\ntwo\nthree${ESC}[201~`)
+		expect(out).toBe(`${ESC}[200~one\ntwo\nthree\n${ESC}[201~`)
 	})
 
 	it("normalizes \\r\\n as well as bare \\r", () => {
 		const out = wrapAsBracketedPaste("a\r\nb\rc")
-		expect(out).toBe(`${ESC}[200~a\nb\nc${ESC}[201~`)
+		expect(out).toBe(`${ESC}[200~a\nb\nc\n${ESC}[201~`)
 	})
 })
 
@@ -60,7 +60,7 @@ describe("installPasteInterceptor", () => {
 		stdin.emit("data", "one\rtwo\rthree")
 
 		expect(received).toHaveLength(1)
-		expect(received[0]).toBe(`${ESC}[200~one\ntwo\nthree${ESC}[201~`)
+		expect(received[0]).toBe(`${ESC}[200~one\ntwo\nthree\n${ESC}[201~`)
 	})
 
 	it("passes through chunks that don't look like a paste", () => {
@@ -99,6 +99,6 @@ describe("installPasteInterceptor", () => {
 		stdin.on("data", (chunk) => received.push(chunk.toString()))
 		stdin.emit("data", "one\rtwo\rthree")
 		expect(received).toHaveLength(1)
-		expect(received[0]).toBe(`${ESC}[200~one\ntwo\nthree${ESC}[201~`)
+		expect(received[0]).toBe(`${ESC}[200~one\ntwo\nthree\n${ESC}[201~`)
 	})
 })

@@ -23,7 +23,7 @@ export function looksLikeRawPaste(chunk: string): boolean {
 }
 
 export function wrapAsBracketedPaste(chunk: string): string {
-	return BRACKETED_START + chunk.replace(/\r\n?/g, "\n") + BRACKETED_END
+	return `${BRACKETED_START + chunk.replace(/\r\n?/g, "\n")}\n${BRACKETED_END}`
 }
 
 type MarkedEmit = NodeJS.ReadStream["emit"] & { installed?: boolean }

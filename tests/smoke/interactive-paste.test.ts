@@ -44,7 +44,7 @@ function allFourLinesVisible(plain: string): boolean {
 
 // TODO broken by the new splash screen.
 // Disabled to unblock releases. Will be fixed in separate PR.
-describe.skip("interactive multi-line paste (LLM-1358)", () => {
+describe("interactive multi-line paste (LLM-1358)", () => {
 	it("bracketed paste of 4 lines keeps all 4 lines in the editor buffer", { timeout: 60_000 }, async () => {
 		const session = spawnInteractive()
 		try {
