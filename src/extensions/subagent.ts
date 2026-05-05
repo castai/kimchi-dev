@@ -399,10 +399,11 @@ function spawnSubagent(
 		const proc = spawn(invocation.command, invocation.args, {
 			cwd,
 			shell: false,
-			stdio: ["ignore", "pipe", "pipe"],
+			stdio: ["pipe", "pipe", "pipe"],
 			env: {
 				...process.env,
 				KIMCHI_SUBAGENT: "1",
+				KIMCHI_SUBAGENT_SUPPORTS_BUDGET_FEEDBACK: "1",
 				...(budgetConfig
 					? {
 							KIMCHI_SUBAGENT_SOFT_BUDGET: String(budgetConfig.softLimit),
@@ -478,8 +479,26 @@ function spawnSubagent(
 				inputTokens += lineInput
 				outputTokens += lineOutput
 				if (budgetState) {
+					const prevState = budgetState.state
 					const result = checkBudgetState(inputTokens, outputTokens, budgetState, budgetState.state)
 					budgetState.state = result.state
+					const total = inputTokens + outputTokens
+					if (budgetState.state !== prevState && proc.stdin.writable) {
+						try {
+							const event =
+								budgetState.state === "exceeded"
+									? { type: "budget_exceeded", used: total, limit: budgetState.softLimit }
+									: {
+											type: "budget_warning",
+											used: total,
+											limit: budgetState.softLimit,
+											percent: Math.round((total / budgetState.softLimit) * 100),
+										}
+							proc.stdin.write(`${JSON.stringify(event)}\n`)
+						} catch {
+							// Child dropped stdin — degrade gracefully
+						}
+					}
 					if (result.kill) {
 						kill("token_budget_exceeded")
 					} else if (result.warning !== null) {
@@ -636,7 +655,7 @@ const SubagentParams = Type.Object({
 	tokenBudget: Type.Optional(
 		Type.Union([Type.Integer({ minimum: 1 }), Type.String({ pattern: "^[1-9][0-9]*$" })], {
 			description:
-				"**Soft advisory cap** on uncached input + output tokens (cache-read tokens are excluded from the count). A warning is shown in the parent output at ~80% and a wrap-up notice at 100%. The subagent knows the limit from its system prompt but does not receive real-time feedback. Use for cost guidance — not strict enforcement. Omit by default.",
+				"**Soft advisory cap** on uncached input + output tokens (cache-read tokens are excluded from the count). The subagent receives a budget warning injected into its conversation at ~80% and a wrap-up notice at 100%, giving it a chance to finish gracefully before the hard ceiling. Use for cost guidance — not strict enforcement. Omit by default.",
 		}),
 	),
 	hardTokenBudget: Type.Optional(
