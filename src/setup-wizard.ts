@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import * as clack from "@clack/prompts"
-import { discoverCcConfig } from "./cc-discovery.js"
+import { AGENT_DEFINITIONS, type AgentDiscovery, discoverAgent } from "./agent-discovery/index.js"
 import { DEFAULT_SKILL_PATHS, getAgentConfigDir } from "./config.js"
 import type { ServerEntry } from "./extensions/mcp-adapter/types.js"
 
@@ -15,23 +15,56 @@ export interface SetupResult {
 
 type MigrationAction = "migrate" | "skip-once" | "skip-forever"
 
-async function runMigrationPhase(
-	mcpServers: Record<string, ServerEntry>,
-	skillCount: number,
-): Promise<MigrationAction> {
-	const serverNames = Object.keys(mcpServers)
-	const lines: string[] = []
-	if (serverNames.length > 0) {
-		lines.push(`MCP servers: ${serverNames.join(", ")}`)
+interface MergedDiscovery {
+	mcpServers: Record<string, ServerEntry>
+	agents: AgentDiscovery[]
+	hasAnythingMigratable: boolean
+}
+
+function mergeDiscoveries(): MergedDiscovery {
+	const agents = AGENT_DEFINITIONS.map(discoverAgent)
+	// Merge MCP servers in *reverse* registry order so earlier-registered
+	// agents win on name collisions. Today: CC is registered first → CC
+	// wins, matching previous behaviour.
+	const mcpServers: Record<string, ServerEntry> = {}
+	for (let i = agents.length - 1; i >= 0; i--) {
+		Object.assign(mcpServers, agents[i].mcpServers)
 	}
-	if (skillCount > 0) {
-		lines.push(`Skills: ${skillCount} skill(s) in ~/.claude/skills/`)
+	const hasAnythingMigratable = agents.some((a) => Object.keys(a.mcpServers).length > 0 || a.skillCount > 0)
+	return { mcpServers, agents, hasAnythingMigratable }
+}
+
+function prettyHome(p: string): string {
+	const h = homedir()
+	return p === h || p.startsWith(`${h}/`) ? `~${p.slice(h.length)}` : p
+}
+
+interface MigrationPhaseResult {
+	action: MigrationAction
+	selectedServers: Record<string, ServerEntry>
+}
+
+async function runMigrationPhase(d: MergedDiscovery): Promise<MigrationPhaseResult> {
+	const lines: string[] = []
+	const names = Object.keys(d.mcpServers)
+	if (names.length > 0) lines.push(`MCP servers: ${names.join(", ")}`)
+	for (const a of d.agents) {
+		if (a.skillCount > 0 && a.skillsDir) {
+			lines.push(`${a.displayName} skills: ${a.skillCount} in ${prettyHome(a.skillsDir)}`)
+		}
 	}
 
-	clack.note(lines.join("\n"), "Claude Code configuration found")
+	// Title: list each present agent. Presence = servers OR skills.
+	const present = d.agents.filter((a) => Object.keys(a.mcpServers).length > 0 || a.skillCount > 0)
+	const title =
+		present.length === 0
+			? "Configuration found"
+			: `${present.map((a) => a.displayName).join(" + ")} configuration found`
+
+	clack.note(lines.join("\n"), title)
 
 	const action = await clack.select<MigrationAction>({
-		message: "Migrate Claude Code MCP servers to Kimchi?",
+		message: "Migrate MCP servers to Kimchi?",
 		options: [
 			{ value: "migrate", label: "Migrate now" },
 			{ value: "skip-once", label: "Skip this time" },
@@ -40,11 +73,28 @@ async function runMigrationPhase(
 	})
 
 	if (clack.isCancel(action)) {
-		return "skip-once"
+		return { action: "skip-once", selectedServers: {} }
 	}
 
 	const validActions: MigrationAction[] = ["migrate", "skip-once", "skip-forever"]
-	return validActions.includes(action as MigrationAction) ? (action as MigrationAction) : "skip-once"
+	const resolvedAction = validActions.includes(action as MigrationAction) ? (action as MigrationAction) : "skip-once"
+
+	if (resolvedAction !== "migrate" || names.length === 0) {
+		return { action: resolvedAction, selectedServers: {} }
+	}
+
+	const chosen = await clack.multiselect<string>({
+		message: "Select MCP servers to migrate:",
+		options: names.map((name) => ({ value: name, label: name, initialChecked: true })),
+		required: false,
+	})
+
+	if (clack.isCancel(chosen) || !Array.isArray(chosen)) {
+		return { action: "skip-once", selectedServers: {} }
+	}
+
+	const selectedServers = Object.fromEntries(chosen.map((name) => [name, d.mcpServers[name]]))
+	return { action: resolvedAction, selectedServers }
 }
 
 function writeMcpServers(servers: Record<string, ServerEntry>): void {
@@ -101,16 +151,14 @@ export async function runSetupWizard(options: {
 	clack.intro("Kimchi first-time setup")
 
 	let migrationState: MigrationState | undefined
-	const discovery = options.needsMigrationCheck ? discoverCcConfig() : { mcpServers: {}, skillCount: 0 }
-	const hasCcConfig =
-		options.needsMigrationCheck && (Object.keys(discovery.mcpServers).length > 0 || discovery.skillCount > 0)
+	const merged = options.needsMigrationCheck ? mergeDiscoveries() : null
 
-	if (hasCcConfig) {
-		const action = await runMigrationPhase(discovery.mcpServers, discovery.skillCount)
+	if (merged?.hasAnythingMigratable) {
+		const { action, selectedServers } = await runMigrationPhase(merged)
 		if (action === "migrate") {
-			writeMcpServers(discovery.mcpServers)
+			writeMcpServers(selectedServers)
 			migrationState = "done"
-			clack.log.success(`Migrated ${Object.keys(discovery.mcpServers).length} MCP server(s) to Kimchi.`)
+			clack.log.success(`Migrated ${Object.keys(selectedServers).length} MCP server(s) to Kimchi.`)
 		} else if (action === "skip-forever") {
 			migrationState = "skip-forever"
 		}
