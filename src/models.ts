@@ -465,6 +465,7 @@ export async function updateModelsConfig(
 		fetched = await fetchAvailableModels(apiKey, options)
 	} catch (err) {
 		const cached = readCachedMetadata(modelsJsonPath) ?? []
+		if (err instanceof ModelsFetchError && err.status === 401) throw err
 		if (options.allowCachedFallback === false || (cached.length === 0 && otherModels.length === 0)) throw err
 		const message = err instanceof Error ? err.message : String(err)
 		console.warn(`Failed to refresh models from API, using cached list: ${message}`)

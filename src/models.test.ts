@@ -608,6 +608,15 @@ describe("updateModelsConfig", () => {
 		expect(result.models.map((m) => m.slug)).toEqual(["kimi-k2.5"])
 	})
 
+	it("rejects invalid credentials even when cached models exist", async () => {
+		vi.mocked(fetch).mockResolvedValueOnce(Response.json({ models: [KIMI] }))
+		await updateModelsConfig(modelsJsonPath, "saved-key")
+		const original = readFileSync(modelsJsonPath, "utf-8")
+		vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 401, statusText: "Unauthorized" }))
+		await expect(updateModelsConfig(modelsJsonPath, "rejected-key")).rejects.toMatchObject({ status: 401 })
+		expect(readFileSync(modelsJsonPath, "utf-8")).toBe(original)
+	})
+
 	it("does not overwrite cached models.json when fetch fails", async () => {
 		vi.mocked(fetch).mockResolvedValueOnce({
 			ok: true,

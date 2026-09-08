@@ -33,6 +33,7 @@ import {
 	DEFAULT_SKILL_PATHS,
 	ensureHideThinkingBlockDefault,
 	ensureQuietStartupDefault,
+	getApiKeyMismatchWarning,
 	loadConfig,
 	RETRY_DEFAULTS,
 	readTelemetryConfig,
@@ -44,6 +45,7 @@ import {
 import { isBunBinary } from "./env.js"
 import activityExtension from "./extensions/activity.js"
 import agentsExtension from "./extensions/agents/index.js"
+import createApiKeyWarningExtension from "./extensions/api-key-warning.js"
 import assistantPrefixExtension from "./extensions/assistant-prefix.js"
 import autoUpdateSettingsExtension from "./extensions/auto-update-settings.js"
 import bashControlExtension from "./extensions/bash-background/bash-control-extension.js"
@@ -270,6 +272,8 @@ const helpOrVersion = isHelpOrVersionArgs(originalArgs)
 class SetupCancelled extends Error {}
 
 try {
+	const apiKeyWarning = helpOrVersion ? undefined : getApiKeyMismatchWarning()
+	if (apiKeyWarning) console.warn(`Warning: ${apiKeyWarning}`)
 	// Top-level kimchi subcommands (setup, claude, opencode, …) and the
 	// top-level --help take ownership before any harness setup runs.
 	// `--version` falls through to pi-coding-agent's main below so it prints
@@ -299,11 +303,6 @@ try {
 		let config = loadConfig()
 
 		const envKey = process.env.KIMCHI_API_KEY || undefined
-		delete process.env.KIMCHI_API_KEY
-		if (envKey && !config.apiKey) {
-			writeApiKey(envKey)
-			config = loadConfig()
-		}
 
 		// Capture the frozen launch-time metadata (OS + config snapshot incl.
 		// multimodel) for injection into JSONL/HTML exports. Decoupled from the
@@ -312,7 +311,7 @@ try {
 		captureSessionStart(config, telemetryConfig.enabled)
 
 		// Fire harness_launched (one shot per harness session; respects telemetry opt-out).
-		// Sent after loadConfig() + env-key reload so the config snapshot reflects
+		// Sent after loadConfig() so the config snapshot reflects
 		// real values rather than defaults.
 		if (telemetryConfig.enabled) {
 			sendPreSessionEvent(telemetryConfig, "harness_launched", {
@@ -372,6 +371,9 @@ try {
 			models = [...models, ...readOllamaModelMetadata(modelsJsonPath)]
 		} catch (err) {
 			const is401 = err instanceof Error && err.message.includes("401")
+			if (is401 && envKey) {
+				throw new Error("KIMCHI_API_KEY was rejected. Update or unset it, then try again.")
+			}
 			if (is401 && process.stdin.isTTY) {
 				console.warn("API key is invalid or expired. Redirecting to setup...")
 				writeApiKey("")
@@ -586,6 +588,7 @@ try {
 			// First so its session_start handler syncs project trust onto the
 			// settings watcher before any other handler reads settings.
 			settingsTrustSyncExtension,
+			createApiKeyWarningExtension(apiKeyWarning),
 			autoUpdateSettingsExtension,
 			startupUpdateExtension,
 			packageInstallGuardExtension,

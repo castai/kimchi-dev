@@ -8,6 +8,7 @@ import {
 	clearApiKey,
 	ensureHideThinkingBlockDefault,
 	ensureQuietStartupDefault,
+	getApiKeyMismatchWarning,
 	loadConfig,
 	RETRY_DEFAULTS,
 	readApiKeyFromConfigFile,
@@ -31,10 +32,35 @@ describe("loadConfig", () => {
 	beforeEach(() => {
 		tempDir = mkdtempSync(join(tmpdir(), "kimchi-test-"))
 		configPath = join(tempDir, "config.json")
+		vi.stubEnv("KIMCHI_API_KEY", "")
 	})
 
 	afterEach(() => {
 		rmSync(tempDir, { recursive: true, force: true })
+		vi.unstubAllEnvs()
+	})
+
+	it("prefers the environment key without replacing the saved login", () => {
+		writeFileSync(configPath, JSON.stringify({ apiKey: "saved-key" }))
+		vi.stubEnv("KIMCHI_API_KEY", "environment-key")
+		expect(loadConfig({ configPath }).apiKey).toBe("environment-key")
+		expect(readApiKeyFromConfigFile(configPath)).toBe("saved-key")
+		vi.stubEnv("KIMCHI_API_KEY", "")
+		expect(loadConfig({ configPath }).apiKey).toBe("saved-key")
+	})
+
+	it.each(["", "saved-key", "different-key"])("warns only for a differing nonempty environment key (%s)", (envKey) => {
+		vi.stubEnv("KIMCHI_API_KEY", envKey)
+		const warning = getApiKeyMismatchWarning("saved-key")
+		if (envKey === "different-key") {
+			expect(warning).toContain("Using the environment key")
+			expect(warning).toContain("unset KIMCHI_API_KEY")
+			expect(warning).not.toContain("saved-key")
+			expect(warning).not.toContain(envKey)
+		} else {
+			expect(warning).toBeUndefined()
+		}
+		expect(getApiKeyMismatchWarning("")).toBeUndefined()
 	})
 
 	it("reads apiKey from config file", () => {

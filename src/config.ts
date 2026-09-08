@@ -439,7 +439,7 @@ export function readTelemetryConfig(configPath?: string): TelemetryConfig {
  * individual keys, but global fills in any missing keys.
  * For all other fields, project config completely replaces global.
  *
- * Returns `apiKey: ""` when no API key is present in either config file.
+ * Returns `apiKey: ""` when no API key is present in the environment or config.
  */
 export function loadConfig(options?: { configPath?: string; cwd?: string }): KimchiConfig {
 	// Read global config
@@ -469,7 +469,7 @@ export function loadConfig(options?: { configPath?: string; cwd?: string }): Kim
 	}
 
 	return {
-		apiKey: extras.apiKey ?? "",
+		apiKey: process.env.KIMCHI_API_KEY || extras.apiKey || "",
 		agentConfigDir: AGENT_CONFIG_DIR,
 		llmEndpoint: extras.llmEndpoint ?? KIMCHI_LLM_ENDPOINT,
 		customLlmEndpoint: extras.llmEndpoint,
@@ -482,6 +482,15 @@ export function loadConfig(options?: { configPath?: string; cwd?: string }): Kim
 		deviceId: extras.deviceId ?? "",
 		redaction: extras.redaction,
 	}
+}
+
+/** Explain an environment override without exposing either credential. */
+export function getApiKeyMismatchWarning(
+	savedKey = readApiKeyFromConfigFile(resolve(process.cwd(), ".kimchi", "config.json")) ?? readApiKeyFromConfigFile(),
+): string | undefined {
+	const envKey = process.env.KIMCHI_API_KEY
+	if (!envKey || !savedKey || envKey === savedKey) return undefined
+	return "KIMCHI_API_KEY differs from your saved key. Using the environment key. Run `unset KIMCHI_API_KEY` to use your saved login."
 }
 
 export function getAgentConfigDir(): string {

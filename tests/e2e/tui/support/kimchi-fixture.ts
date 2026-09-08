@@ -84,6 +84,7 @@ export interface SeedHomeResult {
 }
 
 export interface CreateKimchiFixtureOptions {
+	rejectedApiKeys?: string[]
 	models?: FakeModel[]
 	responses: FakeResponseScript[]
 	routerResponses?: unknown[]
