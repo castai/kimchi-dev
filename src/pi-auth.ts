@@ -6,7 +6,7 @@ import { lock } from "proper-lockfile"
 const KIMCHI_PROVIDER = "kimchi-dev"
 const KIMCHI_EXPERIMENTAL_PROVIDER = "kimchi-experimental"
 
-function isKimchiProvider(providerId: string): boolean {
+export function isKimchiProvider(providerId: string): boolean {
 	return (
 		providerId === KIMCHI_PROVIDER ||
 		providerId.startsWith(`${KIMCHI_PROVIDER}/`) ||

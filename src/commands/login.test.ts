@@ -32,7 +32,8 @@ it.each(["", "new-key", "old-key"])("saves login without exporting and warns onl
 	expect(exportEnvToShellProfile).not.toHaveBeenCalled()
 	expect(process.env.KIMCHI_API_KEY).toBe(envKey)
 	if (envKey === "old-key") {
-		expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("unset KIMCHI_API_KEY"))
+		expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("Using the environment key."))
+		expect(console.warn).not.toHaveBeenCalledWith(expect.stringContaining("unset"))
 	} else {
 		expect(console.warn).not.toHaveBeenCalled()
 	}

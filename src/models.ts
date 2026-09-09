@@ -293,6 +293,8 @@ function buildModelsConfig(models: ModelMetadata[], endpoint?: string) {
 
 export interface ModelsConfigResult {
 	models: ModelMetadata[]
+	/** A custom-provider fallback followed a Kimchi 401; do not persist this key. */
+	apiKeyRejected?: boolean
 }
 
 function modelToMetadata(m: PiModelConfig): ModelMetadata {
@@ -437,10 +439,10 @@ export function readExperimentalModels(modelsJsonPath: string): ModelMetadata[] 
 /**
  * Fetch available models from the kimchi metadata API and write the
  * configuration to modelsJsonPath. If no API key is configured, returns
- * cached models (if available) or an empty list without making a network call.
- * If the fetch fails and the previous models.json is still on disk, returns
- * the cached models with a warning. Throws only when a key is present but
- * there is no cache to fall back on.
+ * cached and custom models (if available) without making a network call.
+ * Failed refreshes fall back to existing models with a warning, unless
+ * fallback is disabled or no models exist. A Kimchi 401 requires custom
+ * models to permit fallback; cached Kimchi models alone are not enough.
  *
  * User-added providers (anything other than "kimchi-dev") are preserved across
  * updates so custom model configurations are not lost on startup.
@@ -465,11 +467,15 @@ export async function updateModelsConfig(
 		fetched = await fetchAvailableModels(apiKey, options)
 	} catch (err) {
 		const cached = readCachedMetadata(modelsJsonPath) ?? []
-		if (err instanceof ModelsFetchError && err.status === 401) throw err
+		const apiKeyRejected = err instanceof ModelsFetchError && err.status === 401
+		// Custom providers authenticate independently, so a rejected saved Kimchi
+		// key need not block their startup. The caller can reject an explicit env
+		// override using apiKeyRejected; strict credential validation disables fallback.
+		if (apiKeyRejected && otherModels.length === 0) throw err
 		if (options.allowCachedFallback === false || (cached.length === 0 && otherModels.length === 0)) throw err
 		const message = err instanceof Error ? err.message : String(err)
 		console.warn(`Failed to refresh models from API, using cached list: ${message}`)
-		return { models: sortModels([...cached, ...otherModels]) }
+		return { models: sortModels([...cached, ...otherModels]), apiKeyRejected }
 	}
 
 	const activeModels = fetched.filter((m) => m.status !== "sunset" && m.limits.max_output_tokens > 0)

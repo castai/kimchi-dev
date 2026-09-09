@@ -30,6 +30,7 @@ import "./login-command-patch.js"
 import "./uncaught-epipe-patch.js"
 import "./paste-to-editor-patch.js"
 import {
+	captureApiKeyFromEnvironment,
 	DEFAULT_SKILL_PATHS,
 	ensureHideThinkingBlockDefault,
 	ensureQuietStartupDefault,
@@ -108,6 +109,7 @@ import promptEnrichmentExtension from "./extensions/prompt-construction/prompt-e
 import promptSummaryExtension from "./extensions/prompt-summary.js"
 import questionnaireExtension from "./extensions/questionnaire/index.js"
 import rateLimitNoticeExtension from "./extensions/rate-limit-notice.js"
+import createRejectedApiKeyExtension from "./extensions/rejected-api-key.js"
 import remoteRunExtension from "./extensions/remote-run/index.js"
 import reportBugExtension from "./extensions/report-bug.js"
 import requestTimingExtension from "./extensions/request-timing.js"
@@ -302,7 +304,7 @@ try {
 		setPrintGate(hasPrintFlag(originalArgs), hasFermentOneshotArg(originalArgs))
 		let config = loadConfig()
 
-		const envKey = process.env.KIMCHI_API_KEY || undefined
+		const envKey = captureApiKeyFromEnvironment()
 
 		// Capture the frozen launch-time metadata (OS + config snapshot incl.
 		// multimodel) for injection into JSONL/HTML exports. Decoupled from the
@@ -357,9 +359,17 @@ try {
 		const modelsJsonPath = resolve(agentDir, "models.json")
 
 		let currentApiKey = apiKey
+		let apiKeyRejected = false
+		const rejectedEnvironmentKeyMessage =
+			"KIMCHI_API_KEY environment variable contains an invalid API key. Update or delete the environment variable, then restart Kimchi."
 		let models: Awaited<ReturnType<typeof updateModelsConfig>>["models"]
 		try {
-			;({ models } = await updateModelsConfig(modelsJsonPath, currentApiKey, { endpoint: config.customLlmEndpoint }))
+			;({ models, apiKeyRejected = false } = await updateModelsConfig(modelsJsonPath, currentApiKey, {
+				endpoint: config.customLlmEndpoint,
+			}))
+			// An explicit environment override cannot be fixed by logging in again.
+			// Fail even when custom models allowed metadata discovery to fall back.
+			if (apiKeyRejected && envKey) throw new Error(rejectedEnvironmentKeyMessage)
 			if (experimentalFeatures) {
 				injectExperimentalProvider(modelsJsonPath, currentApiKey ?? "")
 				models = [...models, ...readExperimentalModels(modelsJsonPath)]
@@ -372,7 +382,7 @@ try {
 		} catch (err) {
 			const is401 = err instanceof Error && err.message.includes("401")
 			if (is401 && envKey) {
-				throw new Error("KIMCHI_API_KEY was rejected. Update or unset it, then try again.")
+				throw new Error(rejectedEnvironmentKeyMessage)
 			}
 			if (is401 && process.stdin.isTTY) {
 				console.warn("API key is invalid or expired. Redirecting to setup...")
@@ -387,7 +397,9 @@ try {
 				currentApiKey = wizardResult.apiKey ?? ""
 				writeApiKey(currentApiKey)
 				config = loadConfig()
-				;({ models } = await updateModelsConfig(modelsJsonPath, currentApiKey, { endpoint: config.customLlmEndpoint }))
+				;({ models, apiKeyRejected = false } = await updateModelsConfig(modelsJsonPath, currentApiKey, {
+					endpoint: config.customLlmEndpoint,
+				}))
 				if (experimentalFeatures) {
 					injectExperimentalProvider(modelsJsonPath, currentApiKey)
 					models = [...models, ...readExperimentalModels(modelsJsonPath)]
@@ -407,7 +419,10 @@ try {
 				throw err
 			}
 		}
-		await syncPiAuth(resolve(agentDir, "auth.json"), modelsJsonPath, currentApiKey)
+		// Custom providers may keep startup alive after a Kimchi 401. Never replace
+		// saved credentials with that rejected key; the runtime guard below prevents
+		// silently falling back to the stored Kimchi account instead.
+		if (!apiKeyRejected) await syncPiAuth(resolve(agentDir, "auth.json"), modelsJsonPath, currentApiKey)
 
 		// Must run before main() so the keybindings file is loaded with the
 		// override in place.
@@ -571,6 +586,7 @@ try {
 		}
 		const startupAuthState = createStartupAuthGateState()
 		const startupAuthGate = createStartupAuthGate({
+			rejectedApiKey: apiKeyRejected ? currentApiKey : undefined,
 			...interactiveStartupContext,
 			state: startupAuthState,
 		})
@@ -599,6 +615,7 @@ try {
 			branchCommandExtension,
 			...terminalUiExtensionFactories,
 			loginExtension,
+			createRejectedApiKeyExtension(apiKeyRejected ? currentApiKey : undefined),
 			startupAuthGate,
 			loopGuardExtension,
 			explorationGuardExtension,
