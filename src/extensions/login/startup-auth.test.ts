@@ -1,6 +1,8 @@
 import { initTheme, LoginDialogComponent, type Theme } from "@earendil-works/pi-coding-agent"
 import type { TUI } from "@earendil-works/pi-tui"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import { createContext } from "../__mocks__/context.js"
+import { createModel, createModelRegistry } from "../__mocks__/model-registry.js"
 
 const authMock = vi.hoisted(() => ({
 	authenticateViaBrowser: vi.fn(),
@@ -29,6 +31,7 @@ vi.mock("../../pi-auth.js", () => piAuthMock)
 import {
 	createStartupAuthGate,
 	createStartupAuthGateState,
+	hasUsableAuth,
 	type StartupAuthGateState,
 	shouldShowStartupAuthGate,
 } from "./startup-auth.js"
@@ -206,6 +209,19 @@ describe("shouldShowStartupAuthGate", () => {
 })
 
 describe("startup auth gate", () => {
+	it.each([
+		"custom",
+		"kimchi-dev/openai",
+	])("does not sync a rejected key while checking %s authentication", async (provider) => {
+		configMock.loadConfig.mockReturnValue({ apiKey: "rejected-key" })
+		const registry = { ...createModelRegistry([createModel("test-model", provider)]), refresh: vi.fn() }
+		const ctx = createContext({ modelRegistry: registry })
+
+		expect(await hasUsableAuth(ctx, "rejected-key")).toBe(provider === "custom")
+		expect(piAuthMock.syncPiAuth).not.toHaveBeenCalled()
+		expect(registry.refresh).toHaveBeenCalledOnce()
+	})
+
 	it("runs the shared Kimchi login option and selects the configured model", async () => {
 		const harness = createHarness()
 		const started = harness.start()
