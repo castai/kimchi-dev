@@ -59,7 +59,7 @@ describe("runDoneStep", () => {
 
 		// Mock updateModelsConfig so we don't hit the real network.
 		vi.spyOn(modelsModule, "updateModelsConfig").mockResolvedValue({
-			models: TEST_MODELS as import("../../models.js").ModelMetadata[],
+			models: [...TEST_MODELS],
 		})
 
 		clackMock.spinnerInstance.start.mockClear()

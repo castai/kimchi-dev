@@ -10,7 +10,7 @@ import {
 } from "@earendil-works/pi-coding-agent"
 import { type Component, Container, type TUI } from "@earendil-works/pi-tui"
 import { authenticateViaBrowser } from "../../cli-auth/index.js"
-import { loadConfig, writeApiKey } from "../../config.js"
+import { getApiKeyMismatchWarning, getApiKeySource, loadConfig, writeApiKey } from "../../config.js"
 import {
 	isTransientModelsError,
 	ModelsFetchError,
@@ -209,7 +209,7 @@ export async function syncKimchiAuth(modelRegistry: ModelRegistryLike, token: st
 
 	if (!modelRegistry.getApiKeyForProvider) return
 	const unresolvedProviders: string[] = []
-	const expectedKey = token || undefined
+	const expectedKey = (getApiKeySource() === "environment" ? loadConfig().apiKey : token) || undefined
 	for (const providerId of getKimchiProviderIds(modelRegistry)) {
 		const resolvedKey = await modelRegistry.getApiKeyForProvider(providerId)
 		if (resolvedKey !== expectedKey) {
@@ -302,6 +302,8 @@ async function configureKimchiToken(
 		const selectedModel = providerModels.find((m) => m.id === KIMCHI_DEFAULT_MODEL_ID) ?? providerModels[0]
 		await host.setModel?.(selectedModel)
 		host.addFeedback?.(formatKimchiLoginSuccessMessage(selectedModel.id))
+		const warning = getApiKeyMismatchWarning(token)
+		if (warning) host.addFeedback?.(warning)
 		return true
 	}
 

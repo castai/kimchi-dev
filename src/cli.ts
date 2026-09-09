@@ -30,6 +30,7 @@ import "./login-command-patch.js"
 import "./uncaught-epipe-patch.js"
 import "./paste-to-editor-patch.js"
 import {
+	captureApiKeyFromEnvironment,
 	DEFAULT_SKILL_PATHS,
 	ensureHideThinkingBlockDefault,
 	ensureQuietStartupDefault,
@@ -43,6 +44,7 @@ import {
 	writeSkillPaths,
 } from "./config.js"
 import { isBunBinary } from "./env.js"
+import { discoverEnvironmentModels, installEnvironmentModels } from "./environment-models.js"
 import activityExtension from "./extensions/activity.js"
 import agentsExtension from "./extensions/agents/index.js"
 import createApiKeyWarningExtension from "./extensions/api-key-warning.js"
@@ -108,6 +110,7 @@ import promptEnrichmentExtension from "./extensions/prompt-construction/prompt-e
 import promptSummaryExtension from "./extensions/prompt-summary.js"
 import questionnaireExtension from "./extensions/questionnaire/index.js"
 import rateLimitNoticeExtension from "./extensions/rate-limit-notice.js"
+import createRejectedApiKeyExtension from "./extensions/rejected-api-key.js"
 import remoteRunExtension from "./extensions/remote-run/index.js"
 import reportBugExtension from "./extensions/report-bug.js"
 import requestTimingExtension from "./extensions/request-timing.js"
@@ -302,7 +305,7 @@ try {
 		setPrintGate(hasPrintFlag(originalArgs), hasFermentOneshotArg(originalArgs))
 		let config = loadConfig()
 
-		const envKey = process.env.KIMCHI_API_KEY || undefined
+		const envKey = captureApiKeyFromEnvironment()
 
 		// Capture the frozen launch-time metadata (OS + config snapshot incl.
 		// multimodel) for injection into JSONL/HTML exports. Decoupled from the
@@ -357,22 +360,40 @@ try {
 		const modelsJsonPath = resolve(agentDir, "models.json")
 
 		let currentApiKey = apiKey
+		let apiKeyRejected = false
+		const rejectedEnvironmentKeyMessage =
+			"KIMCHI_API_KEY environment variable contains an invalid API key. Update or delete the environment variable, then restart Kimchi."
 		let models: Awaited<ReturnType<typeof updateModelsConfig>>["models"]
+		let environmentOllamaModels: Awaited<ReturnType<typeof discoverEnvironmentModels>>["ollamaModels"] | undefined
 		try {
-			;({ models } = await updateModelsConfig(modelsJsonPath, currentApiKey, { endpoint: config.customLlmEndpoint }))
-			if (experimentalFeatures) {
-				injectExperimentalProvider(modelsJsonPath, currentApiKey ?? "")
-				models = [...models, ...readExperimentalModels(modelsJsonPath)]
+			if (envKey) {
+				const discover = () =>
+					discoverEnvironmentModels(modelsJsonPath, envKey, {
+						endpoint: config.customLlmEndpoint,
+						experimental: experimentalFeatures,
+					})
+				const discovered = await discover()
+				models = discovered.models
+				environmentOllamaModels = discovered.ollamaModels
+				installEnvironmentModels(envKey, discovered.providers, discovered.refreshed ? undefined : discover)
+			} else {
+				;({ models, apiKeyRejected = false } = await updateModelsConfig(modelsJsonPath, currentApiKey, {
+					endpoint: config.customLlmEndpoint,
+				}))
+				if (experimentalFeatures) {
+					injectExperimentalProvider(modelsJsonPath, currentApiKey ?? "")
+					models = [...models, ...readExperimentalModels(modelsJsonPath)]
+				}
+				injectAutoModel(modelsJsonPath)
+				// Auto-discover a local Ollama server and merge its models into the
+				// registry. Probe is silent on failure — startup is never blocked.
+				await injectOllamaProvider(modelsJsonPath, resolveOllamaHost())
+				models = [...models, ...readOllamaModelMetadata(modelsJsonPath)]
 			}
-			injectAutoModel(modelsJsonPath)
-			// Auto-discover a local Ollama server and merge its models into the
-			// registry. Probe is silent on failure — startup is never blocked.
-			await injectOllamaProvider(modelsJsonPath, resolveOllamaHost())
-			models = [...models, ...readOllamaModelMetadata(modelsJsonPath)]
 		} catch (err) {
 			const is401 = err instanceof Error && err.message.includes("401")
 			if (is401 && envKey) {
-				throw new Error("KIMCHI_API_KEY was rejected. Update or unset it, then try again.")
+				throw new Error(rejectedEnvironmentKeyMessage)
 			}
 			if (is401 && process.stdin.isTTY) {
 				console.warn("API key is invalid or expired. Redirecting to setup...")
@@ -387,7 +408,9 @@ try {
 				currentApiKey = wizardResult.apiKey ?? ""
 				writeApiKey(currentApiKey)
 				config = loadConfig()
-				;({ models } = await updateModelsConfig(modelsJsonPath, currentApiKey, { endpoint: config.customLlmEndpoint }))
+				;({ models, apiKeyRejected = false } = await updateModelsConfig(modelsJsonPath, currentApiKey, {
+					endpoint: config.customLlmEndpoint,
+				}))
 				if (experimentalFeatures) {
 					injectExperimentalProvider(modelsJsonPath, currentApiKey)
 					models = [...models, ...readExperimentalModels(modelsJsonPath)]
@@ -407,7 +430,10 @@ try {
 				throw err
 			}
 		}
-		await syncPiAuth(resolve(agentDir, "auth.json"), modelsJsonPath, currentApiKey)
+		// Custom providers may keep startup alive after a Kimchi 401. Never replace
+		// saved credentials with that rejected key; the runtime guard below prevents
+		// silently falling back to the stored Kimchi account instead.
+		if (!envKey && !apiKeyRejected) await syncPiAuth(resolve(agentDir, "auth.json"), modelsJsonPath, currentApiKey)
 
 		// Must run before main() so the keybindings file is loaded with the
 		// override in place.
@@ -420,7 +446,7 @@ try {
 		// Wire Ollama-discovered models into the explorer / reviewer / builder
 		// role pools. Runs after setAvailableModels so the resolved roles
 		// singleton reflects the same model list the picker exposes.
-		const ollamaModelsForRoles = readOllamaModelsFromConfig(modelsJsonPath)
+		const ollamaModelsForRoles = environmentOllamaModels ?? readOllamaModelsFromConfig(modelsJsonPath)
 		if (ollamaModelsForRoles.length > 0) {
 			applyRoleAugmentation((roles) => augmentModelRolesWithOllama(roles, ollamaModelsForRoles))
 		}
@@ -571,6 +597,7 @@ try {
 		}
 		const startupAuthState = createStartupAuthGateState()
 		const startupAuthGate = createStartupAuthGate({
+			rejectedApiKey: apiKeyRejected ? currentApiKey : undefined,
 			...interactiveStartupContext,
 			state: startupAuthState,
 		})
@@ -599,6 +626,7 @@ try {
 			branchCommandExtension,
 			...terminalUiExtensionFactories,
 			loginExtension,
+			createRejectedApiKeyExtension(apiKeyRejected ? currentApiKey : undefined),
 			startupAuthGate,
 			loopGuardExtension,
 			explorationGuardExtension,

@@ -4,7 +4,7 @@ import type {
 	ExtensionFactory,
 	SessionStartEvent,
 } from "@earendil-works/pi-coding-agent"
-import { loadConfig } from "../../config.js"
+import { getApiKeySource, loadConfig } from "../../config.js"
 import {
 	createLoginChoiceSelector,
 	isKimchiProvider,
@@ -26,6 +26,8 @@ export interface StartupAuthGateState {
 
 export interface StartupAuthGateOptions {
 	nonInteractiveMode: boolean
+	/** Preserve stored credentials when metadata discovery already rejected this key. */
+	rejectedApiKey?: string
 	stdinIsTTY: boolean
 	stdoutIsTTY: boolean
 	state?: StartupAuthGateState
@@ -55,12 +57,16 @@ export function shouldShowStartupAuthGate(input: {
 	return true
 }
 
-export async function hasUsableAuth(ctx: ExtensionContext): Promise<boolean> {
+export async function hasUsableAuth(ctx: ExtensionContext, rejectedApiKey?: string): Promise<boolean> {
 	const configKey = loadConfig().apiKey
 	let kimchiAuthSynchronized = configKey.length === 0
 	try {
-		if (configKey) {
-			await syncKimchiAuth(ctx.modelRegistry, configKey)
+		if (configKey && configKey !== rejectedApiKey) {
+			if (getApiKeySource() === "environment") {
+				await ctx.modelRegistry.refresh()
+			} else {
+				await syncKimchiAuth(ctx.modelRegistry, configKey)
+			}
 			kimchiAuthSynchronized = true
 		} else {
 			await ctx.modelRegistry.refresh()
@@ -166,7 +172,7 @@ async function runStartupAuthGate(
 
 		if (result === "cancelled") continue
 
-		if (result === "success" && (await hasUsableAuth(ctx))) {
+		if (result === "success" && (await hasUsableAuth(ctx, options.rejectedApiKey))) {
 			state.authenticated = true
 			return
 		}
@@ -180,7 +186,7 @@ export function createStartupAuthGate(options: StartupAuthGateOptions): Extensio
 
 	return (pi: ExtensionAPI) => {
 		pi.on("session_start", async (event, ctx) => {
-			const usableAuth = await hasUsableAuth(ctx)
+			const usableAuth = await hasUsableAuth(ctx, options.rejectedApiKey)
 			if (
 				!shouldShowStartupAuthGate({
 					hasUI: ctx.hasUI,
